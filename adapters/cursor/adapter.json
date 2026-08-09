@@ -1,0 +1,12 @@
+{
+  "id": "cursor",
+  "title": "Cursor Adapter",
+  "summary": "Instructions optimized for Cursor rules and editor-integrated agents.",
+  "outputFile": ".cursor/rules/nokta.md",
+  "rules": [
+    "Keep rules short and stack-specific.",
+    "Reference the active trail for continuity.",
+    "Prefer project-local conventions and tests.",
+    "Avoid loading unrelated packs into every chat."
+  ]
+}

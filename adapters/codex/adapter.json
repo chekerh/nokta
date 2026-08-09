@@ -1,0 +1,13 @@
+{
+  "id": "codex",
+  "title": "Codex Adapter",
+  "summary": "Instructions optimized for Codex-style repo work, terminal usage, patches, and concise handoffs.",
+  "outputFile": "AGENTS.md",
+  "rules": [
+    "Use targeted shell exploration before editing.",
+    "Use apply_patch for manual file edits.",
+    "Preserve unrelated user changes.",
+    "Update the active trail before final response.",
+    "Report verification commands and residual risk."
+  ]
+}

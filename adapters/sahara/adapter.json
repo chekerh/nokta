@@ -1,0 +1,12 @@
+{
+  "id": "sahara",
+  "title": "Sahara Adapter",
+  "summary": "Instructions optimized for the local Sahara IDE prompt registry and provider architecture.",
+  "outputFile": ".sahara/nokta-context.md",
+  "rules": [
+    "Load compiled packs dynamically instead of hardcoding large prompt strings.",
+    "Expose active trail path in the IDE session state.",
+    "Keep provider, tool, memory, and policy concerns separate.",
+    "Use gates before model responses that claim task completion."
+  ]
+}

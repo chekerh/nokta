@@ -1,0 +1,12 @@
+{
+  "id": "claude",
+  "title": "Claude Adapter",
+  "summary": "Instructions optimized for Claude Code style skills, memory, hooks, and subagents.",
+  "outputFile": "CLAUDE.md",
+  "rules": [
+    "Use Nokta packs as compact skill-like instructions.",
+    "Prefer file-backed trail handoffs over long chat memory.",
+    "Use subagents only with clear inputs and outputs.",
+    "Run verification before declaring completion."
+  ]
+}
