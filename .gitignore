@@ -1,0 +1,25 @@
+.DS_Store
+node_modules/
+coverage/
+dist/
+build/
+.cache/
+*.log
+*.bak
+*.bak2
+.ai/compiled-context.md
+.nokta/.encryption-key
+.nokta/.jwt-secret
+.nokta/nokta.db
+.nokta/nokta.db-*
+.nokta/discovery-cache.json
+.nokta/repo-cache/
+.nokta/sprints/
+.nokta/learned/
+.nokta/providers.json
+.nokta/cost-ledger.json
+.nokta/backups/
+
+# Embedded git repos in upstream/
+upstream/*/
+
