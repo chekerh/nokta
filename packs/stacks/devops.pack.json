@@ -1,0 +1,29 @@
+{
+  "id": "stack.devops",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "DevOps And Observability",
+  "summary": "Operational defaults for Docker, CI/CD, infrastructure, monitoring, and release safety.",
+  "priority": 74,
+  "tokenCost": 330,
+  "required": false,
+  "triggers": {
+    "stacks": ["docker", "kubernetes", "ci"],
+    "taskTypes": ["deployment", "ci", "ops", "observability"],
+    "files": ["Dockerfile", "docker-compose.yml", ".github/workflows", "k8s", "helm", "prometheus", "grafana"],
+    "keywords": ["docker", "kubernetes", "deploy", "ci", "monitoring", "grafana", "prometheus"]
+  },
+  "appliesTo": ["ops"],
+  "instructions": [
+    "Treat build, deploy, rollback, health checks, and observability as one system.",
+    "Avoid leaking secrets into images, logs, or pipeline output.",
+    "Verify infrastructure changes with the cheapest available dry run or validation command.",
+    "Record operational risks and rollback notes for deployment-affecting changes."
+  ],
+  "evidenceRequirements": [
+    "Docker, CI, or infrastructure files affected by the change",
+    "Validation command output when available"
+  ],
+  "gates": ["security", "verification", "handoff"],
+  "sourceRefs": []
+}

@@ -1,0 +1,29 @@
+{
+  "id": "senior.architecture",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "Architecture And Design Review",
+  "summary": "System design discipline for boundaries, data flow, tradeoffs, and long-term maintainability.",
+  "priority": 80,
+  "tokenCost": 360,
+  "required": false,
+  "triggers": {
+    "stacks": [],
+    "taskTypes": ["architecture", "refactor", "design", "planning"],
+    "files": ["docs/", "architecture", "adr"],
+    "keywords": ["architecture", "design", "refactor", "scalable", "boundary"]
+  },
+  "appliesTo": ["all"],
+  "instructions": [
+    "Identify ownership boundaries, data flow, dependencies, and failure modes.",
+    "Prefer simple designs that fit existing project architecture.",
+    "Record tradeoffs and rejected alternatives when they materially affect future work.",
+    "Use ADR-style notes for durable decisions."
+  ],
+  "evidenceRequirements": [
+    "Existing architecture docs or code entrypoints",
+    "Relevant dependency and runtime configuration"
+  ],
+  "gates": ["evidence", "handoff"],
+  "sourceRefs": []
+}

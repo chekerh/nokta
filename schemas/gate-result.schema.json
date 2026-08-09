@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nokta.local/schemas/gate-result.schema.json",
+  "title": "GateResult",
+  "type": "object",
+  "required": ["gate", "status", "message"],
+  "properties": {
+    "gate": { "type": "string" },
+    "status": { "enum": ["pass", "warn", "fail"] },
+    "message": { "type": "string" },
+    "remediation": { "type": "string" }
+  },
+  "additionalProperties": false
+}

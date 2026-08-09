@@ -1,0 +1,62 @@
+{
+  "id": "design.framer-motion",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "Framer Motion + 21st.dev Animation Patterns",
+  "summary": "Framer Motion animation patterns, page transitions, micro-interactions, gesture-driven UI, and 21st.dev component library integration for production-grade motion design.",
+  "priority": 78,
+  "tokenCost": 220,
+  "required": false,
+  "triggers": {
+    "stacks": ["react", "next", "frontend", "framer-motion"],
+    "taskTypes": ["ui", "frontend", "animation", "component"],
+    "files": ["framer-motion", "motion.", "animate.", "useAnimation", "motion.div", "motionComponents"],
+    "keywords": [
+      "framer-motion",
+      "animation",
+      "motion",
+      "transition",
+      "gesture",
+      "spring",
+      "page-transition",
+      "21st.dev",
+      "variants",
+      "layout-animation"
+    ]
+  },
+  "appliesTo": ["frontend", "designer"],
+  "instructions": [
+    "Framer Motion is the standard for React animation — use it for all enter/exit, layout, gesture, and shared-element transitions.",
+    "Page transitions: wrap route content in motion.div with initial/animate/exit variants, use AnimatePresence for exit animations.",
+    "Animation principles: duration 150-300ms micro-interactions, complex transitions ≤400ms, use spring for natural feel.",
+    "Use motion components (motion.div, motion.p, etc.) instead of manual CSS transitions for declarative, composable animation.",
+    "Variants pattern: define named variant objects (hidden, visible, hover, tap) for reusable, declarative animation states.",
+    "Stagger children: use staggerChildren with variants on parent + child elements for sequenced list/ grid entrances (30-50ms apart).",
+    "Layout animations: use layout prop for smooth FLIP animations when elements change position/size automatically.",
+    "Gesture animations: whileHover, whileTap, whileFocus, whileDrag for interaction-driven motion — scale buttons to 0.95 on tap.",
+    "Enter/exit: use AnimatePresence mode='wait' or 'popLayout' for route/component transitions with exitBeforeEnter.",
+    "SVG animation: motion.path with pathLength, pathOffset for drawing animations, motion.circle for morphing.",
+    "Scroll animations: use useInView or useScroll for reveal-on-scroll, parallax, and progress-based animations.",
+    "Drag: motion.div with drag='x'|'y', dragConstraints, dragElastic for swipeable cards, pull-to-refresh, draggable modals.",
+    "Orchestration: use AnimatePresence on lists with initial={ opacity: 0, y: 20 } animate={ opacity: 1, y: 0 } exit={{ opacity: 0, y: -20 }}.",
+    "Performance: animate transform and opacity only (never width/height/top/left), use will-change: transform on animated elements.",
+    "Reduced motion: wrap animations in useReducedMotion() hook and disable/scale down accordingly.",
+    "Shared element transitions: use LayoutGroup + layoutId for hero animations between routes (similar to Flutter Hero widget).",
+    "Keyframes: use keyframes array in animate for multi-step animations (e.g. { x: [0, 100, 0], opacity: [1, 0.5, 1] }).",
+    "Spring physics: use type: 'spring' with stiffness/damping/mass for natural-feeling motion (stiffness: 300, damping: 30).",
+    "21st.dev integration: reference 21st.dev component library for production-ready React components with built-in Framer Motion animations.",
+    "Use 21st.dev's ComponentArray import pattern for dynamic component rendering with animation support.",
+    "When building landing pages: use hero animations with staggered fade-up, floating elements with y-axis keyframes, CTA pulse.",
+    "For dashboards: use layout animations for resizable panels, AnimatePresence for tab content switching, progress bar animations.",
+    "For mobile: use gesture-based navigation with drag, spring-based scroll mechanics, tap feedback with whileTap scale."
+  ],
+  "evidenceRequirements": [
+    "Project's existing motion/animation patterns if any",
+    "Framer Motion version in package.json dependencies",
+    "Whether 21st.dev components are already in use",
+    "Target animation type: page transition, micro-interaction, gesture, scroll, layout, or SVG",
+    "Reduced motion preference handling strategy"
+  ],
+  "gates": ["evidence", "verification"],
+  "sourceRefs": ["https://www.framer.com/motion/", "https://21st.dev/"]
+}

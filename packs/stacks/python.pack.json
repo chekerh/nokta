@@ -1,0 +1,26 @@
+{
+  "id": "stack.python",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "Python",
+  "summary": "Python defaults for maintainable modules, typed boundaries, environment discipline, and tests.",
+  "priority": 68,
+  "tokenCost": 300,
+  "required": false,
+  "triggers": {
+    "stacks": ["python"],
+    "taskTypes": ["all"],
+    "files": ["pyproject.toml", "requirements.txt", "setup.py", ".py"],
+    "keywords": ["python", "pytest", "fastapi", "flask"]
+  },
+  "appliesTo": ["python"],
+  "instructions": [
+    "Inspect pyproject, requirements, and test configuration before choosing commands.",
+    "Keep side effects out of import paths where possible.",
+    "Use typed boundaries for public functions and IO-heavy code.",
+    "Prefer focused pytest tests for behavior changes."
+  ],
+  "evidenceRequirements": ["pyproject.toml, requirements.txt, or setup.py when present", "Relevant tests or fixtures"],
+  "gates": ["verification"],
+  "sourceRefs": []
+}

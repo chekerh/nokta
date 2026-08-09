@@ -1,0 +1,26 @@
+{
+  "id": "stack.flutter-mobile",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "Flutter And Mobile",
+  "summary": "Mobile defaults for Flutter, platform boundaries, state, responsiveness, and testability.",
+  "priority": 66,
+  "tokenCost": 310,
+  "required": false,
+  "triggers": {
+    "stacks": ["flutter", "dart", "mobile"],
+    "taskTypes": ["mobile", "ui", "bugfix"],
+    "files": ["pubspec.yaml", "lib/", "android/", "ios/"],
+    "keywords": ["flutter", "dart", "mobile", "widget"]
+  },
+  "appliesTo": ["mobile"],
+  "instructions": [
+    "Inspect pubspec and existing state-management patterns first.",
+    "Keep widgets composable and avoid mixing UI, persistence, and networking concerns.",
+    "Check platform permissions and lifecycle behavior for native integrations.",
+    "Run flutter analyze or flutter test when available."
+  ],
+  "evidenceRequirements": ["pubspec.yaml", "Nearby widgets, providers, blocs, or services"],
+  "gates": ["verification"],
+  "sourceRefs": []
+}

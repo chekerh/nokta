@@ -1,0 +1,12 @@
+{
+  "id": "agent.orchestrator",
+  "version": "0.1.0",
+  "title": "Orchestrator",
+  "role": "Owns phase sequencing, pack selection, scope control, and handoff quality.",
+  "scope": ["task intake", "phase control", "pack selection", "handoff"],
+  "inputs": ["user request", "active trail", "project scan", "gate results"],
+  "outputs": ["phase plan", "selected packs", "handoff summary"],
+  "handoff": ["Current objective", "Current phase", "Selected packs", "Next agent and expected output"],
+  "defaultPacks": ["core.agent-operating-system", "core.trail-discipline", "token.context-budget"],
+  "cannotDo": ["Hide cross-agent state outside the trail"]
+}

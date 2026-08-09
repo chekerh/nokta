@@ -1,0 +1,38 @@
+{
+  "id": "design.21st-dev",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "21st.dev Component Library Integration",
+  "summary": "Rules and patterns for integrating 21st.dev production-ready React components into projects, including component discovery, customization, animation patterns, and best practices.",
+  "priority": 73,
+  "tokenCost": 140,
+  "required": false,
+  "triggers": {
+    "stacks": ["react", "next", "frontend"],
+    "taskTypes": ["ui", "frontend", "component"],
+    "files": [],
+    "keywords": ["21st.dev", "21st", "ComponentArray", "shadcn", "ui-library", "component-library"]
+  },
+  "appliesTo": ["frontend", "designer"],
+  "instructions": [
+    "21st.dev provides production-ready React components with built-in Framer Motion animations — prefer over hand-rolling common UI patterns.",
+    "ComponentArray import: use dynamic import pattern for loading 21st.dev components. Components support className prop for styling.",
+    "Component discovery: search 21st.dev for landing page sections (hero, features, pricing, testimonials, FAQ, CTA, stats, logos, contact).",
+    "Animation integration: 21st.dev components use Framer Motion internally. Wrap sections in AnimatePresence when needed for staggered reveals.",
+    "Customization: override default styles via className prop. Components use Tailwind CSS classes. Avoid modifying component internals.",
+    "Dark mode: 21st.dev components support dark mode via parent dark class. Test in both modes after integration.",
+    "Landing pages: use pre-built section components (HeroSection, FeaturesGrid, PricingTable, TestimonialsCarousel) for rapid prototyping.",
+    "Animation variants: 21st.dev components accept animation variant props for customizing enter/exit behavior.",
+    "Bundle optimization: tree-shake unused components at build time. Import only what's needed per page.",
+    "DO NOT: re-implement 21st.dev components from scratch — always import and customize via props/className.",
+    "DO NOT: wrap 21st.dev components in unnecessary motion.div layers — they already handle their own animations.",
+    "When combining with Three.js: place 21st.dev sections below the 3D hero, connected via shared color/typography tokens."
+  ],
+  "evidenceRequirements": [
+    "Whether 21st.dev is already installed or needs to be added",
+    "Target page type (landing, dashboard, pricing, etc.)",
+    "Existing Tailwind CSS configuration and theme tokens"
+  ],
+  "gates": ["evidence"],
+  "sourceRefs": ["https://21st.dev/"]
+}

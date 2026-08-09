@@ -1,0 +1,70 @@
+{
+  "id": "design.ui-ux-pro-max",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "UI/UX Pro Max Design Intelligence",
+  "summary": "Comprehensive UI/UX design knowledge: 50+ styles, 161 color palettes, 57 font pairings, 161 product types, 99 UX guidelines, 25 chart types across 10 stacks.",
+  "priority": 80,
+  "tokenCost": 280,
+  "required": false,
+  "triggers": {
+    "stacks": [
+      "react",
+      "next",
+      "vue",
+      "svelte",
+      "flutter",
+      "react-native",
+      "swiftui",
+      "tailwind",
+      "frontend",
+      "mobile",
+      "web"
+    ],
+    "taskTypes": ["ui", "frontend", "design", "ux", "component"],
+    "files": ["*.css", "*.scss", "tailwind.config", "components/", "pages/", "app/"],
+    "keywords": [
+      "design",
+      "ui",
+      "ux",
+      "component",
+      "style",
+      "color",
+      "font",
+      "layout",
+      "responsive",
+      "accessible",
+      "animation"
+    ]
+  },
+  "appliesTo": ["frontend", "designer"],
+  "instructions": [
+    "Apply UI/UX Pro Max rules when designing or reviewing any user-facing interface.",
+    "Priority order: Accessibility (CRITICAL) > Touch & Interaction (CRITICAL) > Performance (HIGH) > Style (HIGH) > Layout (HIGH) > Typography (MEDIUM) > Animation (MEDIUM) > Forms (MEDIUM) > Navigation (HIGH) > Charts (LOW).",
+    "Always meet WCAG AA contrast (4.5:1 normal, 3:1 large text) — never strip focus rings.",
+    "Touch targets minimum 44x44pt (Apple) / 48x48dp (Material) — never rely on hover alone.",
+    "Match style to product type: fintech → clean/minimal, entertainment → vibrant/playful, health → calming/trust.",
+    "Use semantic color tokens (primary, secondary, error, surface, on-surface) never raw hex.",
+    "Base font 16px, line-height 1.5, type scale: 12/14/16/18/24/32/48.",
+    "Animations 150-300ms, ease-out for enter, ease-in for exit, transform/opacity only.",
+    "Mobile-first breakpoints: 375 / 768 / 1024 / 1440. No horizontal scroll. Min-h-dvh over 100vh.",
+    "Forms need visible labels (never placeholder-only), inline validation on blur, errors near field.",
+    "Bottom nav max 5 items, back navigation predictable, deep linking for all key screens.",
+    "Charts: match type to data, accessible colors, legends+tooltips, never color-only meaning.",
+    "SVG icons only (Heroicons, Lucide) — never emoji as icons. Consistent stroke width per layer.",
+    "Dark mode uses desaturated tonal variants — test contrast independently, don't invert colors.",
+    "Respect prefers-reduced-motion — disable/scale down animations when requested.",
+    "Use spring/physics curves for natural motion, stagger list entries 30-50ms apart.",
+    "No emoji as structural icons. Vector-only assets (SVG). Official brand assets with correct proportions.",
+    "MCP integration: use shadcn/ui MCP server for component search and examples when available."
+  ],
+  "evidenceRequirements": [
+    "Design context: product type, target audience, style keywords",
+    "Existing design system or component library being used",
+    "Platform target (web, iOS, Android) for platform-specific rules",
+    "Any existing color palettes, typography choices, or spacing conventions in the project",
+    "Accessibility requirements (WCAG level, target audience needs)"
+  ],
+  "gates": ["preflight", "evidence", "verification"],
+  "sourceRefs": ["https://github.com/affaan-m/UI-UX-Pro-Max"]
+}

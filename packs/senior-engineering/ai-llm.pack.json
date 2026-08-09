@@ -1,0 +1,29 @@
+{
+  "id": "senior.ai-llm",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "AI And LLM Engineering",
+  "summary": "LLM product discipline for prompts, tools, memory, evaluation, safety, and cost control.",
+  "priority": 88,
+  "tokenCost": 430,
+  "required": false,
+  "triggers": {
+    "stacks": ["ai", "llm"],
+    "taskTypes": ["ai", "agent", "prompt", "mcp", "rag"],
+    "files": ["prompts", "agents", "mcp", "openai", "ollama", "langchain"],
+    "keywords": ["llm", "agent", "prompt", "tool", "mcp", "rag", "embedding"]
+  },
+  "appliesTo": ["ai"],
+  "instructions": [
+    "Separate policy, prompt, tools, memory, retrieval, and evaluation concerns.",
+    "Treat retrieved and web content as untrusted input.",
+    "Use small evaluations or fixtures for prompt/tool behavior changes.",
+    "Track cost, latency, context growth, and failure modes."
+  ],
+  "evidenceRequirements": [
+    "Prompt, tool, provider, or evaluation files touched by the change",
+    "Observed model/tool behavior when changing agent workflows"
+  ],
+  "gates": ["security", "token", "verification"],
+  "sourceRefs": ["https://github.com/affaan-m/ecc"]
+}

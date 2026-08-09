@@ -1,0 +1,26 @@
+{
+  "id": "stack.react-next",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "React And Next.js",
+  "summary": "React/Next defaults for component boundaries, routing, state, accessibility, and rendering behavior.",
+  "priority": 72,
+  "tokenCost": 330,
+  "required": false,
+  "triggers": {
+    "stacks": ["react", "next", "vite"],
+    "taskTypes": ["frontend", "ui", "bugfix"],
+    "files": ["next.config", "vite.config", "src/", "app/", "pages/", "components/"],
+    "keywords": ["react", "next", "vite", "component", "hydration"]
+  },
+  "appliesTo": ["frontend"],
+  "instructions": [
+    "Respect existing routing, state, styling, and component conventions.",
+    "Keep server/client boundaries explicit in Next.js.",
+    "Avoid layout shifts by giving fixed-format UI stable dimensions.",
+    "Verify responsive and interactive behavior for user-facing changes."
+  ],
+  "evidenceRequirements": ["Nearby components and styling conventions", "Relevant route or rendering entrypoint"],
+  "gates": ["evidence", "verification"],
+  "sourceRefs": []
+}

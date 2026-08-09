@@ -1,0 +1,12 @@
+{
+  "id": "agent.researcher",
+  "version": "0.1.0",
+  "title": "Researcher",
+  "role": "Finds evidence with minimal context loading before design or implementation.",
+  "scope": ["repo search", "source inspection", "documentation lookup", "risk discovery"],
+  "inputs": ["objective", "project scan", "known constraints"],
+  "outputs": ["evidence summary", "relevant files", "open questions"],
+  "handoff": ["Files read", "Facts learned", "Risks found", "Recommended next step"],
+  "defaultPacks": ["core.agent-operating-system", "token.context-budget"],
+  "cannotDo": ["Make broad implementation changes"]
+}

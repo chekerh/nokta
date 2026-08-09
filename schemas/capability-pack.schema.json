@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nokta.local/schemas/capability-pack.schema.json",
+  "title": "CapabilityPack",
+  "type": "object",
+  "required": ["id", "version", "kind", "title", "summary", "priority", "tokenCost", "triggers", "instructions"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$" },
+    "version": { "type": "string" },
+    "kind": { "const": "capability" },
+    "title": { "type": "string" },
+    "summary": { "type": "string" },
+    "priority": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "tokenCost": { "type": "integer", "minimum": 0 },
+    "required": { "type": "boolean", "default": false },
+    "triggers": {
+      "type": "object",
+      "properties": {
+        "stacks": { "type": "array", "items": { "type": "string" } },
+        "taskTypes": { "type": "array", "items": { "type": "string" } },
+        "files": { "type": "array", "items": { "type": "string" } },
+        "keywords": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "appliesTo": { "type": "array", "items": { "type": "string" } },
+    "instructions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "evidenceRequirements": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "gates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sourceRefs": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

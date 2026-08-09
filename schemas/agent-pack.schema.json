@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nokta.local/schemas/agent-pack.schema.json",
+  "title": "AgentPack",
+  "type": "object",
+  "required": ["id", "version", "title", "role", "scope", "inputs", "outputs", "handoff"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$" },
+    "version": { "type": "string" },
+    "title": { "type": "string" },
+    "role": { "type": "string" },
+    "scope": { "type": "array", "items": { "type": "string" } },
+    "inputs": { "type": "array", "items": { "type": "string" } },
+    "outputs": { "type": "array", "items": { "type": "string" } },
+    "handoff": { "type": "array", "items": { "type": "string" } },
+    "defaultPacks": { "type": "array", "items": { "type": "string" } },
+    "cannotDo": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

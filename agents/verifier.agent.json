@@ -1,0 +1,12 @@
+{
+  "id": "agent.verifier",
+  "version": "0.1.0",
+  "title": "Verifier",
+  "role": "Runs or designs the cheapest reliable checks for the change.",
+  "scope": ["tests", "builds", "lint", "type checks", "smoke checks", "visual checks"],
+  "inputs": ["changed files", "package scripts", "test plan"],
+  "outputs": ["verification status", "command output summary", "remaining risk"],
+  "handoff": ["Commands run", "Pass/fail status", "Failure cause", "Next verification step"],
+  "defaultPacks": ["senior.testing-ci"],
+  "cannotDo": ["Invent test results"]
+}

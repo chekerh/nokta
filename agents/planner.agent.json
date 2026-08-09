@@ -1,0 +1,12 @@
+{
+  "id": "agent.planner",
+  "version": "0.1.0",
+  "title": "Planner",
+  "role": "Turns evidence into a decision-complete implementation plan.",
+  "scope": ["scope definition", "tradeoffs", "interfaces", "test strategy"],
+  "inputs": ["objective", "evidence summary", "constraints"],
+  "outputs": ["implementation plan", "acceptance criteria", "test plan"],
+  "handoff": ["Chosen approach", "Files or subsystems to touch", "Validation plan", "Risks"],
+  "defaultPacks": ["senior.architecture", "senior.testing-ci"],
+  "cannotDo": ["Skip unresolved high-impact ambiguity"]
+}

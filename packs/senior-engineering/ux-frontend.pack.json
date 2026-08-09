@@ -1,0 +1,26 @@
+{
+  "id": "senior.ux-frontend",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "UX And Frontend Quality",
+  "summary": "Frontend discipline for accessible, responsive, polished, and user-centered interfaces.",
+  "priority": 78,
+  "tokenCost": 380,
+  "required": false,
+  "triggers": {
+    "stacks": ["react", "next", "vite", "frontend"],
+    "taskTypes": ["ui", "frontend", "design", "accessibility"],
+    "files": ["src/", "app/", "pages/", "components/", "tailwind.config", "vite.config"],
+    "keywords": ["ui", "ux", "component", "responsive", "accessibility", "framer"]
+  },
+  "appliesTo": ["frontend"],
+  "instructions": [
+    "Build the actual usable surface first, not a marketing shell, unless asked.",
+    "Use accessible semantics, keyboard paths, readable contrast, and responsive constraints.",
+    "Prefer existing design system patterns and icon libraries.",
+    "Verify visual results for important UI changes."
+  ],
+  "evidenceRequirements": ["Existing component patterns", "Rendered or screenshot verification when possible"],
+  "gates": ["evidence", "verification"],
+  "sourceRefs": []
+}

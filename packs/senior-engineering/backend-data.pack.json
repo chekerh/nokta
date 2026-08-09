@@ -1,0 +1,29 @@
+{
+  "id": "senior.backend-data",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "Backend And Data Engineering",
+  "summary": "Backend discipline for contracts, persistence, migrations, concurrency, performance, and resilience.",
+  "priority": 80,
+  "tokenCost": 400,
+  "required": false,
+  "triggers": {
+    "stacks": ["backend", "spring", "database"],
+    "taskTypes": ["api", "backend", "database", "migration", "performance"],
+    "files": ["server/", "api/", "routes/", "controllers/", "migrations/", "schema.prisma"],
+    "keywords": ["api", "database", "migration", "query", "transaction", "cache"]
+  },
+  "appliesTo": ["backend"],
+  "instructions": [
+    "Protect API contracts and database invariants.",
+    "Consider idempotency, transactions, concurrency, retries, and backpressure.",
+    "Use migrations and rollback notes for persistent data changes.",
+    "Verify with contract, integration, or targeted unit tests when available."
+  ],
+  "evidenceRequirements": [
+    "API route/controller/service entrypoints",
+    "Schema, migration, or model definitions for data changes"
+  ],
+  "gates": ["evidence", "security", "verification"],
+  "sourceRefs": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "token.context-budget",
+  "version": "0.1.0",
+  "kind": "policy",
+  "title": "Context Budget",
+  "summary": "Rules for minimal context loading, progressive disclosure, and compact handoffs.",
+  "priority": 95,
+  "tokenCost": 430,
+  "required": true,
+  "triggers": {
+    "stacks": [],
+    "taskTypes": ["all"],
+    "files": [],
+    "keywords": ["token", "context", "mcp", "compact", "summary"]
+  },
+  "appliesTo": ["all"],
+  "instructions": [
+    "Load the smallest useful context for the current step.",
+    "Summarize large files and record reusable findings in the trail.",
+    "Prefer targeted searches over broad file dumps.",
+    "Enable only relevant tools and MCP servers for the task.",
+    "Emit compact compiled context with pack IDs and high-signal instructions."
+  ],
+  "evidenceRequirements": ["Detected stack signals", "Selected pack list"],
+  "gates": ["token"],
+  "sourceRefs": [
+    "https://raw.githubusercontent.com/affaan-m/ECC/main/the-shortform-guide.md",
+    "https://raw.githubusercontent.com/affaan-m/ECC/main/the-longform-guide.md"
+  ]
+}

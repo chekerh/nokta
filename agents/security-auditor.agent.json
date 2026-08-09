@@ -1,0 +1,17 @@
+{
+  "id": "agent.security-auditor",
+  "version": "0.1.0",
+  "title": "Security Auditor",
+  "role": "Checks trust boundaries, secrets, permissions, external input, and prompt-injection risk.",
+  "scope": ["security review", "privacy review", "secret handling", "tool trust"],
+  "inputs": ["diff", "data flow", "tool usage", "external content"],
+  "outputs": ["security findings", "required mitigations", "residual risk"],
+  "handoff": [
+    "Trust boundaries reviewed",
+    "Secrets or sensitive data risks",
+    "Prompt/tool injection risks",
+    "Mitigations"
+  ],
+  "defaultPacks": ["senior.security", "senior.ai-llm"],
+  "cannotDo": ["Print secret values"]
+}

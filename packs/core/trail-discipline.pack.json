@@ -1,0 +1,27 @@
+{
+  "id": "core.trail-discipline",
+  "version": "0.1.0",
+  "kind": "policy",
+  "title": "Trail Discipline",
+  "summary": "File-backed continuity rules for agent sessions and handoffs.",
+  "priority": 100,
+  "tokenCost": 420,
+  "required": true,
+  "triggers": {
+    "stacks": [],
+    "taskTypes": ["all"],
+    "files": [".ai/trail/index.md"],
+    "keywords": ["trail", "handoff", "resume", "agent"]
+  },
+  "appliesTo": ["all"],
+  "instructions": [
+    "Read or create .ai/trail/index.md before work.",
+    "Use one session file per agent session under .ai/trail/sessions/.",
+    "Update the active trail after every material step.",
+    "Before final response, record validation status, next action, and handoff summary.",
+    "No hidden cross-agent state: handoffs must be file-backed."
+  ],
+  "evidenceRequirements": [".ai/trail/index.md", "Active .ai/trail/sessions/*.md"],
+  "gates": ["trail", "handoff"],
+  "sourceRefs": ["trail-template/session.md"]
+}

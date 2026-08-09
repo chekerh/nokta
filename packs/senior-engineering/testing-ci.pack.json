@@ -1,0 +1,26 @@
+{
+  "id": "senior.testing-ci",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "Testing And CI/CD",
+  "summary": "Verification discipline for tests, build checks, pipeline health, release safety, and observability signals.",
+  "priority": 85,
+  "tokenCost": 380,
+  "required": false,
+  "triggers": {
+    "stacks": [],
+    "taskTypes": ["test", "ci", "bugfix", "release", "deployment"],
+    "files": [".github/workflows", "Jenkinsfile", "package.json", "pytest.ini", "pom.xml", "pubspec.yaml"],
+    "keywords": ["test", "ci", "pipeline", "deploy", "release", "lint", "coverage"]
+  },
+  "appliesTo": ["all"],
+  "instructions": [
+    "Map every meaningful change to the cheapest reliable verification.",
+    "Prefer targeted tests during development and broader checks before handoff.",
+    "When checks fail, record the command, failure, likely cause, and next action.",
+    "Keep CI deterministic and avoid hiding failures behind permissive scripts."
+  ],
+  "evidenceRequirements": ["Test scripts or CI workflow definitions", "Actual command output for verification claims"],
+  "gates": ["verification", "handoff"],
+  "sourceRefs": []
+}

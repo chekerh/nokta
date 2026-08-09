@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nokta.local/schemas/compiled-context.schema.json",
+  "title": "CompiledContext",
+  "type": "object",
+  "required": ["generatedAt", "adapter", "target", "task", "budget", "detected", "packs"],
+  "properties": {
+    "generatedAt": { "type": "string" },
+    "adapter": { "type": "string" },
+    "target": { "type": "string" },
+    "task": { "type": "string" },
+    "budget": { "type": "integer" },
+    "detected": {
+      "type": "object",
+      "required": ["stacks", "files"],
+      "properties": {
+        "stacks": { "type": "array", "items": { "type": "string" } },
+        "files": { "type": "array", "items": { "type": "string" } },
+        "packageManagers": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "packs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "kind", "tokenCost"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "kind": { "type": "string" },
+          "tokenCost": { "type": "integer" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

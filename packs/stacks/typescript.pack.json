@@ -1,0 +1,26 @@
+{
+  "id": "stack.typescript",
+  "version": "0.1.0",
+  "kind": "capability",
+  "title": "TypeScript",
+  "summary": "TypeScript engineering defaults for strict contracts, type-safe changes, and fast checks.",
+  "priority": 70,
+  "tokenCost": 300,
+  "required": false,
+  "triggers": {
+    "stacks": ["typescript"],
+    "taskTypes": ["all"],
+    "files": ["tsconfig.json", ".ts", ".tsx"],
+    "keywords": ["typescript", "node", "npm", "pnpm", "yarn"]
+  },
+  "appliesTo": ["typescript"],
+  "instructions": [
+    "Inspect package scripts and tsconfig before assuming build or test commands.",
+    "Prefer explicit domain types at boundaries and inference inside local implementation.",
+    "Avoid any, broad casts, and unchecked JSON at IO boundaries.",
+    "Run type checks or explain why the project has none."
+  ],
+  "evidenceRequirements": ["package.json", "tsconfig.json when present"],
+  "gates": ["verification"],
+  "sourceRefs": []
+}

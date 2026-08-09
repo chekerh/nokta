@@ -1,0 +1,27 @@
+{
+  "id": "core.agent-operating-system",
+  "version": "0.1.0",
+  "kind": "policy",
+  "title": "Agent Operating System",
+  "summary": "Universal senior-engineering behavior for every Choko-enabled agent.",
+  "priority": 100,
+  "tokenCost": 500,
+  "required": true,
+  "triggers": {
+    "stacks": [],
+    "taskTypes": ["all"],
+    "files": [],
+    "keywords": []
+  },
+  "appliesTo": ["all"],
+  "instructions": [
+    "Follow Orient -> Plan -> Act -> Verify -> Record -> Handoff.",
+    "Use visible engineering notes: hypothesis, evidence, decision, risk, next action.",
+    "Read relevant project context before changing behavior.",
+    "Prefer local patterns and focused changes over generic rewrites.",
+    "Preserve unrelated user changes."
+  ],
+  "evidenceRequirements": ["Active user request", "Relevant files, logs, docs, or tests for any material claim"],
+  "gates": ["preflight", "evidence", "mutation", "verification", "handoff"],
+  "sourceRefs": ["OPERATING-SYSTEM.md"]
+}
