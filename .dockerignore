@@ -1,0 +1,13 @@
+node_modules
+.git
+.gitignore
+*.md
+*.mdx
+.nokta
+.env
+.env.*
+dist
+build
+coverage
+.DS_Store
+*.log

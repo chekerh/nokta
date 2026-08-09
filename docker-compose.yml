@@ -1,0 +1,59 @@
+services:
+  nokta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nokta
+    restart: unless-stopped
+    ports:
+      - "4217:4217"
+    volumes:
+      # Persist database, encryption keys, JWT secrets, and provider configs
+      - nokta-data:/data
+      # Mount your project to be managed
+      - ${PROJECT_PATH:-.}:/project:ro
+    environment:
+      - NODE_ENV=production
+      - NOKTA_DATA_DIR=/data
+      - PORT=4217
+      - HOST=0.0.0.0
+      # Encryption key for provider API keys (AES-256-GCM)
+      # Generate with: openssl rand -hex 32
+      # If not set, auto-generated and stored in /data/.encryption-key
+      - NOKTA_ENCRYPTION_KEY=${NOKTA_ENCRYPTION_KEY:-}
+      # JWT secret for auth tokens
+      # If not set, auto-generated and stored in /data/.jwt-secret
+      - NOKTA_JWT_SECRET=${NOKTA_JWT_SECRET:-}
+      # API key for server-to-server auth (optional)
+      - NOKTA_API_KEY=${NOKTA_API_KEY:-}
+      # Provider API keys (fallback if not configured via UI)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      # Log level: debug, info, warn, error
+      - NOKTA_LOG_LEVEL=${NOKTA_LOG_LEVEL:-info}
+      # Allowed CORS origin(s). Set to your frontend domain in production.
+      # Empty means same-origin only (most secure). '*' means allow all (dev only).
+      - NOKTA_CORS_ORIGIN=${NOKTA_CORS_ORIGIN:-}
+      # JWT token TTL in seconds (default: 604800 = 7 days). Shorter = more frequent re-login.
+      - NOKTA_TOKEN_TTL_SEC=${NOKTA_TOKEN_TTL_SEC:-604800}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:4217/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+volumes:
+  nokta-data:
+    driver: local
+
+networks:
+  default:
+    name: nokta-network

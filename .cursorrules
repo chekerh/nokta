@@ -1,0 +1,221 @@
+# Nokta — Master Development Rules & Agent Instructions
+
+You are executing within a Nokta-controlled workspace. Nokta is a **Local-First Developer Operating System** that acts as an intelligent symmetry layer between a developer's IDEs and LLM Providers. It coordinates AI agents, optimizes context compilation, implements encrypted credential storage, enforces FinOps cost logs, and manages autonomous development loops.
+
+Read and follow these rules strictly to deliver production-grade, highly scalable, and structurally immaculate code.
+
+---
+
+## 1. Core Mandates & Architecture
+
+### A. The Tech Stack & Ecosystem
+* **Runtime**: Node.js v22 (all code must be premium, vanilla ES modules; no CommonJS unless explicitly requested).
+* **Database (DBOps)**: Native, zero-dependency `node:sqlite` (DatabaseSync).
+  * Always use **WAL mode** (`PRAGMA journal_mode=WAL`), **foreign keys** (`PRAGMA foreign_keys=ON`), and **busy timeouts** (`PRAGMA busy_timeout=5000`).
+  * All database operations must be transactional or prepare-cached. No raw unescaped interpolations to prevent SQL injection.
+  * Keep Schema migrations versioned inside `daemon/db/schema.mjs`.
+* **API Routing**: Express 5. Use modular route files under `daemon/routes/` and register them in `daemon/server.mjs`. Wrap asynchronous route handlers in `asyncHandler`.
+* **Credentials & Secrets (SecOps)**:
+  * NEVER hardcode keys, credentials, or tokens.
+  * All LLM Provider API keys must be encrypted using **AES-256-GCM** inside the `provider_keys` table using the `daemon/lib/crypto.mjs` wrapper.
+  * Protect non-public endpoints with stateful JWT tokens. Check `Authorization: Bearer <token>` headers.
+* **Cost Tracking & Budgets (FinOps)**:
+  * Log all LLM input/output tokens and cost approximations to the `cost_logs` table.
+  * Enforce strict rate-limiting per user tier (Free = 10/min, Pro = 60/min, Enterprise = 300/min).
+
+### B. The Symmetry Proxy
+Nokta intercepts all LLM traffic to ensure every prompt is optimized and a la mode:
+* **Global Context Injection**: Injects the **User Brain** (Personal DNA) and **Domain Best Practices** into every prompt.
+* **Token Optimizer**: Dynamically prunes context to maximize the "signal-to-noise" ratio.
+* **Sentry Sentinel**: Budget Guard, Loop Detector, and SecOps Scanner protect against cost overruns, infinite loops, and security vulnerabilities.
+
+### C. The Omni-Brain
+* **User DNA**: A persistent, cross-project knowledge base of *how the developer operates*. It learns from every correction.
+* **Learned Patterns**: JSON array of `{ rule, example, domain, confidence, timestamp }`. Extracted when the developer edits AI-generated code.
+* **Domain Capability Packs**: Best-practice rules for Cloud/DevOps, Security, Mobile, Web, and Data Engineering.
+* **UI/UX Pro Max**: A searchable design reasoning engine for premium interfaces.
+
+---
+
+## 2. ECC Integration (Everything Claude Code Patterns)
+
+Nokta incorporates battle-tested patterns from the ECC (Everything Claude Code) plugin system:
+
+### A. Agent-First Delegation
+* Complex feature requests → **planner** agent (planning step)
+* Code just written/modified → **code-reviewer** agent (review step)
+* Bug fix or new feature → **tdd-guide** agent (TDD workflow)
+* Architectural decision → **architect** agent (architecture step)
+* Security-sensitive code → **security-reviewer** agent (security step)
+* Brownfield project onboarding → **spec-miner** agent (spec extraction step)
+* Autonomous loops → **loop-operator** agent (monitoring step)
+
+### B. Core Engineering Principles
+1. **Immutability (CRITICAL)**: Always create new objects, never mutate. Return new copies with changes applied.
+2. **TDD Workflow**: Write test first (RED) → minimal implementation (GREEN) → refactor (IMPROVE). Minimum 80% coverage.
+3. **Security-First**: Never compromise on security. Validate all inputs at system boundaries. No hardcoded secrets.
+4. **File Organization**: Many small files (200-400 lines, 800 max). Feature/domain organization, not type organization.
+5. **Error Handling**: Handle errors at every level. User-friendly UI messages, detailed server-side logging. Never silently swallow errors.
+
+### C. Code Quality Checklist
+- Functions small (<50 lines), files focused (<800 lines)
+- No deep nesting (>4 levels)
+- Proper error handling, no hardcoded values
+- Readable, well-named identifiers
+- No emojis as icons (use SVG: Heroicons/Lucide)
+- `cursor-pointer` on all clickable elements
+- Hover states with smooth transitions (150-300ms)
+- Minimum 4.5:1 contrast ratio for text
+- Visible focus states for keyboard navigation
+- `prefers-reduced-motion` respected
+- Responsive: 375px, 768px, 1024px, 1440px
+
+---
+
+## 3. UI/UX Pro Max Integration (Design Mandates)
+
+Nokta incorporates **UI/UX Pro Max** — a design reasoning engine containing 160+ UI rules, color palettes, accessible WCAG typography, and landing patterns.
+
+### A. Design System Generation
+* If building frontend components, query `/api/v1/uiux/design-system` to get precise typography, style keywords, and CSS colors before generating code.
+* Follow the **Master + Overrides** pattern: `MASTER.md` for global rules, `pages/[page].md` for page-specific overrides.
+
+### B. Anti-Patterns to Avoid
+* NEVER use emojis as icons. Use clean inline SVGs (or Lucide/Heroicons).
+* Avoid neon purples/pinks unless strictly matching a retro brand. Prefer deep obsidian, slate grey, and solid high-contrast accents.
+* Ensure hover states (`transition: all 0.2s`) and `cursor: pointer` are applied on all clickable elements.
+* Light-mode text contrast must meet WCAG AA (4.5:1 minimum).
+* No layout-shifting hovers (avoid scale transforms that shift layout).
+* No content hidden behind fixed navbars.
+* No horizontal scroll on mobile.
+
+### C. Pre-Delivery Checklist
+Before delivering any UI code, verify:
+- [ ] No emojis used as icons (use SVG instead)
+- [ ] All icons from consistent icon set (Heroicons/Lucide)
+- [ ] `cursor-pointer` on all clickable elements
+- [ ] Hover states with smooth transitions (150-300ms)
+- [ ] Light mode: text contrast 4.5:1 minimum
+- [ ] Focus states visible for keyboard navigation
+- [ ] `prefers-reduced-motion` respected
+- [ ] Responsive: 375px, 768px, 1024px, 1440px
+
+---
+
+## 4. The Autonomous Developer Loop (The Sleep Loop)
+
+Nokta can execute, audit, and commit changes while the developer is sleeping.
+
+### A. The Pipeline
+```
+AutoWatcher → Sprint Board → Steps Planner → Execution Worker → Quality Gates → Git Commit/Push → PR Creation
+```
+
+### B. Step Types
+| Type | Description | Example |
+|------|-------------|---------|
+| `prompt` | Call an LLM with messages | "Analyze this code for vulnerabilities" |
+| `shell` | Execute a shell command | `npm test`, `git status` |
+| `edit` | Modify a file | Update configuration, fix bug |
+| `review` | Review current changes | "Review the diff for quality" |
+| `pr` | Create a GitHub PR | "Create PR with summary" |
+| `condition` | Check a condition | `git:hasChanges`, `file:exists:package.json` |
+
+### C. The Adversarial Layer (Critic/Implementer)
+Every major task spawns two agents:
+* **The Implementer**: Focuses on speed and feature delivery.
+* **The Critic**: Focuses on edge cases, performance, and "Symmetry DNA" compliance.
+If the Critic rejects a PR, the Implementer must address feedback before the Verification Gate opens.
+
+### D. Execution Verification
+* Before considering a task complete, you MUST execute the project's tests (`npm test`).
+* Run code quality gates using `daemon/lib/gate-keeper.mjs` or `/api/v1/gates`.
+
+### E. Automated Pull Requests
+* If GITHUB_TOKEN is not present, Nokta falls back to the local `gh` CLI. It will automatically check out a branch (`nokta-run-<run_id>`), add changes, commit (`git commit -m "[Nokta]..." --no-verify`), push, and create a Pull Request (`gh pr create`).
+
+---
+
+## 5. The Advanced Capability Layers
+
+### A. The Semantic Layer (RAG Engine)
+* Vector DB integration for project-wide RAG, enabling deep-context retrieval across massive codebases.
+* Incremental Indexing: Real-time updating of embeddings via the AutoWatcher.
+* Cross-Project Search: Query across all indexed projects for shared patterns.
+
+### B. The Sandbox Layer (Isolated Execution)
+* Containerized execution environments (Docker/WASM) for secure, isolated agent runs.
+* Resource Capping: Strict CPU/RAM limits to prevent "Agent-Runaway."
+* Ephemeral States: Every execution starts from a clean snapshot.
+
+### C. The Evolution Layer (Skill Synthesis)
+* Pattern Detection: The system monitors successful autonomous sequences.
+* Skill Synthesis: When a "Fix Pattern" is used successfully 3+ times, the Evolution Layer converts the sequence into a formal `Nokta Skill`.
+* Self-Improving Library: Continuous expansion of Domain Capability Packs through agent-led discovery.
+
+---
+
+## 6. Code Style & Integrity
+
+* **Zero-Dep Philosophy**: Minimize adding new npm packages. Rely on native Node.js core modules (`node:fs`, `node:path`, `node:child_process`, `node:crypto`, `node:sqlite`).
+* **Self-Contained Code**: For single-page web applications, bundle your components and logic clearly. Avoid spreading CSS/JS across 50 tiny files unless creating a complex framework project.
+* **No Unhandled Rejections**: Always wrap async child processes or fetch requests in robust try-catch blocks with helpful logging.
+* **Immutability**: Always create new objects, never mutate existing ones.
+* **Naming**: Use descriptive, intention-revealing names. No single-letter variables except loop counters.
+* **Comments**: Explain *why*, not *what*. Code should be self-documenting.
+
+---
+
+## 7. Security Guidelines
+
+**Before ANY commit:**
+- No hardcoded secrets (API keys, passwords, tokens)
+- All user inputs validated
+- SQL injection prevention (parameterized queries)
+- XSS prevention (sanitized HTML)
+- CSRF protection enabled
+- Authentication/authorization verified
+- Rate limiting on all endpoints
+- Error messages don't leak sensitive data
+
+**Secret management:** NEVER hardcode secrets. Use environment variables or a secret manager. Validate required secrets at startup. Rotate any exposed secrets immediately.
+
+**If security issue found:** STOP → use security-reviewer agent → fix CRITICAL issues → rotate exposed secrets → review codebase for similar issues.
+
+---
+
+## 8. Testing Requirements
+
+**Minimum coverage: 80%**
+
+Test types (all required):
+1. **Unit tests** — Individual functions, utilities, components
+2. **Integration tests** — API endpoints, database operations
+3. **E2E tests** — Critical user flows
+
+**TDD workflow (mandatory):**
+1. Write test first (RED) — test should FAIL
+2. Write minimal implementation (GREEN) — test should PASS
+3. Refactor (IMPROVE) — verify coverage 80%+
+
+Troubleshoot failures: check test isolation → verify mocks → fix implementation (not tests, unless tests are wrong).
+
+---
+
+## 9. Git Workflow
+
+**Commit format:** `<type>: <description>` — Types: feat, fix, refactor, docs, test, chore, perf, ci
+
+**PR workflow:** Analyze full commit history → draft comprehensive summary → include test plan → push with `-u` flag.
+
+**Branch strategy:** `main` for production, `feat/*` for features, `fix/*` for fixes, `nokta-run-*` for autonomous agent runs.
+
+---
+
+## 10. Performance Guidelines
+
+* **Context Management**: Avoid last 20% of context window for large refactoring and multi-file features.
+* **Token Optimization**: Only inject relevant context. Use relevance scoring to prune noise.
+* **Lazy Loading**: Load project context on-demand, not eagerly.
+* **Debouncing**: File change events should be debounced (2s default) to prevent excessive processing.
+* **Caching**: Cache frequently accessed data (user brain, project config) in memory.
