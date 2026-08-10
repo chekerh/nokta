@@ -1,0 +1,26 @@
+{
+  "decisions": {
+    "DEC-msn3edao-aqps": {
+      "id": "DEC-msn3edao-aqps",
+      "type": "architectural",
+      "title": "Test decision for CLI",
+      "description": "",
+      "rationale": "",
+      "alternativesConsidered": [],
+      "status": "proposed",
+      "decisionDate": null,
+      "reviewedBy": null,
+      "effectiveDate": null,
+      "supersededBy": null,
+      "supersedes": null,
+      "tags": [],
+      "relatedFiles": [],
+      "relatedItems": [],
+      "implementedIn": null,
+      "impactAssessment": "",
+      "createdAt": "2026-08-10T10:32:26.832Z",
+      "updatedAt": "2026-08-10T10:32:26.832Z"
+    }
+  },
+  "nextId": 1
+}
