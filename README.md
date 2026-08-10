@@ -1,5 +1,9 @@
 # Nokta AI Operating System
 
+[![CI/CD](https://github.com/chekerh/nokta/actions/workflows/ci.yml/badge.svg)](https://github.com/chekerh/nokta/actions/workflows/ci.yml)
+[![Security](https://img.shields.io/badge/security-0%20vulns-00c853)](https://github.com/chekerh/nokta/security)
+[![License](https://img.shields.io/badge/license-MIT-00c853)](LICENSE)
+
 Nokta is a best-practice operating system for AI software agents. It gives Codex,
 Claude, Cursor, Sahara, and future tools a shared way to work like disciplined
 senior engineers: evidence first, token efficient, security aware, test driven,
