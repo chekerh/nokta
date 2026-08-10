@@ -12,6 +12,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run test:ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm prune --omit=dev
 
 FROM base AS runner
 RUN addgroup --system --gid 1001 nokta && \
@@ -24,7 +26,6 @@ COPY daemon/ ./daemon/
 COPY compiler/ ./compiler/
 COPY packs/ ./packs/
 COPY adapters/ ./adapters/
-COPY upstream/ ./upstream/
 
 ENV NODE_ENV=production
 ENV NOKTA_DATA_DIR=/data
