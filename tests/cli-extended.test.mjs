@@ -82,3 +82,19 @@ test('cli: compile --help shows options for compile', () => {
   assert.ok(stdout.includes('compile <target>'));
   assert.ok(stdout.includes('--out'));
 });
+
+test('cli: agent list shows item counts', () => {
+  const { stdout } = runCli(['agent', 'list']);
+  assert.ok(stdout.includes('Total items:') || stdout.includes('Total'));
+});
+
+test('cli: index shows project dashboard', () => {
+  const { stdout } = runCli(['index']);
+  assert.ok(stdout.includes('Nokta Project Index'));
+  assert.ok(stdout.includes('Items:'));
+});
+
+test('cli: agent run requires task argument', () => {
+  const { exitCode, stderr } = runCli(['agent', 'run']);
+  assert.ok(exitCode === 1 || stderr.includes('Usage'));
+});

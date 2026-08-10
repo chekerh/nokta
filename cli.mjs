@@ -391,6 +391,92 @@ async function cmdChat(args) {
   console.log(result.content + '\n');
 }
 
+async function cmdAgent(args) {
+  const sub = args[0];
+  const projectRoot = process.cwd();
+  const { SprintEngine } = await import('./daemon/lib/sprint-engine.mjs');
+  const { ProviderManager } = await import('./daemon/lib/provider-manager.mjs');
+  const { AgentOrchestrator } = await import('./daemon/agent/orchestrator.mjs');
+  const log = logger.child ? logger.child({ module: 'cli' }) : logger;
+
+  if (sub === 'list' || sub === 'ls') {
+    const engine = new SprintEngine(projectRoot, { log });
+    const data = await engine._load();
+    const items = Object.values(data.items);
+    const pending = items.filter((i) => i.status === 'backlog' || i.status === 'ready');
+    const inProgress = items.filter((i) => i.status === 'in-progress' || i.status === 'review');
+    const done = items.filter((i) => i.status === 'done');
+    console.log(`Total items: ${items.length}`);
+    console.log(`  Backlog/Ready: ${pending.length}`);
+    console.log(`  In Progress/Review: ${inProgress.length}`);
+    console.log(`  Done: ${done.length}`);
+    if (pending.length > 0) {
+      console.log('\nPending items:');
+      for (const item of pending.slice(0, 10)) {
+        console.log(`  📋 [${item.priority}] ${item.title} (${item.id})`);
+      }
+    }
+    return;
+  }
+
+  if (sub === 'run') {
+    const task = args[1];
+    if (!task) {
+      console.error('Usage: nokta agent run <task description>');
+      process.exit(1);
+    }
+    console.log(`Running agent task: ${task}`);
+    const providerManager = new ProviderManager({ log });
+    await providerManager.initDefaults();
+    const { JobQueue } = await import('./daemon/agent/job-queue.mjs');
+    const { JobWorker } = await import('./daemon/agent/job-worker.mjs');
+    const jobQueue = new JobQueue(log);
+    await jobQueue.init();
+    const worker = new JobWorker({ projectRoot, log, providerManager, jobQueue });
+    await worker.start();
+    const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, jobQueue });
+    const run = await orchestrator.runTask(task);
+    console.log(`\nRun complete: ${run.status}`);
+    if (run.result) console.log(run.result);
+    await worker.stop();
+    await jobQueue.close();
+    return;
+  }
+
+  console.error(`Unknown agent subcommand: ${sub}`);
+  console.log('Usage: nokta agent [list|run]');
+  process.exit(1);
+}
+
+async function cmdIndex() {
+  const projectRoot = process.cwd();
+  const { SprintEngine } = await import('./daemon/lib/sprint-engine.mjs');
+  const log = logger.child ? logger.child({ module: 'cli' }) : logger;
+  const engine = new SprintEngine(projectRoot, { log });
+  const summary = await engine.getSummary();
+
+  console.log(`\n📊 Nokta Project Index: ${projectRoot}\n`);
+  console.log(`📋 Items: ${summary.totalItems}`);
+  console.log(`   Backlog: ${summary.byStatus.backlog}`);
+  console.log(`   Ready: ${summary.byStatus.ready}`);
+  console.log(`   In Progress: ${summary.byStatus['in-progress']}`);
+  console.log(`   Review: ${summary.byStatus.review}`);
+  console.log(`   Done: ${summary.byStatus.done}`);
+  console.log('\n🏷  Priority:');
+  console.log(`   P0: ${summary.byPriority.P0}`);
+  console.log(`   P1: ${summary.byPriority.P1}`);
+  console.log(`   P2: ${summary.byPriority.P2}`);
+  console.log(`   P3: ${summary.byPriority.P3}`);
+  console.log(`   P4: ${summary.byPriority.P4}`);
+  console.log(`\n🏗️  Epics: ${summary.epics}`);
+  console.log(`💡 Initiatives: ${summary.initiatives}`);
+  console.log(`🏃 Sprints: ${summary.sprints}`);
+  if (summary.activeSprint) {
+    console.log(`📍 Active Sprint: ${summary.activeSprint.name || summary.activeSprint.id}`);
+  }
+  console.log('\n✨ Nokta: Evidence-first, token-efficient AI operating system.');
+}
+
 function showHelp() {
   console.log(`
 nokta — AI Operating System
@@ -409,6 +495,8 @@ Commands:
   decisions [list|show|create]     Manage architectural decisions
   kanban                           Open the Kanban board in browser
   chat [query]                     Chat with Nokta via LLM
+  agent [list|run]                 List items or run an agent task
+  index                            Show project index/dashboard
 
 Options:
   --help                           Show this help message
@@ -427,6 +515,9 @@ Examples:
   nokta decisions list             List architectural decisions
   nokta kanban                     Open Kanban board
   nokta chat "How do I handle auth in Express?"  Ask Nokta
+  nokta agent list                 List pending sprint items
+  nokta agent run "Implement auth"  Run an agent task
+  nokta index                      Show project dashboard
 `);
 }
 
@@ -441,6 +532,8 @@ const commands = {
   decisions: cmdDecisions,
   kanban: cmdKanban,
   chat: cmdChat,
+  agent: cmdAgent,
+  index: cmdIndex,
 };
 
 async function main() {
