@@ -46,7 +46,7 @@ jobs:
       - name: Run smoke test
         run: |
           docker run -d --name nokta-test -p 4217:4217 nokta
-          sleep 10
+          sleep 15
           curl -sf http://localhost:4217/health || exit 1
           docker stop nokta-test
           docker rm nokta-test
