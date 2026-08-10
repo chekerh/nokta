@@ -232,11 +232,14 @@ New test targets:
 🟢 DONE       → File watcher already wired (AutoWatcher → SprintEngine.autoUpdate)
 🟢 DONE       → Implement estimate function (story points + learning) ✅
 🟢 DONE       → Implement auto-prioritize function (deps + deadlines + code health) ✅
-🔴 BLOCKER    → Create CLI commands (nokta review-pr, nokta review-branch) — no cli.mjs
-🟡 HIGH       → Create reports module (reports.js)
-🟡 HIGH       → Add reports view to planner UI
-🟡 HIGH       → Design decision tracking directory (.nokta/design-decisions/)
-🟡 HIGH       → Wire learning into brainstorm (commonStoryPoints)
+🟢 DONE       → Create CLI commands (nokta review-pr, nokta review-branch) ✅
+🟢 DONE       → Create reports module (reports.js) ✅
+🟢 DONE       → Add reports view to planner UI ✅
+🟢 DONE       → Design decision tracking directory (.nokta/design-decisions/) ✅
+🟢 DONE       → Wire learning into brainstorm (commonStoryPoints) ✅
+🟢 DONE       → Security: Fix all 6 Dependabot alerts ✅
+🟢 DONE       → Push to GitHub, create release v0.3.0 ✅
+🟢 DONE       → Make repository public ✅
 🟢 MEDIUM     → Phase 7.1: Integration tests for sprint engine + planner
 🟢 LOW        → Phase 6+: Advanced features
 ```
@@ -257,7 +260,7 @@ New test targets:
 | Phase 9 — Polish | ⚠️ 1/10 | ✅ Pass | ✅ Clean |
 | Phase 10 — Ecosystem | ❌ 0/5 | ✅ Pass | ✅ Clean |
 
-**Total: 100 tests, 0 lint errors**
+**Total: 100 tests, 0 lint errors, 0 vulnerabilities**
 
 ## Verification Commands
 
@@ -265,13 +268,19 @@ After completing each phase:
 
 ```bash
 npm run lint          # Must pass with 0 warnings
-npm run test:ci       # All tests must pass
-node daemon/index.mjs daemon --port 4217  # Daemon must start
-curl http://localhost:4217/health         # Must return {"status":"ok",...}
+npm test              # All 100 tests must pass
+npm audit             # Must show 0 vulnerabilities
+node compiler/nokta-gates.mjs  # All 17 gates must pass
+git push              # Pre-push hook will run lint + tests
 ```
 
 ## Next Action
 
-**Implement reports module** (`daemon/public/lib/reports.js`) and **add reports view to planner UI** (`daemon/public/index.html`). The sprint report generator exists in `sprint-engine.mjs` but the UI and chart rendering module are missing.
+All planned work for v0.3.0 is complete. Repository is live at https://github.com/chekerh/nokta with releases tagged.
+
+Optional future enhancements:
+- TypeScript type generation from JSDoc annotations
+- Phase 6+: Dependency graph visualization, prompt template system, NLI interface
+- Phase 8+: Plugin architecture formalization, design/development mode toggles
 
 See `docs/loop/TASK_LOG.md` for ongoing task tracking.
