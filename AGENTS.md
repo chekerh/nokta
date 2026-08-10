@@ -29,22 +29,22 @@ NOKTA AI COMPANY OS
 
 ## Skills
 
-| Skill | Purpose |
-|-------|---------|
-| loop-engineering | Autonomous loop with discover→plan→execute→verify cycles |
-| source-driven-development | Verify from source before making claims |
-| doubt-driven-verification | Challenge every claim with structured doubt |
-| context-engineering | Optimize context flow to each agent |
-| concise-output | Minimize token usage — no preamble, no postamble |
+| Skill                     | Purpose                                                  |
+| ------------------------- | -------------------------------------------------------- |
+| loop-engineering          | Autonomous loop with discover→plan→execute→verify cycles |
+| source-driven-development | Verify from source before making claims                  |
+| doubt-driven-verification | Challenge every claim with structured doubt              |
+| context-engineering       | Optimize context flow to each agent                      |
+| concise-output            | Minimize token usage — no preamble, no postamble         |
 
 ## Agent Model Routing
 
-| Tier | Model | Use For |
-|------|-------|---------|
-| Orchestrator | mimo-v2.5-free | CEO, Chief of Staff |
-| Senior Architecture | nemotron-3-ultra-free | CTO, Security, Database, Reviewer, Cloud |
-| Implementation | deepseek-v4-flash-free | Frontend, Backend, QA, DevOps, Performance |
-| Fast Worker | north-mini-code-free | Repo Archaeologist, Tech Writer |
+| Tier                | Model                  | Use For                                    |
+| ------------------- | ---------------------- | ------------------------------------------ |
+| Orchestrator        | mimo-v2.5-free         | CEO, Chief of Staff                        |
+| Senior Architecture | nemotron-3-ultra-free  | CTO, Security, Database, Reviewer, Cloud   |
+| Implementation      | deepseek-v4-flash-free | Frontend, Backend, QA, DevOps, Performance |
+| Fast Worker         | north-mini-code-free   | Repo Archaeologist, Tech Writer            |
 
 ## Separation of Duties
 
@@ -63,6 +63,7 @@ Terminal: DONE, BLOCKED_*, WAITING_*, RATE_LIMITED, BUDGET_EXHAUSTED, PAUSED, CA
 ## Terminal Conditions
 
 The loop stops when:
+
 - No unblocked useful work remains
 - User explicitly stopped
 - System safety requires termination

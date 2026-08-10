@@ -24,33 +24,37 @@ async function _runCmd(cmd, args, opts = {}) {
 
 function getGitBranch() {
   return new Promise((resolve, reject) => {
-    import('node:child_process').then(({ execSync }) => {
-      try {
-        const branch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
-        resolve(branch);
-      } catch {
-        resolve('main');
-      }
-    }).catch(reject);
+    import('node:child_process')
+      .then(({ execSync }) => {
+        try {
+          const branch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
+          resolve(branch);
+        } catch {
+          resolve('main');
+        }
+      })
+      .catch(reject);
   });
 }
 
 function getDiff(branch) {
   return new Promise((resolve, reject) => {
-    import('node:child_process').then(({ execSync }) => {
-      try {
-        const base = branch === 'main' ? 'HEAD~1' : 'main';
-        const diff = execSync(`git diff ${base}...HEAD`, { encoding: 'utf8' });
-        resolve(diff);
-      } catch {
-        resolve('');
-      }
-    }).catch(reject);
+    import('node:child_process')
+      .then(({ execSync }) => {
+        try {
+          const base = branch === 'main' ? 'HEAD~1' : 'main';
+          const diff = execSync(`git diff ${base}...HEAD`, { encoding: 'utf8' });
+          resolve(diff);
+        } catch {
+          resolve('');
+        }
+      })
+      .catch(reject);
   });
 }
 
 async function cmdReviewPr(args) {
-  const branch = args[0] || await getGitBranch();
+  const branch = args[0] || (await getGitBranch());
   const projectRoot = process.cwd();
   const log = logger.child ? logger.child({ module: 'cli' }) : logger;
 
@@ -97,7 +101,7 @@ async function cmdReviewPr(args) {
 }
 
 async function cmdReviewBranch(args) {
-  const branch = args[0] || await getGitBranch();
+  const branch = args[0] || (await getGitBranch());
   const projectRoot = process.cwd();
   const log = logger.child ? logger.child({ module: 'cli' }) : logger;
 
@@ -124,7 +128,9 @@ async function cmdReviewBranch(args) {
   const engine = new SprintEngine(projectRoot, { log });
   const result = await engine.reviewPR(branch, diff);
 
-  console.log(`\nIssues: ${result.summary.issuesFound} (${result.summary.errors} errors, ${result.summary.warnings} warnings)`);
+  console.log(
+    `\nIssues: ${result.summary.issuesFound} (${result.summary.errors} errors, ${result.summary.warnings} warnings)`,
+  );
   console.log(`Overall: ${result.summary.overall}`);
 }
 

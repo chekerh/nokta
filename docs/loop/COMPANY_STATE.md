@@ -39,6 +39,7 @@ Implement all missing planner API routes, estimate function, auto-prioritize fun
 ## Next Action
 
 **Implement reports module** (`daemon/public/lib/reports.js`) with Canvas-based chart rendering for:
+
 - Sprint burndown charts
 - Velocity tracking
 - Completion rate metrics

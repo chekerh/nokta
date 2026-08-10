@@ -5,18 +5,18 @@
 
 ## Current State Summary
 
-| Category | Status | Notes |
-|---|---|---|
-| Lint (eslint) | ✅ Pass | `--max-warnings 0` clean |
-| Tests (node --test) | ✅ 100/100 | All pass |
-| Daemon startup | ✅ Starts | Health check responds |
-| Core sprint engine | ✅ Implemented | `sprint-engine.mjs` has full CRUD + estimate + auto-prioritize |
-| Planner frontend UI | ✅ Implemented | `index.html` + `planner.js` |
-| **Planner API routes** | ✅ **COMPLETE** | All CRUD endpoints implemented and tested |
-| File watcher | ✅ Done | `AutoWatcher` wired to `SprintEngine.autoUpdate` |
-| CLI (`cli.mjs`) | ✅ Done | `nokta compile`, `gates`, `detect`, `review-pr`, `review-branch` |
-| Estimate function | ✅ Done | Story point estimation with learning |
-| Auto-prioritize | ✅ Done | Dependency-based, deadline-based, code health prioritization
+| Category               | Status          | Notes                                                            |
+| ---------------------- | --------------- | ---------------------------------------------------------------- |
+| Lint (eslint)          | ✅ Pass         | `--max-warnings 0` clean                                         |
+| Tests (node --test)    | ✅ 100/100      | All pass                                                         |
+| Daemon startup         | ✅ Starts       | Health check responds                                            |
+| Core sprint engine     | ✅ Implemented  | `sprint-engine.mjs` has full CRUD + estimate + auto-prioritize   |
+| Planner frontend UI    | ✅ Implemented  | `index.html` + `planner.js`                                      |
+| **Planner API routes** | ✅ **COMPLETE** | All CRUD endpoints implemented and tested                        |
+| File watcher           | ✅ Done         | `AutoWatcher` wired to `SprintEngine.autoUpdate`                 |
+| CLI (`cli.mjs`)        | ✅ Done         | `nokta compile`, `gates`, `detect`, `review-pr`, `review-branch` |
+| Estimate function      | ✅ Done         | Story point estimation with learning                             |
+| Auto-prioritize        | ✅ Done         | Dependency-based, deadline-based, code health prioritization     |
 
 ---
 
@@ -27,6 +27,7 @@
 The frontend (`daemon/public/lib/planner.js`) calls these endpoints that **don't exist**:
 
 **Items:**
+
 - `GET /api/v1/planner/items` — list items with filters (type, status, sprint, priority, label, search)
 - `POST /api/v1/planner/items` — create item
 - `GET /api/v1/planner/items/:id` — get single item
@@ -34,16 +35,19 @@ The frontend (`daemon/public/lib/planner.js`) calls these endpoints that **don't
 - `DELETE /api/v1/planner/items/:id` — delete item
 
 **Sprints:**
+
 - `GET /api/v1/planner/sprints` — list all sprints
 - `POST /api/v1/planner/sprints` — create sprint
 
 **Epics & Initiatives:**
+
 - `GET /api/v1/planner/epics` — list epics
 - `POST /api/v1/planner/epics` — create epic
 - `GET /api/v1/planner/initiatives` — list initiatives
 - `POST /api/v1/planner/initiatives` — create initiative
 
 **Brainstorm & Reports:**
+
 - `POST /api/v1/planner/brainstorm` — generate AI brainstorm suggestions
 - `GET /api/v1/planner/summary` — dashboard summary counts
 - `GET /api/v1/planner/sprints/:id/report` — generate sprint report
@@ -65,6 +69,7 @@ The frontend (`daemon/public/lib/planner.js`) calls these endpoints that **don't
 ### 2.1 Implement Estimate Function (`daemon/lib/sprint-engine.mjs`)
 
 Currently has **0 references** to estimate. Needs:
+
 - Story point estimation using historical velocity
 - User-override learning (record when user overrides estimate)
 - Integration with the learning system
@@ -72,6 +77,7 @@ Currently has **0 references** to estimate. Needs:
 ### 2.2 Implement Auto-Prioritize Function (`daemon/lib/sprint-engine.mjs`)
 
 Currently has **0 references** to auto-prioritize. Needs:
+
 - Dependency-based priority (items with more dependents → higher priority)
 - Deadline-based priority (items due sooner → higher priority)
 - Code health signals (files with more churn → higher priority)
@@ -195,11 +201,12 @@ Currently has **0 references** to auto-prioritize. Needs:
 
 ### 7.3 Test Suite Expansion (Target: 50+ tests)
 
-| Current | Target |
-|---|---|
+| Current  | Target         |
+| -------- | -------------- |
 | 86 tests | 50+ additional |
 
 New test targets:
+
 - Planner API routes (15-20 tests)
 - Sprint engine estimate/prioritize (5-10 tests)
 - File watcher integration (3-5 tests)
@@ -246,19 +253,19 @@ New test targets:
 
 ## Current Progress
 
-| Phase | Status | Tests | Lint |
-|---|---|---|---|
-| Phase 0 — Foundation | ⚠️ 3/4 | ✅ Pass | ✅ Clean |
-| Phase 1 — Sprint Engine Core | ✅ 5/5 | ✅ Pass | ✅ Clean |
-| Phase 2 — Planner UI | ✅ Complete | ✅ Pass | ✅ Clean |
-| Phase 3 — Design Intelligence | ✅ Complete | ✅ Pass | ✅ Clean |
-| Phase 4 — Architectural Intelligence | ⚠️ 2/5 | ✅ Pass | ✅ Clean |
-| Phase 5 — Auto-Update | ✅ Done | ✅ Pass | ✅ Clean |
-| Phase 6 — PR Review | ✅ 4/4 | ✅ Pass | ✅ Clean |
-| Phase 7 — Reports | ⚠️ 1/4 | ✅ Pass | ✅ Clean |
-| Phase 8 — Self-Learning | ⚠️ 3/7 | ✅ Pass | ✅ Clean |
-| Phase 9 — Polish | ⚠️ 1/10 | ✅ Pass | ✅ Clean |
-| Phase 10 — Ecosystem | ❌ 0/5 | ✅ Pass | ✅ Clean |
+| Phase                                | Status      | Tests   | Lint     |
+| ------------------------------------ | ----------- | ------- | -------- |
+| Phase 0 — Foundation                 | ⚠️ 3/4      | ✅ Pass | ✅ Clean |
+| Phase 1 — Sprint Engine Core         | ✅ 5/5      | ✅ Pass | ✅ Clean |
+| Phase 2 — Planner UI                 | ✅ Complete | ✅ Pass | ✅ Clean |
+| Phase 3 — Design Intelligence        | ✅ Complete | ✅ Pass | ✅ Clean |
+| Phase 4 — Architectural Intelligence | ⚠️ 2/5      | ✅ Pass | ✅ Clean |
+| Phase 5 — Auto-Update                | ✅ Done     | ✅ Pass | ✅ Clean |
+| Phase 6 — PR Review                  | ✅ 4/4      | ✅ Pass | ✅ Clean |
+| Phase 7 — Reports                    | ⚠️ 1/4      | ✅ Pass | ✅ Clean |
+| Phase 8 — Self-Learning              | ⚠️ 3/7      | ✅ Pass | ✅ Clean |
+| Phase 9 — Polish                     | ⚠️ 1/10     | ✅ Pass | ✅ Clean |
+| Phase 10 — Ecosystem                 | ❌ 0/5      | ✅ Pass | ✅ Clean |
 
 **Total: 100 tests, 0 lint errors, 0 vulnerabilities**
 
@@ -279,6 +286,7 @@ git push              # Pre-push hook will run lint + tests
 All planned work for v0.3.0 is complete. Repository is live at https://github.com/chekerh/nokta with releases tagged.
 
 Optional future enhancements:
+
 - TypeScript type generation from JSDoc annotations
 - Phase 6+: Dependency graph visualization, prompt template system, NLI interface
 - Phase 8+: Plugin architecture formalization, design/development mode toggles

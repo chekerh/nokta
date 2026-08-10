@@ -689,9 +689,7 @@ export class SprintEngine {
 
     const completedItems = Object.values(data.items).filter((i) => i.status === 'done' && i.storyPoints);
     const avgVelocity =
-      completedItems.length > 0
-        ? completedItems.reduce((sum, i) => sum + i.storyPoints, 0) / completedItems.length
-        : 5;
+      completedItems.length > 0 ? completedItems.reduce((sum, i) => sum + i.storyPoints, 0) / completedItems.length : 5;
 
     const complexityMap = {
       story: 8,
@@ -754,9 +752,7 @@ export class SprintEngine {
       score += priorityScore[item.priority] || 0;
 
       // Dependency scoring — items with more dependents get higher priority
-      const dependents = Object.values(data.items).filter(
-        (i) => i.dependencies && i.dependencies.includes(item.id),
-      );
+      const dependents = Object.values(data.items).filter((i) => i.dependencies && i.dependencies.includes(item.id));
       score += dependents.length * 5;
       if (dependents.length > 0) score += 20;
 

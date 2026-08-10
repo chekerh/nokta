@@ -187,10 +187,7 @@ test('SprintEngine estimateItem handles missing item', async () => {
   const root = makeFixture('estimate-missing');
   const engine = new SprintEngine(root);
 
-  await assert.rejects(
-    () => engine.estimateItem('NOK-9999'),
-    /Item not found/,
-  );
+  await assert.rejects(() => engine.estimateItem('NOK-9999'), /Item not found/);
 });
 
 test('SprintEngine autoPrioritize ranks items by priority and dependencies', async () => {

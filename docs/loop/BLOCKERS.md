@@ -3,6 +3,7 @@
 ## Active Blockers
 
 ### BLOCKER-001: Missing Planner API Routes (CRITICAL)
+
 - **Severity:** Critical
 - **Component:** `daemon/routes/planner.mjs`
 - **Description:** The planner routes file only contains 3 decision-linking endpoints. The frontend Kanban board (`daemon/public/lib/planner.js`) calls 15+ additional endpoints that don't exist, including:

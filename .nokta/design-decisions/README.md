@@ -18,13 +18,14 @@ When creating a new decision record, use:
 
 ## Index
 
-| # | Title | Status | Date |
-|---|-------|--------|------|
-| _(add as decisions are made)_ | | | |
+| #                             | Title | Status | Date |
+| ----------------------------- | ----- | ------ | ---- |
+| _(add as decisions are made)_ |       |        |      |
 
 ## Decision Engine Integration
 
 Decisions feed into `daemon/lib/sprint-engine.mjs` via:
+
 - `.nokta/learned/patterns.json` — conventions and accepted patterns
 - Sprint recommendations are filtered by recorded decisions
 - PR review gates check against accepted conventions

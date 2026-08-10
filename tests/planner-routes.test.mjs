@@ -144,11 +144,9 @@ test('planner: POST/GET/UPDATE/DELETE item', async () => {
     assert.equal(fetched.status, 200);
     assert.equal(fetched.body.id, created.body.id);
 
-    const patched = await httpRequest(
-      `${BASE(port)}/api/v1/planner/items/${created.body.id}`,
-      'PATCH',
-      { status: 'in-progress' },
-    );
+    const patched = await httpRequest(`${BASE(port)}/api/v1/planner/items/${created.body.id}`, 'PATCH', {
+      status: 'in-progress',
+    });
     assert.equal(patched.status, 200);
     assert.equal(patched.body.status, 'in-progress');
 
@@ -156,11 +154,7 @@ test('planner: POST/GET/UPDATE/DELETE item', async () => {
     assert.equal(listed.status, 200);
     assert.ok(listed.body.items.length >= 1);
 
-    const deleted = await httpRequest(
-      `${BASE(port)}/api/v1/planner/items/${created.body.id}`,
-      'DELETE',
-      {},
-    );
+    const deleted = await httpRequest(`${BASE(port)}/api/v1/planner/items/${created.body.id}`, 'DELETE', {});
     assert.equal(deleted.status, 200);
     assert.equal(deleted.body.success, true);
   } finally {
@@ -249,10 +243,15 @@ test('planner: brainstorm returns suggestions', async () => {
     // We accept either a 200 with suggestions or a 408/504 timeout response.
     let res;
     try {
-      res = await httpRequest(`${BASE(port)}/api/v1/planner/brainstorm`, 'POST', {
-        context: { stacks: ['node'], files: [] },
-        prompts: { features: 'Add dark mode toggle' },
-      }, 30000);
+      res = await httpRequest(
+        `${BASE(port)}/api/v1/planner/brainstorm`,
+        'POST',
+        {
+          context: { stacks: ['node'], files: [] },
+          prompts: { features: 'Add dark mode toggle' },
+        },
+        30000,
+      );
     } catch {
       // Timeout is acceptable — LLM call may be slow
       res = { status: 200, body: { suggestions: [] } };
@@ -261,10 +260,15 @@ test('planner: brainstorm returns suggestions', async () => {
     if (res.status === 400) {
       await new Promise((r) => setTimeout(r, 1000));
       try {
-        res = await httpRequest(`${BASE(port)}/api/v1/planner/brainstorm`, 'POST', {
-          context: { stacks: ['node'], files: [] },
-          prompts: { features: 'Add dark mode toggle' },
-        }, 30000);
+        res = await httpRequest(
+          `${BASE(port)}/api/v1/planner/brainstorm`,
+          'POST',
+          {
+            context: { stacks: ['node'], files: [] },
+            prompts: { features: 'Add dark mode toggle' },
+          },
+          30000,
+        );
       } catch {
         res = { status: 200, body: { suggestions: [] } };
       }
@@ -299,11 +303,9 @@ test('planner: feedback endpoint records accept', async () => {
     });
     assert.equal(created.status, 201);
 
-    const feedback = await httpRequest(
-      `${BASE(port)}/api/v1/planner/items/${created.body.id}/feedback`,
-      'POST',
-      { action: 'accept' },
-    );
+    const feedback = await httpRequest(`${BASE(port)}/api/v1/planner/items/${created.body.id}/feedback`, 'POST', {
+      action: 'accept',
+    });
     assert.equal(feedback.status, 200);
     assert.ok(feedback.body.patterns.acceptedItems > 0);
     assert.ok(feedback.body.patterns.commonLabels.includes('frontend'));

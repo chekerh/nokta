@@ -5,11 +5,13 @@
 The autonomous loop protocol for Nokta follows these phases:
 
 ### 1. TRIGGERED
+
 - **Entry point:** User request, file change, scheduled task, or agent auto-run
 - **Output:** Loop initialization, context loading begins
 - **Transition:** → DISCOVERING
 
 ### 2. DISCOVERING
+
 - **Actions:**
   - Scan project structure
   - Detect tech stack (detect.mjs)
@@ -22,6 +24,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → TRIAGING
 
 ### 3. TRIAGING
+
 - **Actions:**
   - Assess task type (bug fix, feature, refactor, etc.)
   - Identify risk level (low, medium, high)
@@ -31,6 +34,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → SPECIFYING
 
 ### 4. SPECIFYING
+
 - **Actions:**
   - Define objective clearly
   - List in-scope and out-of-scope items
@@ -42,6 +46,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → RESEARCHING
 
 ### 5. RESEARCHING
+
 - **Actions:**
   - Read relevant source files
   - Check existing patterns and conventions
@@ -53,6 +58,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → PLANNING
 
 ### 6. PLANNING
+
 - **Actions:**
   - Break down into concrete steps
   - Estimate each step (story points)
@@ -63,6 +69,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → DELEGATING
 
 ### 7. DELEGATING
+
 - **Actions:**
   - For autonomous mode: create agent run with goal-oriented steps
   - For directive mode: assign to specific agent role
@@ -71,6 +78,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → EXECUTING
 
 ### 8. EXECUTING
+
 - **Actions:**
   - Write tests first (TDD)
   - Implement changes (smallest coherent change)
@@ -81,6 +89,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → VERIFYING
 
 ### 9. VERIFYING
+
 - **Actions:**
   - Run lint (`npm run lint`)
   - Run tests (`npm run test:ci`)
@@ -92,6 +101,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → REVIEWING
 
 ### 10. REVIEWING
+
 - **Actions:**
   - Code review via `code-reviewer` agent
   - Security review via `security-reviewer` agent
@@ -102,6 +112,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → RECONCILING
 
 ### 11. RECONCILING
+
 - **Actions:**
   - Address review feedback
   - Fix any identified issues
@@ -111,6 +122,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → DOCUMENTING
 
 ### 12. DOCUMENTING
+
 - **Actions:**
   - Update active trail session
   - Record decisions made
@@ -122,6 +134,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → PERSISTING
 
 ### 13. PERSISTING
+
 - **Actions:**
   - Save state to `.nokta/` directory
   - Update learned patterns from feedback
@@ -132,6 +145,7 @@ The autonomous loop protocol for Nokta follows these phases:
 - **Transition:** → SELECTING_NEXT
 
 ### 14. SELECTING_NEXT
+
 - **Actions:**
   - Check for more work (backlog items, file changes, feedback)
   - Prioritize next task
@@ -149,23 +163,23 @@ The autonomous loop protocol for Nokta follows these phases:
 
 Each loop must pass these gates before transitioning:
 
-| Gate | When | Must Pass Before |
-|---|---|---|
-| **Preflight Gate** | Phase 2 | PLANNING |
-| **Evidence Gate** | Phases 2-3 | EXECUTING |
-| **Mutation Gate** | Phase 7 | EXECUTING |
-| **Token Gate** | All phases | All transitions |
-| **Security Gate** | Phases 6-7 | COMMIT/PR |
-| **Verification Gate** | Phase 9 | DOCUMENTING |
-| **Trail Gate** | Phase 12 | SELECTING_NEXT |
+| Gate                  | When       | Must Pass Before |
+| --------------------- | ---------- | ---------------- |
+| **Preflight Gate**    | Phase 2    | PLANNING         |
+| **Evidence Gate**     | Phases 2-3 | EXECUTING        |
+| **Mutation Gate**     | Phase 7    | EXECUTING        |
+| **Token Gate**        | All phases | All transitions  |
+| **Security Gate**     | Phases 6-7 | COMMIT/PR        |
+| **Verification Gate** | Phase 9    | DOCUMENTING      |
+| **Trail Gate**        | Phase 12   | SELECTING_NEXT   |
 
 ## Agent Model Routing
 
-| Tier | Model | Use For |
-|---|---|---|
-| Orchestrator | mimo-v2.5-free | CEO, Chief of Staff |
-| Senior Architecture | nemotron-3-ultra-free | CTO, Security, Reviewer, Database |
-| Implementation | deepseek-v4-flash-free | Frontend, Backend, QA, DevOps |
-| Fast Worker | north-mini-code-free | Tech Writer, Repo Archaeologist |
+| Tier                | Model                  | Use For                           |
+| ------------------- | ---------------------- | --------------------------------- |
+| Orchestrator        | mimo-v2.5-free         | CEO, Chief of Staff               |
+| Senior Architecture | nemotron-3-ultra-free  | CTO, Security, Reviewer, Database |
+| Implementation      | deepseek-v4-flash-free | Frontend, Backend, QA, DevOps     |
+| Fast Worker         | north-mini-code-free   | Tech Writer, Repo Archaeologist   |
 
 **Separation of Duties:** Executor and verifier MUST use different models.
