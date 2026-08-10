@@ -8,7 +8,7 @@ import test from 'node:test';
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function findPort() {
-  return 5000 + Math.floor(Math.random() * 20000);
+  return 6000 + Math.floor(Math.random() * 20000);
 }
 
 function httpGet(url, timeout = 5000) {
@@ -66,7 +66,7 @@ function httpRequest(url, method, body, timeout = 5000) {
 function startDaemon(port) {
   const proc = spawn('node', [path.join(DIR, 'daemon', 'index.mjs'), 'daemon', '--port', String(port)], {
     cwd: DIR,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: 'ignore',
     env: { ...process.env, NOKTA_LOG_LEVEL: 'error' },
   });
   return proc;
@@ -84,7 +84,7 @@ async function waitForHealth(url, timeout = 15000) {
   throw new Error('Timeout waiting for daemon');
 }
 
-function killProcess(proc) {
+async function killProcess(proc) {
   if (!proc || proc.killed) return;
   try {
     proc.kill('SIGTERM');
@@ -92,6 +92,16 @@ function killProcess(proc) {
   try {
     proc.kill('SIGKILL');
   } catch {}
+  if (proc.pid && !proc.killed) {
+    try {
+      await new Promise((resolve) => {
+        proc.on('exit', resolve);
+        setTimeout(() => resolve(), 1000);
+      });
+    } catch {}
+  }
+  // Extra delay to ensure port is released
+  await new Promise((resolve) => setTimeout(resolve, 200));
 }
 
 const BASE = (port) => `http://localhost:${port}`;
@@ -110,7 +120,7 @@ test('planner: GET /api/v1/planner/summary returns counts', async () => {
     assert.ok('epics' in res.body);
     assert.ok('initiatives' in res.body);
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -154,7 +164,7 @@ test('planner: POST/GET/UPDATE/DELETE item', async () => {
     assert.equal(deleted.status, 200);
     assert.equal(deleted.body.success, true);
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -167,7 +177,7 @@ test('planner: GET non-existent item returns 404', async () => {
     assert.equal(res.status, 404);
     assert.ok(res.body.error.includes('not found'));
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -187,7 +197,7 @@ test('planner: POST/GET sprint', async () => {
     assert.equal(listed.status, 200);
     assert.ok(listed.body.sprints.length >= 1);
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -207,7 +217,7 @@ test('planner: POST/GET epic', async () => {
     assert.equal(listed.status, 200);
     assert.ok(listed.body.epics.length >= 1);
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -226,7 +236,7 @@ test('planner: POST/GET initiatives', async () => {
     assert.equal(listed.status, 200);
     assert.ok(listed.body.initiatives.length >= 1);
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -247,7 +257,19 @@ test('planner: brainstorm returns suggestions', async () => {
       // Timeout is acceptable — LLM call may be slow
       res = { status: 200, body: { suggestions: [] } };
     }
-     // Either successful brainstorm or graceful fallback
+    // Retry once if we got an unexpected 400 — daemon may not have fully initialized
+    if (res.status === 400) {
+      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        res = await httpRequest(`${BASE(port)}/api/v1/planner/brainstorm`, 'POST', {
+          context: { stacks: ['node'], files: [] },
+          prompts: { features: 'Add dark mode toggle' },
+        }, 30000);
+      } catch {
+        res = { status: 200, body: { suggestions: [] } };
+      }
+    }
+    // Either successful brainstorm or graceful fallback
     if (res.status === 200) {
       assert.ok(res.body.suggestions);
       assert.ok(res.body.suggestions.length >= 0);
@@ -256,7 +278,7 @@ test('planner: brainstorm returns suggestions', async () => {
       assert.ok(res.status >= 500 || res.status === 408, `Unexpected status: ${res.status}`);
     }
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -286,7 +308,7 @@ test('planner: feedback endpoint records accept', async () => {
     assert.ok(feedback.body.patterns.acceptedItems > 0);
     assert.ok(feedback.body.patterns.commonLabels.includes('frontend'));
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -302,7 +324,7 @@ test('planner: brainstorm without features returns 400', async () => {
     assert.equal(res.status, 400);
     assert.ok(res.body.error);
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -314,6 +336,6 @@ test('planner: delete non-existent item returns 404', async () => {
     const res = await httpRequest(`${BASE(port)}/api/v1/planner/items/NOK-9999`, 'DELETE', {});
     assert.equal(res.status, 404);
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });

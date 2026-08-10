@@ -8,7 +8,7 @@ import test from 'node:test';
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function findPort() {
-  return 5000 + Math.floor(Math.random() * 20000);
+  return 6000 + Math.floor(Math.random() * 20000);
 }
 
 function httpGet(url, timeout = 3000) {
@@ -66,7 +66,7 @@ function httpPost(url, body, timeout = 3000) {
 function startDaemon(port) {
   const proc = spawn('node', [path.join(DIR, 'daemon', 'index.mjs'), 'daemon', '--port', String(port)], {
     cwd: DIR,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: 'ignore',
     env: { ...process.env, NOKTA_LOG_LEVEL: 'error' },
   });
   return proc;
@@ -84,7 +84,7 @@ async function waitForHealth(url, timeout = 8000) {
   throw new Error('Timeout waiting for daemon');
 }
 
-function killProcess(proc) {
+async function killProcess(proc) {
   if (!proc || proc.killed) return;
   try {
     proc.kill('SIGTERM');
@@ -92,6 +92,16 @@ function killProcess(proc) {
   try {
     proc.kill('SIGKILL');
   } catch {}
+  if (proc.pid && !proc.killed) {
+    try {
+      await new Promise((resolve) => {
+        proc.on('exit', resolve);
+        setTimeout(() => resolve(), 1000);
+      });
+    } catch {}
+  }
+  // Extra delay to ensure port is released
+  await new Promise((resolve) => setTimeout(resolve, 200));
 }
 
 test('daemon starts and responds to health check', async () => {
@@ -102,7 +112,7 @@ test('daemon starts and responds to health check', async () => {
     assert.equal(health.status, 'ok');
     assert.ok(Array.isArray(health.providers));
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -115,7 +125,7 @@ test('daemon detects project stacks', async () => {
     assert.ok(Array.isArray(result.stacks));
     assert.ok(result.stacks.includes('node'));
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -129,7 +139,7 @@ test('daemon runs trail gates', async () => {
     assert.ok(Array.isArray(result.gates));
     assert.ok(result.gates.length >= 5);
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -143,7 +153,7 @@ test('daemon returns trail state', async () => {
     assert.ok('activeSession' in result);
     assert.ok(Array.isArray(result.recentSessions));
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
 
@@ -158,6 +168,6 @@ test('daemon returns context packs', async () => {
     assert.ok(result.packs.some((p) => p.id === 'core.agent-operating-system'));
     assert.ok(result.packs.some((p) => p.id === 'token.context-budget'));
   } finally {
-    killProcess(proc);
+    await killProcess(proc);
   }
 });
