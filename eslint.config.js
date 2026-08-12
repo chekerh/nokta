@@ -1,6 +1,6 @@
 export default [
   {
-    ignores: ['upstream/**', 'packs/**', 'agents/**', 'adapters/**', 'trail-template/**', 'sources/**', 'schemas/**'],
+    ignores: ['upstream/**', 'packs/**', 'agents/**', 'adapters/**', 'trail-template/**', 'sources/**', 'schemas/**', '.nokta/**', 'daemon/public/**'],
     files: ['**/*.mjs'],
     languageOptions: {
       ecmaVersion: 2022,
