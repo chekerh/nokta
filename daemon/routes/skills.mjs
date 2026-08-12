@@ -1,7 +1,8 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { authMiddleware } from '../lib/auth.mjs';
 import { runDiscovery, getCachedReport } from '../lib/discovery.mjs';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 
@@ -110,7 +111,7 @@ async function cloneRepo(url) {
   try {
     await fs.access(target);
     try {
-      execSync(`cd "${target}" && git pull --ff-only`, { stdio: 'pipe', timeout: 30000 });
+      execFileSync('git', ['pull', '--ff-only'], { cwd: target, stdio: 'pipe', timeout: 30000 });
     } catch {}
     return target;
   } catch {}
@@ -120,7 +121,7 @@ async function cloneRepo(url) {
   } catch {
     await fs.mkdir(REPO_CACHE, { recursive: true });
   }
-  execSync(`git clone --depth 1 "${url}" "${target}"`, { stdio: 'pipe', timeout: 60000 });
+  execFileSync('git', ['clone', '--depth', '1', url, target], { stdio: 'pipe', timeout: 60000 });
   return target;
 }
 
@@ -164,6 +165,7 @@ export function registerSkillRoutes(app, log) {
   // List known/cached sources
   app.get(
     '/api/v1/skills/sources',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const sources = await loadSources();
       res.json({ sources });
@@ -173,6 +175,7 @@ export function registerSkillRoutes(app, log) {
   // Scan a repo URL for skills
   app.post(
     '/api/v1/skills/scan',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { url } = req.body || {};
       if (!url) throw new AppError('url is required', 400);
@@ -197,6 +200,7 @@ export function registerSkillRoutes(app, log) {
   // Import scanned skills into Nokta
   app.post(
     '/api/v1/skills/import',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { url } = req.body || {};
       if (!url) throw new AppError('url is required', 400);
@@ -280,6 +284,7 @@ export function registerSkillRoutes(app, log) {
   // Health: cached sources count
   app.get(
     '/api/v1/skills',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const sources = await loadSources();
       res.json({ cachedSources: sources.length, sources });
@@ -287,7 +292,7 @@ export function registerSkillRoutes(app, log) {
   );
 
   // Discovery: auto-search the web for new skills, tools, and updates
-  app.get('/api/v1/discover', async (req, res) => {
+  app.get('/api/v1/discover', authMiddleware(), async (req, res) => {
     const force = req.query.force === 'true';
     try {
       const report = await runDiscovery(force);
@@ -299,7 +304,7 @@ export function registerSkillRoutes(app, log) {
   });
 
   // Discovery: get cached report only (no new search)
-  app.get('/api/v1/discover/cached', async (req, res) => {
+  app.get('/api/v1/discover/cached', authMiddleware(), async (req, res) => {
     const report = await getCachedReport();
     if (report) return res.json(report);
     res.json({

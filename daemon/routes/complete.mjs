@@ -1,8 +1,10 @@
+import { authMiddleware } from '../lib/auth.mjs';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 
 export function registerCompleteRoutes(app, providerManager) {
   app.post(
     '/api/v1/chat/complete',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { prompt, context = [], model, maxTokens, temperature } = req.body;
 

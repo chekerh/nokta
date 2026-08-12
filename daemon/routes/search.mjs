@@ -1,6 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { authMiddleware } from '../lib/auth.mjs';
+import { semanticSearch } from '../lib/semantic.mjs';
 
 const IGNORE_EXTS = new Set([
   '.jpg',
@@ -315,6 +317,7 @@ async function walkDir(dir, queryTokens, projectRoot, maxResults, scope, symbolT
 export function registerSearchRoutes(app) {
   app.post(
     '/api/v1/search',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { query, target, maxResults = 20, dir, ext, regex } = req.body;
       if (!query) throw new AppError('Query is required', 400);
@@ -392,7 +395,20 @@ export function registerSearchRoutes(app) {
     }),
   );
 
-  app.get('/api/v1/search/history', (req, res) => {
+  app.get('/api/v1/search/history', authMiddleware(), (req, res) => {
     res.json({ history: SEARCH_HISTORY.slice(0, 50) });
   });
+
+  app.post(
+    '/api/v1/search/semantic',
+    authMiddleware(),
+    asyncHandler(async (req, res) => {
+      const { query, target, maxResults = 10 } = req.body;
+      if (!query) throw new AppError('Query is required', 400);
+
+      const projectRoot = target || process.cwd();
+      const result = await semanticSearch(query, projectRoot, { maxResults });
+      res.json(result);
+    }),
+  );
 }

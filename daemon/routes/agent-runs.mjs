@@ -155,7 +155,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
     }),
   );
 
-  app.get('/api/v1/agent-runs/events', (req, res) => {
+  app.get('/api/v1/agent-runs/events', authMiddleware(), (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

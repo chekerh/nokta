@@ -1,8 +1,10 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { authMiddleware } from '../lib/auth.mjs';
 
 export function registerAgentRoutes(app, providerManager, _log) {
   app.get(
     '/api/v1/agents',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const providers = providerManager.list();
       const health = await providerManager.health();
@@ -29,6 +31,7 @@ export function registerAgentRoutes(app, providerManager, _log) {
 
   app.post(
     '/api/v1/agents/recommend',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { prompt } = req.body;
       if (!prompt) throw new AppError('Prompt is required', 400);

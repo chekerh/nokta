@@ -1,13 +1,19 @@
-import { asyncHandler } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { authMiddleware } from '../lib/auth.mjs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 export function registerGateRoutes(app, gateKeeper) {
   app.post(
     '/api/v1/gates',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target } = req.body;
       const projectRoot = target ? path.resolve(target) : process.cwd();
+      const allowedRoot = path.resolve(process.cwd());
+      if (!projectRoot.startsWith(allowedRoot)) {
+        throw new AppError('Path traversal detected', 403);
+      }
       const gates = [];
       const trailDir = path.join(projectRoot, '.ai', 'trail');
       try {
@@ -69,6 +75,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.post(
     '/api/v1/gates/evaluate',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { messages, estimatedTokens } = req.body;
       if (!messages) {
@@ -81,6 +88,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.post(
     '/api/v1/gates/check-token',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { messages, estimatedTokens } = req.body;
       const result = await gateKeeper.checkToken(messages, estimatedTokens);
@@ -90,6 +98,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.post(
     '/api/v1/gates/check-security',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { messages } = req.body;
       const result = await gateKeeper.checkSecurity(messages);
@@ -99,6 +108,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.get(
     '/api/v1/gates/config',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       res.json({
         tokenLimit: gateKeeper.tokenLimit,
@@ -109,6 +119,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.put(
     '/api/v1/gates/config',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { tokenLimit, severity } = req.body;
       if (tokenLimit !== undefined) gateKeeper.tokenLimit = tokenLimit;

@@ -1,9 +1,11 @@
+import { authMiddleware } from '../lib/auth.mjs';
 import { asyncHandler } from '../lib/route-utils.mjs';
 import { compileContext, detectProject, loadPacks } from '../../compiler/lib/nokta.mjs';
 
 export function registerContextRoutes(app) {
   app.post(
     '/api/v1/context',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target, task, adapter = 'codex', budget = 6000 } = req.body;
       const result = compileContext({
@@ -21,6 +23,7 @@ export function registerContextRoutes(app) {
 
   app.post(
     '/api/v1/detect',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target } = req.body;
       const detected = detectProject(target || process.cwd());
@@ -30,6 +33,7 @@ export function registerContextRoutes(app) {
 
   app.get(
     '/api/v1/packs',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const packs = loadPacks();
       res.json({

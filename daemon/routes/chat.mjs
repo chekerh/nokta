@@ -1,9 +1,11 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { authMiddleware } from '../lib/auth.mjs';
 import { sendSSEError, streamOllama, streamOpenAI, streamClaude } from '../lib/streaming-utils.mjs';
 
 export function registerChatRoutes(app, chatHandler, providerManager) {
   app.post(
     '/api/v1/chat',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const {
         messages,
@@ -53,6 +55,7 @@ export function registerChatRoutes(app, chatHandler, providerManager) {
 
   app.get(
     '/api/v1/models',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const providers = providerManager.list();
       const result = [];

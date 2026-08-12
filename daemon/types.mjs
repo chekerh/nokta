@@ -383,4 +383,116 @@ export class AppError extends Error {
  * @property {Array<{id:string, name:string, enabled:boolean, healthy:boolean}>} providers
  * @property {string|null} defaultProvider
  * @property {boolean} autoRoute
+ * @property {string[]} routes
+ */
+
+/**
+ * ── Projects ─────────────────────────────────────────────────────
+ */
+
+/**
+ * @typedef {Object} ProjectCreateRequest
+ * @property {string} name
+ * @property {string} rootPath
+ * @property {string} [techStack='unknown']
+ */
+
+/**
+ * @typedef {Object} ProjectResponse
+ * @property {string} id
+ * @property {string} name
+ * @property {string} rootPath
+ * @property {string} techStack
+ */
+
+/**
+ * @typedef {Object} ProjectListResponse
+ * @property {ProjectResponse[]} projects
+ */
+
+/**
+ * ── Brain ────────────────────────────────────────────────────────
+ */
+
+/**
+ * @typedef {Object} BrainResponse
+ * @property {string[]} operational_dna
+ * @property {object} design_preferences
+ * @property {Array<{pattern:string, example:string, timestamp:string}>} learned_patterns
+ */
+
+/**
+ * @typedef {Object} BrainContextResponse
+ * @property {string} context
+ */
+
+/**
+ * ── Search ───────────────────────────────────────────────────────
+ */
+
+/**
+ * @typedef {Object} SemanticSearchRequest
+ * @property {string} query
+ * @property {string} [target]
+ * @property {number} [maxResults=10]
+ */
+
+/**
+ * @typedef {Object} SemanticSearchResult
+ * @property {string} file
+ * @property {string} ext
+ * @property {number} score
+ * @property {string} snippet
+ * @property {number} tokenCount
+ */
+
+/**
+ * @typedef {Object} SemanticSearchResponse
+ * @property {SemanticSearchResult[]} results
+ * @property {number} total
+ * @property {number} vocabSize
+ * @property {number} indexedFiles
+ */
+
+/**
+ * ── Sandbox ──────────────────────────────────────────────────────
+ */
+
+/**
+ * @typedef {Object} SandboxExecRequest
+ * @property {string} code
+ * @property {string} [fileName]
+ * @property {number} [timeoutMs=30000]
+ * @property {string} [memoryLimit]
+ */
+
+/**
+ * @typedef {Object} SandboxResultResponse
+ * @property {string} stdout
+ * @property {string} stderr
+ * @property {number} exitCode
+ * @property {boolean} passed
+ * @property {boolean} timedOut
+ * @property {number} durationMs
+ */
+
+/**
+ * ── Adversarial ──────────────────────────────────────────────────
+ */
+
+/**
+ * @typedef {Object} AdversarialIssue
+ * @property {'critical'|'high'|'medium'|'low'} severity
+ * @property {string} category
+ * @property {string} [file]
+ * @property {number} [line]
+ * @property {string} message
+ * @property {string} [suggestion]
+ */
+
+/**
+ * @typedef {Object} AdversarialCritiqueResponse
+ * @property {AdversarialIssue[]} issues
+ * @property {object} summary
+ * @property {boolean} passed
  */

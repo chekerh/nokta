@@ -1,8 +1,10 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { authMiddleware } from '../lib/auth.mjs';
 
 export function registerCostRoutes(app, costTracker) {
   app.get(
     '/api/v1/costs',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { since, until } = req.query;
       const entries = await costTracker.getCosts(since, until);
@@ -12,6 +14,7 @@ export function registerCostRoutes(app, costTracker) {
 
   app.get(
     '/api/v1/costs/summary',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const summary = await costTracker.getSummary();
       res.json(summary);
@@ -20,6 +23,7 @@ export function registerCostRoutes(app, costTracker) {
 
   app.get(
     '/api/v1/costs/monthly',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const monthly = await costTracker.getMonthlySpend();
       res.json(monthly);
@@ -28,6 +32,7 @@ export function registerCostRoutes(app, costTracker) {
 
   app.get(
     '/api/v1/costs/pricing',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const pricing = costTracker.listPricing();
       res.json({ models: Object.entries(pricing).map(([model, info]) => ({ model, ...info })) });
@@ -36,6 +41,7 @@ export function registerCostRoutes(app, costTracker) {
 
   app.post(
     '/api/v1/costs/estimate',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { model, inputTokens, outputTokens } = req.body;
       if (!model) throw new AppError('model is required', 400);
