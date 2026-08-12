@@ -11,9 +11,17 @@ function findPort() {
   return 6000 + Math.floor(Math.random() * 20000);
 }
 
+const API_KEY = 'test-key-123';
+
+function authHeaders() {
+  return { Authorization: `Bearer ${API_KEY}` };
+}
+
 function httpGet(url, timeout = 5000) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, (res) => {
+    const req = http.get(url, {
+      headers: { ...authHeaders() },
+    }, (res) => {
       let data = '';
       res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {
@@ -39,7 +47,7 @@ function httpRequest(url, method, body, timeout = 5000) {
       url,
       {
         method,
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), ...authHeaders() },
       },
       (res) => {
         let data = '';
@@ -67,7 +75,7 @@ function startDaemon(port) {
   const proc = spawn('node', [path.join(DIR, 'daemon', 'index.mjs'), 'daemon', '--port', String(port)], {
     cwd: DIR,
     stdio: 'ignore',
-    env: { ...process.env, NOKTA_LOG_LEVEL: 'error' },
+    env: { ...process.env, NOKTA_LOG_LEVEL: 'error', NOKTA_API_KEY: API_KEY },
   });
   return proc;
 }
