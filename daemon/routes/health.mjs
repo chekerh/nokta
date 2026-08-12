@@ -1,5 +1,11 @@
 import { asyncHandler } from '../lib/route-utils.mjs';
 
+const routeRegistry = new Set();
+
+export function trackRoute(name) {
+  routeRegistry.add(name);
+}
+
 export function registerHealthRoute(app, providerManager) {
   app.get(
     '/health',
@@ -17,6 +23,7 @@ export function registerHealthRoute(app, providerManager) {
         })),
         defaultProvider: providerManager.getDefault()?.id || null,
         autoRoute: true,
+        routes: Array.from(routeRegistry).sort(),
       });
     }),
   );
