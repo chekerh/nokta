@@ -776,6 +776,9 @@ tr:hover td{
       <button class="nav-tab" data-tab="gates"><span class="icon">🚧</span> Gates & Audits</button>
       <button class="nav-tab" data-tab="providers"><span class="icon">🔌</span> LLM Keys</button>
       <button class="nav-tab" data-tab="skills"><span class="icon">📦</span> Skill Packs</button>
+      <button class="nav-tab" data-tab="search"><span class="icon">🔍</span> Semantic Search</button>
+      <button class="nav-tab" data-tab="sandbox"><span class="icon">⏯️</span> Sandbox</button>
+      <button class="nav-tab" data-tab="adversarial"><span class="icon">👁️</span> Adversarial Review</button>
     </nav>
     
     <div class="sidebar-footer">
@@ -1125,10 +1128,53 @@ tr:hover td{
           <div id="scanResult"></div>
         </div>
         
-        <div class="card">
+         <div class="card">
           <div class="card-title">Imported Developer Packages</div>
           <div id="knownSourcesError" class="error-banner" style="display:none"></div>
           <div id="knownSources"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🧠 Learned Skills</div>
+          <button class="btn" onclick="synthesizeSkills()" style="margin-bottom:10px">🔄 Synthesize from History</button>
+          <div id="skillsContainer" style="max-height:300px;overflow-y:auto"></div>
+          <div id="skillsError" class="error-banner" style="display:none"></div>
+        </div>
+       </div>
+
+      <!-- Panel: Semantic Search -->
+      <div class="panel" id="panel-search">
+        <div class="card">
+          <div class="card-title">🔍 Semantic Code Search</div>
+          <div style="display:grid;grid-template-columns:3fr 1fr;gap:10px;margin-bottom:14px">
+            <input type="text" id="searchQuery" placeholder="Enter search terms..." />
+            <button class="btn" onclick="runSemanticSearch()">Search</button>
+          </div>
+          <div id="searchResults"></div>
+        </div>
+      </div>
+
+      <!-- Panel: Sandbox -->
+      <div class="panel" id="panel-sandbox">
+        <div class="card">
+          <div class="card-title">⏯️ Safe Code Execution</div>
+          <div style="margin-bottom:14px">
+            <textarea id="sandboxCode" rows="6" style="width:100%;font-family:monospace;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px" placeholder="console.log('hello world')"></textarea>
+          </div>
+          <button class="btn" onclick="runSandbox()">Execute</button>
+          <div id="sandboxResult" style="margin-top:14px"></div>
+        </div>
+      </div>
+
+      <!-- Panel: Adversarial Review -->
+      <div class="panel" id="panel-adversarial">
+        <div class="card">
+          <div class="card-title">👁️ Adversarial Code Review</div>
+          <div style="margin-bottom:14px">
+            <textarea id="adversarialCode" rows="8" style="width:100%;font-family:monospace;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px" placeholder="Paste code to review..."></textarea>
+          </div>
+          <button class="btn" onclick="runAdversarialReview()">Review</button>
+          <div id="adversarialResult" style="margin-top:14px"></div>
         </div>
       </div>
 
@@ -1421,7 +1467,8 @@ window.switchTab=function(name){
   if(name==='planner')window.refreshPlanner();
   if(name==='reports')loadReport();
   if(name==='agents')refreshAgentRuns();
-  if(name==='settings')loadSettings();
+   if(name==='settings')loadSettings();
+   if(name==='skills')loadLearnedSkills();
 };
 tabs.forEach(function(t){t.addEventListener('click',function(){window.switchTab(t.dataset.tab);});});
 
@@ -2056,6 +2103,151 @@ async function init(){
   populateModels();
   setTimeout(refreshKnownSources,500);
 }
+
+async function runSemanticSearch() {
+  var query = $('searchQuery').value.trim();
+  if (!query) return;
+  var resultDiv = $('searchResults');
+  resultDiv.innerHTML = '<div style="color:var(--text-secondary)">Searching...</div>';
+  try {
+    var resp = await api('POST', '/api/v1/search/semantic', { query: query, target: '.', maxResults: 20 });
+    var html = '';
+    if (resp.results && resp.results.length > 0) {
+      resp.results.forEach(function(r) {
+        html += '<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--accent)">' + escHtml(r.file) + '</div>';
+        html += '<div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:6px">Score: ' + r.score + '</div>';
+        if (r.snippet) html += '<pre style="font-size:0.8rem;background:var(--surface-2);padding:8px;border-radius:var(--radius);overflow-x:auto">' + escHtml(r.snippet) + '</pre>';
+        html += '</div>';
+      });
+    } else {
+      html = '<div style="color:var(--text-secondary)">No results found</div>';
+    }
+    resultDiv.innerHTML = html;
+  } catch (e) {
+    resultDiv.innerHTML = '<div class="error-banner">' + (e.message || 'Search failed') + '</div>';
+  }
+}
+
+async function runSandbox() {
+  var code = $('sandboxCode').value.trim();
+  if (!code) return;
+  var resultDiv = $('sandboxResult');
+  resultDiv.innerHTML = '<div style="color:var(--text-secondary)">Executing...</div>';
+  try {
+    var resp = await api('POST', '/api/v1/sandbox/exec', { code: code, fileName: 'exec.mjs' });
+    var passed = resp.passed ? '✅ Passed' : '❌ Failed';
+    var html = '<div style="font-weight:600;margin-bottom:8px">' + passed + ' (exit: ' + resp.exitCode + ', ' + resp.durationMs + 'ms)</div>';
+    if (resp.stdout) html += '<div><strong>stdout:</strong><pre>' + escHtml(resp.stdout) + '</pre></div>';
+    if (resp.stderr) html += '<div><strong>stderr:</strong><pre style="color:#f871f1">' + escHtml(resp.stderr) + '</pre></div>';
+    resultDiv.innerHTML = html;
+  } catch (e) {
+    resultDiv.innerHTML = '<div class="error-banner">' + (e.message || 'Execution failed') + '</div>';
+  }
+}
+
+async function runAdversarialReview() {
+  var code = $('adversarialCode').value.trim();
+  if (!code) return;
+  var resultDiv = $('adversarialResult');
+  resultDiv.innerHTML = '<div style="color:var(--text-secondary)">Reviewing... this may take a while</div>';
+  try {
+    var resp = await api('POST', '/api/v1/adversarial/review', { code: code, file: 'reviewed.js', maxRounds: 1 });
+    var html = '';
+    if (resp.passed) {
+      html = '<div style="color:#4ade80">✅ Review passed. No critical or high issues found.</div>';
+    } else {
+      var issues = resp.feedback?.issues || [];
+      var criticalHigh = issues.filter(function(i) { return ['critical', 'high'].includes(i.severity); });
+      html = '<div style="font-weight:600;margin-bottom:8px">❌ Found ' + criticalHigh.length + ' issues</div>';
+      criticalHigh.forEach(function(issue) {
+        html += '<div style="margin-bottom:12px"><span style="color:' + (issue.severity === 'critical' ? '#f871f1' : '#fbbf24') + ';font-weight:600">[' + issue.severity.toUpperCase() + ']</span> ' + escHtml(issue.message);
+        if (issue.suggestion) html += '<br><span style="color:var(--text-secondary)">Fix: ' + escHtml(issue.suggestion) + '</span>';
+        html += '</div>';
+      });
+    }
+    resultDiv.innerHTML = html;
+  } catch (e) {
+    resultDiv.innerHTML = '<div class="error-banner">' + (e.message || 'Review failed') + '</div>';
+  }
+}
+
+async function loadLearnedSkills() {
+  var skillsDiv = document.getElementById('skillsContainer');
+  if (!skillsDiv) return;
+  try {
+    var resp = await api('GET', '/api/v1/skills/ranked');
+    var html = '';
+    if (resp.skills && resp.skills.length > 0) {
+      resp.skills.slice(0, 20).forEach(function(s) {
+        var level = Math.min(5, Math.max(1, Math.round(s.rankingScore)));
+        var stars = '★'.repeat(level) + '☆'.repeat(5 - level);
+        html += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div><strong>' + escHtml(s.name) + '</strong><span style="color:var(--text-secondary);font-size:0.8rem"> (' + (s.category || 'general') + ')</span></div><span style="color:#fbbf24">' + stars + '</span></div>';
+      });
+    } else {
+      html = '<div style="color:var(--text-secondary)">No learned skills yet. Run agents to build skills.</div>';
+    }
+    skillsDiv.innerHTML = html;
+  } catch (e) {
+    skillsDiv.innerHTML = '<div class="error-banner">Failed to load skills</div>';
+  }
+}
+
+async function synthesizeSkills() {
+  var errorDiv = document.getElementById('skillsError');
+  var container = document.getElementById('skillsContainer');
+  if (!errorDiv || !container) return;
+
+  errorDiv.style.display = 'none';
+  container.innerHTML = '<div style="color:var(--text-secondary)">Synthesizing skills from brainstorm, sprint items, and feedback...</div>';
+
+  try {
+    // Fetch source data from available APIs
+    var sources = {};
+
+    // Get sprint items (brainstorm data lives in sprint items)
+    try {
+      var sprintResp = await api('GET', '/api/v1/planner/items?type=story&status=all&sortBy=createdAt&limit=100');
+      if (sprintResp.items && sprintResp.items.length > 0) {
+        sources.sprintItems = sprintResp.items;
+        sources.brainstorm = sprintResp.items.filter(function(i) {
+          return i.title.includes('brainstorm') || i.description.includes('brainstorm');
+        }).map(function(i) { return { title: i.title, description: i.description }; });
+      }
+    } catch (e) {
+      // Sprint items not available, continue with empty sources
+    }
+
+    // Get decision trail for feedback-like patterns
+    try {
+      var trailResp = await api('GET', '/api/v1/trail');
+      if (trailResp && trailResp.items) {
+        sources.feedback = trailResp.items.map(function(i) {
+          return { title: i.action || i.name, description: i.reasoning || '', type: 'trail' };
+        });
+      }
+    } catch (e) {
+      // Trail data not available
+    }
+
+    var resp = await api('POST', '/api/v1/skills/synthesize', { sources: sources });
+    container.innerHTML = '';
+    if (resp.skills && resp.skills.length > 0) {
+      resp.skills.slice(0, 20).forEach(function(s) {
+        var level = Math.min(5, Math.max(1, Math.round(s.confidence || 0.5)));
+        var stars = '★'.repeat(level) + '☆'.repeat(5 - level);
+        container.innerHTML += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div><strong>' + escHtml(s.name) + '</strong><span style="color:var(--text-secondary);font-size:0.8rem"> (' + (s.category || 'general') + ', ' + (s.occurrences || 0) + ' occurrences)</span></div><span style="color:#fbbf24">' + stars + '</span></div>';
+      });
+      container.innerHTML += '<div style="margin-top:10px;color:var(--text-secondary)">Synthesized ' + resp.total + ' skills (' + resp.new + ' new).</div>';
+    } else {
+      container.innerHTML = '<div style="color:var(--text-secondary)">No learned patterns to synthesize yet.</div>';
+    }
+  } catch (e) {
+    errorDiv.textContent = 'Failed to synthesize skills: ' + (e.message || 'Unknown error');
+    errorDiv.style.display = 'block';
+    container.innerHTML = '';
+  }
+}
+
 
 init();
 })();
