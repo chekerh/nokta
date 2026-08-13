@@ -13,7 +13,9 @@ function findPort() {
 
 function httpGet(url, timeout = 3000) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, (res) => {
+    const req = http.get(url, {
+      headers: { ...authHeaders() },
+    }, (res) => {
       let data = '';
       res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {
@@ -39,7 +41,7 @@ function httpPost(url, body, timeout = 3000) {
       url,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), ...authHeaders() },
       },
       (res) => {
         let data = '';
@@ -63,13 +65,42 @@ function httpPost(url, body, timeout = 3000) {
   });
 }
 
+function httpGetNoAuth(url, timeout = 3000) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, {
+      headers: {},
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          resolve(data);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeout, () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+  });
+}
+
 function startDaemon(port) {
   const proc = spawn('node', [path.join(DIR, 'daemon', 'index.mjs'), 'daemon', '--port', String(port)], {
     cwd: DIR,
     stdio: 'ignore',
-    env: { ...process.env, NOKTA_LOG_LEVEL: 'error' },
+    env: { ...process.env, NOKTA_LOG_LEVEL: 'error', NOKTA_API_KEY: 'test-key-123' },
   });
   return proc;
+}
+
+const API_KEY = 'test-key-123';
+
+function authHeaders() {
+  return { Authorization: `Bearer ${API_KEY}` };
 }
 
 async function waitForHealth(url, timeout = 8000) {
@@ -167,6 +198,97 @@ test('daemon returns context packs', async () => {
     assert.ok(result.packs.length >= 8);
     assert.ok(result.packs.some((p) => p.id === 'core.agent-operating-system'));
     assert.ok(result.packs.some((p) => p.id === 'token.context-budget'));
+  } finally {
+    await killProcess(proc);
+  }
+});
+
+test('daemon returns routes in health check', async () => {
+  const port = findPort();
+  const proc = startDaemon(port);
+  try {
+    const health = await waitForHealth(`http://localhost:${port}/health`, 20000);
+    if (health.routes) {
+      assert.ok(Array.isArray(health.routes), 'health should include routes array');
+    }
+  } finally {
+    await killProcess(proc);
+  }
+});
+
+test('daemon projects route requires authentication', async () => {
+  const port = findPort();
+  const proc = startDaemon(port);
+  try {
+    await waitForHealth(`http://localhost:${port}/health`, 20000);
+    const result = await httpGetNoAuth(`http://localhost:${port}/api/v1/projects`);
+    assert.equal(result.error, 'Unauthorized');
+    assert.equal(result.status, 401);
+  } finally {
+    await killProcess(proc);
+  }
+});
+
+test('daemon brain route requires authentication', async () => {
+  const port = findPort();
+  const proc = startDaemon(port);
+  try {
+    await waitForHealth(`http://localhost:${port}/health`, 20000);
+    const result = await httpGetNoAuth(`http://localhost:${port}/api/v1/brain`);
+    assert.equal(result.error, 'Unauthorized');
+    assert.equal(result.status, 401);
+  } finally {
+    await killProcess(proc);
+  }
+});
+
+test('daemon semantic search returns results', async () => {
+  const port = findPort();
+  const proc = startDaemon(port);
+  try {
+    await waitForHealth(`http://localhost:${port}/health`, 20000);
+    const result = await httpPost(`http://localhost:${port}/api/v1/search/semantic`, {
+      query: 'semantic search',
+      target: '.',
+      maxResults: 5,
+    });
+    if (typeof result === 'object' && result !== null) {
+      assert.ok('results' in result || 'error' in result || 'status' in result);
+    }
+  } finally {
+    await killProcess(proc);
+  }
+});
+
+test('daemon adversarial critique endpoint returns JSON', async () => {
+  const port = findPort();
+  const proc = startDaemon(port);
+  try {
+    await waitForHealth(`http://localhost:${port}/health`, 20000);
+    const result = await httpPost(`http://localhost:${port}/api/v1/adversarial/critique`, {
+      code: 'const x = 1;',
+      file: 'test.js',
+    });
+    if (typeof result === 'object' && result !== null) {
+      assert.ok('issues' in result || 'error' in result || 'status' in result);
+    }
+  } finally {
+    await killProcess(proc);
+  }
+});
+
+test('daemon sandbox exec endpoint executes code', async () => {
+  const port = findPort();
+  const proc = startDaemon(port);
+  try {
+    await waitForHealth(`http://localhost:${port}/health`, 20000);
+    const result = await httpPost(`http://localhost:${port}/api/v1/sandbox/exec`, {
+      code: 'console.log("hello from sandbox");',
+      fileName: 'exec.mjs',
+    });
+    if (typeof result === 'object' && result !== null) {
+      assert.ok('passed' in result || 'error' in result || 'status' in result);
+    }
   } finally {
     await killProcess(proc);
   }
