@@ -19,6 +19,17 @@ build/
 .nokta/providers.json
 .nokta/cost-ledger.json
 .nokta/backups/
+.nokta/agent-runs.json
+.nokta/daemon.pid
+.nokta/skill-sources.json
+
+# Graphify outputs
+.graphify_*.json
+.graphify_*.txt
+graphify-out/
+
+# Docs
+docs/REMAINING_WORK.md
 
 # Embedded git repos in upstream/
 upstream/*/
