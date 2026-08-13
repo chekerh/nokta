@@ -1,13 +1,13 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
-import { authMiddleware } from '../lib/auth.mjs';
 
 export function registerDecisionRoutes(app, decisionEngine) {
+  // Decision types and statuses for validation (should match decision-engine.mjs)
   const DECISION_TYPES = ['architectural', 'ui-ux', 'technology', 'process', 'security'];
   const DECISION_STATUSES = ['proposed', 'under-review', 'accepted', 'superseded', 'rejected'];
 
+  // --- Decision CRUD Operations ---
   app.get(
     '/api/v1/decisions',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { type, status, tag, since, sortBy } = req.query;
       const opts = {};
@@ -29,7 +29,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
 
   app.post(
     '/api/v1/decisions',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { type, title, description, rationale, alternativesConsidered, tags, relatedItems } = req.body;
 
@@ -56,7 +55,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
 
   app.get(
     '/api/v1/decisions/:id',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       if (!id) throw new AppError('Decision ID is required', 400);
@@ -75,7 +73,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
 
   app.patch(
     '/api/v1/decisions/:id',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       if (!id) throw new AppError('Decision ID is required', 400);
@@ -132,7 +129,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
 
   app.delete(
     '/api/v1/decisions/:id',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       if (!id) throw new AppError('Decision ID is required', 400);
@@ -152,7 +148,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
   // --- Decision Analysis and Insights ---
   app.get(
     '/api/v1/decisions/:id/impact',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       if (!id) throw new AppError('Decision ID is required', 400);
@@ -171,7 +166,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
 
   app.get(
     '/api/v1/decisions/:id/related',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       const { relationship } = req.query;
@@ -192,7 +186,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
   // --- Decision Templates ---
   app.get(
     '/api/v1/decisions/templates/:type',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { type } = req.params;
       if (!type) throw new AppError('Decision type is required', 400);
@@ -216,7 +209,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
 
   app.get(
     '/api/v1/decisions/templates',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const templates = {};
       for (const type of DECISION_TYPES) {
@@ -229,7 +221,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
   // --- Decision Analytics ---
   app.get(
     '/api/v1/decisions/analytics/summary',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const decisions = await decisionEngine.listDecisions();
 
@@ -279,7 +270,6 @@ export function registerDecisionRoutes(app, decisionEngine) {
   // --- Bulk Operations ---
   app.post(
     '/api/v1/decisions/bulk-update-status',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { decisionIds, status } = req.body;
 

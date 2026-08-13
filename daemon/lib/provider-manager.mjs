@@ -26,12 +26,10 @@ export class ProviderManager {
     this._autoRoute = true;
     this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
     this._dbUserId = null;
-    this._dbUserMap = new Map();
   }
 
   setDbUser(userId) {
     this._dbUserId = userId;
-    this._dbUserMap.set(userId, true);
   }
 
   getDbUser() {

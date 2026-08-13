@@ -115,13 +115,6 @@ export function authMiddleware(required = true) {
       return next();
     }
 
-    // Allow NOKTA_API_KEY as a simpler alternative to JWT
-    const apiKey = process.env.NOKTA_API_KEY;
-    if (apiKey && token === apiKey) {
-      req.user = { id: 'api-key', email: 'api-key@system', name: 'API Key', role: 'admin', tier: 'pro' };
-      return next();
-    }
-
     const payload = verifyToken(token);
     if (!payload) {
       if (required) return res.status(401).json({ error: 'Invalid or expired token', status: 401 });

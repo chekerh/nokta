@@ -1,5 +1,4 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
-import { authMiddleware } from '../lib/auth.mjs';
 
 export function registerCodeActionRoutes(app, chatHandler) {
   async function runChat(messages, task) {
@@ -12,7 +11,6 @@ export function registerCodeActionRoutes(app, chatHandler) {
 
   app.post(
     '/api/v1/code-actions/explain',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { code, language } = req.body;
       if (!code) throw new AppError('Code is required', 400);
@@ -26,7 +24,6 @@ export function registerCodeActionRoutes(app, chatHandler) {
 
   app.post(
     '/api/v1/code-actions/refactor',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { code, language, suggestion } = req.body;
       if (!code) throw new AppError('Code is required', 400);
@@ -38,7 +35,6 @@ export function registerCodeActionRoutes(app, chatHandler) {
 
   app.post(
     '/api/v1/code-actions/generate-tests',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { code, language, testFramework } = req.body;
       if (!code) throw new AppError('Code is required', 400);
@@ -50,7 +46,6 @@ export function registerCodeActionRoutes(app, chatHandler) {
 
   app.post(
     '/api/v1/code-actions/fix-errors',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { code, language, errors } = req.body;
       if (!code) throw new AppError('Code is required', 400);

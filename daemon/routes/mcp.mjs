@@ -1,4 +1,3 @@
-import { authMiddleware } from '../lib/auth.mjs';
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -100,7 +99,6 @@ async function executeMcpTool(config, toolName, args, log) {
 export function registerMcpRoutes(app, log) {
   app.post(
     '/api/v1/mcp/execute',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { serverId, toolName, args, target } = req.body;
       if (!serverId || !toolName) throw new AppError('serverId and toolName are required', 400);
@@ -116,7 +114,6 @@ export function registerMcpRoutes(app, log) {
 
   app.get(
     '/api/v1/mcp/servers',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target } = req.query;
       const servers = await loadMcpConfig(target);
@@ -126,7 +123,6 @@ export function registerMcpRoutes(app, log) {
 
   app.post(
     '/api/v1/mcp/servers',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target, servers } = req.body;
       if (!Array.isArray(servers)) throw new AppError('servers array is required', 400);

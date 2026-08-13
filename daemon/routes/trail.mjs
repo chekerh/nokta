@@ -1,4 +1,3 @@
-import { authMiddleware } from '../lib/auth.mjs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
@@ -33,7 +32,6 @@ async function readOrCreateIndex(target) {
 export function registerTrailRoutes(app) {
   app.get(
     '/api/v1/trail',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target } = req.query;
       const indexContent = await readOrCreateIndex(target);
@@ -70,7 +68,6 @@ export function registerTrailRoutes(app) {
 
   app.post(
     '/api/v1/trail/start',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target, task, agent } = req.body;
       const sessionsDir = getSessionsDir(target);
@@ -168,7 +165,6 @@ Not ready for handoff.
 
   app.put(
     '/api/v1/trail/update',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target, sessionFile, content } = req.body;
       if (!sessionFile || !content) throw new AppError('sessionFile and content are required', 400);
@@ -185,7 +181,6 @@ Not ready for handoff.
 
   app.get(
     '/api/v1/trail/sessions',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target, limit = 20 } = req.query;
       const sessionsDir = getSessionsDir(target);
@@ -227,7 +222,6 @@ Not ready for handoff.
 
   app.get(
     '/api/v1/trail/session/:sessionId',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target } = req.query;
       const { sessionId } = req.params;
@@ -246,7 +240,6 @@ Not ready for handoff.
 
   app.post(
     '/api/v1/trail/resume',
-    authMiddleware(),
     asyncHandler(async (req, res) => {
       const { target, sessionId } = req.body;
       if (!sessionId) throw new AppError('sessionId is required', 400);
