@@ -5,7 +5,7 @@ const _SCHEMA_VERSION = 3;
 
 const MIGRATIONS = [
   // v1: Initial schema
-  `
+  { up: `
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
@@ -122,9 +122,18 @@ const MIGRATIONS = [
     config TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
-  `,
+  `, down: `
+  DROP TABLE IF EXISTS user_configs;
+  DROP TABLE IF EXISTS sprint_items;
+  DROP TABLE IF EXISTS agent_run_steps;
+  DROP TABLE IF EXISTS agent_runs;
+  DROP TABLE IF EXISTS cost_logs;
+  DROP TABLE IF EXISTS provider_keys;
+  DROP TABLE IF EXISTS sessions;
+  DROP TABLE IF EXISTS users;
+  ` },
   // v2: Multi-project and User Brain support
-  `
+  { up: `
   CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -144,9 +153,12 @@ const MIGRATIONS = [
   );
 
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
-  `,
+  `, down: `
+  DROP TABLE IF EXISTS user_brain;
+  DROP TABLE IF EXISTS projects;
+  ` },
   // v3: Security hardening + Trust Architecture
-  `
+  { up: `
   CREATE TABLE IF NOT EXISTS token_blacklist (
     token_id TEXT PRIMARY KEY,
     expires_at TEXT NOT NULL,
@@ -227,7 +239,15 @@ const MIGRATIONS = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_relationships_projects ON project_relationships(project_a, project_b);
-  `,
+  `, down: `
+  DROP TABLE IF EXISTS project_relationships;
+  DROP TABLE IF EXISTS shared_patterns;
+  DROP TABLE IF EXISTS decision_trail;
+  DROP TABLE IF EXISTS context_memory;
+  DROP TABLE IF EXISTS scope_declarations;
+  DROP TABLE IF EXISTS model_pricing;
+  DROP TABLE IF EXISTS token_blacklist;
+  ` },
 ];
 
 export function migrate() {
@@ -243,10 +263,53 @@ export function migrate() {
   for (let i = currentVersion; i < MIGRATIONS.length; i++) {
     const version = i + 1;
     logger.info(`Running migration v${version}...`);
-    db.exec(MIGRATIONS[i]);
+    db.exec(MIGRATIONS[i].up);
     db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(version);
     logger.info(`Migration v${version} complete.`);
   }
 
   return MIGRATIONS.length;
+}
+
+export function migrateDown(targetVersion = 0) {
+  const db = getDb();
+
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  const currentVersion = db.prepare('SELECT COALESCE(MAX(version), 0) as v FROM schema_version').get()?.v || 0;
+
+  if (currentVersion <= targetVersion) {
+    logger.info(`Already at v${currentVersion}. Nothing to roll back.`);
+    return currentVersion;
+  }
+
+  for (let i = currentVersion; i > targetVersion; i--) {
+    logger.info(`Rolling back migration v${i}...`);
+    db.exec(MIGRATIONS[i - 1].down);
+    db.prepare('DELETE FROM schema_version WHERE version = ?').run(i);
+    logger.info(`Rollback v${i} complete.`);
+  }
+
+  return targetVersion;
+}
+
+export function getMigrationStatus() {
+  const db = getDb();
+
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+
+  const versions = db.prepare('SELECT version, applied_at FROM schema_version ORDER BY version').all();
+  const currentVersion = versions.length > 0 ? versions[versions.length - 1].version : 0;
+
+  return {
+    currentVersion,
+    appliedMigrations: versions,
+    totalMigrations: MIGRATIONS.length,
+  };
 }

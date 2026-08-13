@@ -186,6 +186,36 @@ async function cmdDetect(args) {
   console.log(`Files analyzed: ${result.files.length}`);
 }
 
+async function cmdSearch(args) {
+  const query = args[0];
+  if (!query) {
+    console.error('Usage: nokta search <query>');
+    process.exit(1);
+  }
+  const { semanticSearch } = await import('./daemon/lib/semantic.mjs');
+  const target = process.cwd();
+  const result = await semanticSearch(query, target, { maxResults: 15 });
+
+  console.log(`\n🔍 Semantic search: "${query}"`);
+  console.log(`Indexed ${result.indexedFiles} files, vocab: ${result.vocabSize} terms\n`);
+
+  if (result.total === 0) {
+    console.log('No matches found.');
+    return;
+  }
+
+  for (const r of result.results) {
+    console.log(`  ${r.file} (score: ${r.score})`);
+    if (r.snippet) {
+      const lines = r.snippet.split('\n');
+      for (const line of lines.slice(0, 3)) {
+        console.log(`    ${line}`);
+      }
+    }
+    console.log('');
+  }
+}
+
 async function cmdDaemon(args) {
   const sub = args[0];
   const projectRoot = process.cwd();
@@ -477,6 +507,121 @@ async function cmdIndex() {
   console.log('\n✨ Nokta: Evidence-first, token-efficient AI operating system.');
 }
 
+async function cmdReviewAdversarial(args) {
+  const file = args[0];
+  if (!file) {
+    console.error('Usage: nokta review-adversarial <file>');
+    process.exit(1);
+  }
+  const projectRoot = process.cwd();
+  const { CriticAgent } = await import('./daemon/lib/critic-agent.mjs');
+  const { ChatHandler } = await import('./daemon/lib/chat-handler.mjs');
+  const { ProviderManager } = await import('./daemon/lib/provider-manager.mjs');
+  const log = logger.child ? logger.child({ module: 'cli' }) : logger;
+
+  const providerManager = new ProviderManager({ log });
+  await providerManager.initDefaults();
+  const chatHandler = new ChatHandler(providerManager, { projectRoot, log });
+  const critic = new CriticAgent({ chatHandler, log });
+
+  console.log(`\n🔍 Adversarial review: ${file}\n`);
+  const result = await critic.adversarialReview(null, {
+    file,
+    projectRoot,
+    maxRounds: 2,
+  });
+
+  if (result.passed) {
+    console.log('✅ Review passed. No critical or high issues.');
+  } else {
+    const issues = result.feedback?.issues || [];
+    const criticalHigh = issues.filter((i) => ['critical', 'high'].includes(i.severity));
+    console.log(`❌ Found ${criticalHigh.length} critical/high issues:\n`);
+    for (const issue of criticalHigh) {
+      console.log(`[${issue.severity}] ${issue.category} — ${issue.message}`);
+      if (issue.suggestion) console.log(`  → ${issue.suggestion}`);
+      console.log('');
+    }
+  }
+}
+
+async function cmdSandbox(args) {
+  const code = args.join(' ');
+  if (!code) {
+    console.error('Usage: nokta sandbox "<javascript-code>"');
+    console.error('Example: nokta sandbox "console.log(\"hello\")"' );
+    process.exit(1);
+  }
+  const { SandboxManager } = await import('./daemon/lib/sandbox.mjs');
+  const sandbox = new SandboxManager({ log: logger });
+  const result = await sandbox.exec(code, { fileName: 'exec.mjs' });
+  const json = result.toJSON();
+  if (json.passed) {
+    console.log('✅ Execution passed');
+  } else {
+    console.log('❌ Execution failed');
+  }
+  if (json.stdout) console.log('stdout:', json.stdout);
+  if (json.stderr) console.log('stderr:', json.stderr);
+  console.log('exit code:', json.exitCode, '| duration:', json.durationMs + 'ms');
+  await sandbox.cleanup();
+}
+
+async function cmdSkills() {
+  const { rankSkills } = await import('./daemon/lib/skill-synthesizer.mjs');
+  const projectRoot = process.cwd();
+  const skills = await rankSkills(projectRoot);
+  console.log(`\n🧠 Learned Skills (${skills.length} total)\n`);
+  for (const s of skills.slice(0, 15)) {
+    console.log(`  ${s.name} (score: ${s.rankingScore.toFixed(2)})`);
+    console.log(`    ${s.category} • ${s.occurrences} occurrences`);
+  }
+  if (skills.length > 15) {
+    console.log(`\n... and ${skills.length - 15} more`);
+  }
+}
+
+async function cmdMigrate(args) {
+  const sub = args[0] || 'up';
+  const projectRoot = process.cwd();
+  const _log = logger.child ? logger.child({ module: 'cli' }) : logger;
+
+  if (sub === 'status') {
+    const { getMigrationStatus } = await import('./daemon/db/schema.mjs');
+    const status = await getMigrationStatus();
+    console.log(`\n📊 Migration Status (project: ${projectRoot})\n`);
+    console.log(`Current version: v${status.currentVersion}`);
+    console.log(`Total migrations: ${status.totalMigrations}`);
+    console.log('\nApplied migrations:');
+    status.appliedMigrations.forEach(v => console.log(`  v${v.version} - ${v.applied_at}`));
+    return;
+  }
+
+  if (sub === 'down') {
+    const target = parseInt(args[1], 10) || 0;
+    const { migrateDown } = await import('./daemon/db/schema.mjs');
+    console.log(`\n📦 Rolling back migrations to v${target}...\n`);
+    try {
+      const version = await migrateDown(target);
+      console.log(`\n✅ Rollback complete. Database at v${version}`);
+    } catch (err) {
+      console.error(`\n❌ Rollback failed: ${err.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  console.log('\n📦 Running migrations up...\n');
+  const { migrate } = await import('./daemon/db/schema.mjs');
+  try {
+    const version = await migrate();
+    console.log(`\n✅ All migrations complete. Database at v${version}`);
+  } catch (err) {
+    console.error(`\n❌ Migration failed: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 function showHelp() {
   console.log(`
 nokta — AI Operating System
@@ -497,6 +642,9 @@ Commands:
   chat [query]                     Chat with Nokta via LLM
   agent [list|run]                 List items or run an agent task
   index                            Show project index/dashboard
+  search <query>                   Semantic code search
+  review-adversarial <file>        Adversarial code review (critic → implementer → critique)
+  sandbox "<code>"                 Safe code execution in sandbox
 
 Options:
   --help                           Show this help message
@@ -518,6 +666,11 @@ Examples:
   nokta agent list                 List pending sprint items
   nokta agent run "Implement auth"  Run an agent task
   nokta index                      Show project dashboard
+  nokta search "auth middleware"   Semantic search the codebase
+  nokta review-adversarial src/index.ts  Adversarial code review
+  nokta sandbox "console.log('hello')"    Safe code execution in sandbox
+  nokta skills                              List learned skills ranked by effectiveness
+  nokta migrate [up|down|status]            Database migrations
 `);
 }
 
@@ -526,15 +679,20 @@ const commands = {
   gates: cmdGates,
   detect: cmdDetect,
   'review-pr': cmdReviewPr,
-  'review-branch': cmdReviewBranch,
-  daemon: cmdDaemon,
-  trail: cmdTrail,
-  decisions: cmdDecisions,
-  kanban: cmdKanban,
-  chat: cmdChat,
-  agent: cmdAgent,
-  index: cmdIndex,
-};
+    'review-branch': cmdReviewBranch,
+    daemon: cmdDaemon,
+    trail: cmdTrail,
+    decisions: cmdDecisions,
+    kanban: cmdKanban,
+    chat: cmdChat,
+    agent: cmdAgent,
+    index: cmdIndex,
+    search: cmdSearch,
+    'review-adversarial': cmdReviewAdversarial,
+    sandbox: cmdSandbox,
+    skills: cmdSkills,
+    migrate: cmdMigrate,
+  };
 
 async function main() {
   const args = process.argv.slice(2);
