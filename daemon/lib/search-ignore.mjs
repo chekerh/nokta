@@ -1,0 +1,17 @@
+export const IGNORE_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  '.next',
+  '.turbo',
+  'coverage',
+  '.venv',
+  'venv',
+  '__pycache__',
+  'target',
+  '.cache',
+  '.ai/trail/events',
+  'vendor',
+  '.bundle',
+]);
