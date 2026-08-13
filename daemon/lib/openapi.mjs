@@ -249,6 +249,99 @@ export function getOpenApiSpec(version = '0.2.0') {
           responses: { 200: { description: 'Import results' } },
         },
       },
+      '/api/v1/projects': {
+        get: {
+          summary: 'List registered projects',
+          responses: { 200: { description: 'Project list', content: { 'application/json': { schema: { $ref: '#/components/schemas/ProjectListResponse' } } } } },
+        },
+        post: {
+          summary: 'Register a new project',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ProjectCreateRequest' } } },
+          },
+          responses: { 201: { description: 'Project created', content: { 'application/json': { schema: { $ref: '#/components/schemas/ProjectResponse' } } } } },
+        },
+      },
+      '/api/v1/projects/{id}': {
+        delete: {
+          summary: 'Remove a registered project',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { 204: { description: 'Project removed' }, 404: { description: 'Project not found' } },
+        },
+      },
+      '/api/v1/brain': {
+        get: { summary: 'Get user brain (operational DNA + learned patterns)', responses: { 200: { description: 'User brain data', content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainResponse' } } } } } },
+      },
+      '/api/v1/brain/dna': {
+        patch: {
+          summary: 'Update operational DNA',
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainDNARequest' } } } },
+          responses: { 200: { description: 'DNA updated' } },
+        },
+      },
+      '/api/v1/brain/patterns': {
+        post: {
+          summary: 'Add a learned pattern',
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainPatternRequest' } } } },
+          responses: { 201: { description: 'Pattern added' } },
+        },
+      },
+      '/api/v1/brain/context': {
+        get: { summary: 'Compile global context for LLM prompts', responses: { 200: { description: 'Compiled context', content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainContextResponse' } } } } } },
+      },
+      '/api/v1/search/semantic': {
+        post: {
+          summary: 'Semantic vector search (TF-IDF cosine similarity)',
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SemanticSearchRequest' } } } },
+          responses: { 200: { description: 'Semantic search results', content: { 'application/json': { schema: { $ref: '#/components/schemas/SemanticSearchResponse' } } } } },
+        },
+      },
+      '/api/v1/adversarial/review': {
+        post: {
+          summary: 'Full adversarial review cycle (critic → implementer → critique)',
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialReviewRequest' } } } },
+          responses: { 200: { description: 'Review result with final code', content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialReviewResponse' } } } } },
+        },
+      },
+      '/api/v1/adversarial/critique': {
+        post: {
+          summary: 'Single critique pass (no iteration)',
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialCritiqueRequest' } } } },
+          responses: { 200: { description: 'Critique issues', content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialCritiqueResponse' } } } } },
+        },
+      },
+      '/api/v1/sandbox/exec': {
+        post: {
+          summary: 'Execute JavaScript code in sandbox',
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxExecRequest' } } } },
+          responses: { 200: { description: 'Execution result', content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxResult' } } } } },
+        },
+      },
+      '/api/v1/sandbox/exec-file': {
+        post: {
+          summary: 'Execute a file in sandbox',
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxFileRequest' } } } },
+          responses: { 200: { description: 'Execution result', content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxResult' } } } } },
+        },
+      },
+      '/api/v1/skills/synthesize': {
+        post: {
+          summary: 'Synthesize skills from brainstorm, sprint items, and feedback',
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillSynthesizeRequest' } } } },
+          responses: { 200: { description: 'Synthesis result', content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillSynthesizeResponse' } } } } },
+        },
+      },
+      '/api/v1/skills/learned': {
+        get: { summary: 'Get all learned skills', responses: { 200: { description: 'Learned skills list', content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillListResponse' } } } } } },
+      },
+      '/api/v1/skills/ranked': {
+        get: {
+          summary: 'Get skills ranked by effectiveness',
+          parameters: [{ name: 'feedback', in: 'query', schema: { type: 'string' }, description: 'Optional JSON feedback data' }],
+          responses: { 200: { description: 'Ranked skills', content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillRankedResponse' } } } } },
+        },
+      },
     },
     components: {
       schemas: {
@@ -344,6 +437,182 @@ export function getOpenApiSpec(version = '0.2.0') {
             args: { type: 'object' },
             target: { type: 'string' },
           },
+        },
+        ProjectCreateRequest: {
+          type: 'object',
+          required: ['name', 'rootPath'],
+          properties: {
+            name: { type: 'string' },
+            rootPath: { type: 'string' },
+            techStack: { type: 'string', default: 'unknown' },
+          },
+        },
+        ProjectResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            rootPath: { type: 'string' },
+            techStack: { type: 'string' },
+          },
+        },
+        ProjectListResponse: {
+          type: 'object',
+          properties: {
+            projects: { type: 'array', items: { $ref: '#/components/schemas/ProjectResponse' } },
+          },
+        },
+        BrainResponse: {
+          type: 'object',
+          properties: {
+            operational_dna: { type: 'array', items: { type: 'string' } },
+            design_preferences: { type: 'object' },
+            learned_patterns: { type: 'array', items: { type: 'object' } },
+          },
+        },
+        BrainDNARequest: {
+          type: 'object',
+          required: ['dna'],
+          properties: { dna: { type: 'array', items: { type: 'string' } } },
+        },
+        BrainPatternRequest: {
+          type: 'object',
+          required: ['rule', 'example'],
+          properties: { rule: { type: 'string' }, example: { type: 'string' } },
+        },
+        BrainContextResponse: {
+          type: 'object',
+          properties: { context: { type: 'string' } },
+        },
+        SemanticSearchRequest: {
+          type: 'object',
+          required: ['query'],
+          properties: {
+            query: { type: 'string' },
+            target: { type: 'string' },
+            maxResults: { type: 'integer', default: 10 },
+          },
+        },
+        SemanticSearchResponse: {
+          type: 'object',
+          properties: {
+            results: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  file: { type: 'string' },
+                  ext: { type: 'string' },
+                  score: { type: 'number' },
+                  snippet: { type: 'string' },
+                  tokenCount: { type: 'integer' },
+                },
+              },
+            },
+            total: { type: 'integer' },
+            vocabSize: { type: 'integer' },
+            indexedFiles: { type: 'integer' },
+          },
+        },
+        AdversarialReviewRequest: {
+          type: 'object',
+          required: ['code'],
+          properties: {
+            code: { type: 'string' },
+            file: { type: 'string' },
+            provider: { type: 'string' },
+            model: { type: 'string' },
+            maxRounds: { type: 'integer', default: 2 },
+          },
+        },
+        AdversarialReviewResponse: {
+          type: 'object',
+          properties: {
+            passed: { type: 'boolean' },
+            finalCode: { type: 'string' },
+            feedback: { type: 'object' },
+          },
+        },
+        AdversarialCritiqueRequest: {
+          type: 'object',
+          required: ['code'],
+          properties: { code: { type: 'string' }, file: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' } },
+        },
+        AdversarialCritiqueResponse: {
+          type: 'object',
+          properties: {
+            issues: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+                  category: { type: 'string' },
+                  file: { type: 'string' },
+                  line: { type: 'integer' },
+                  message: { type: 'string' },
+                  suggestion: { type: 'string' },
+                },
+              },
+            },
+            summary: { type: 'object' },
+            passed: { type: 'boolean' },
+          },
+        },
+        SandboxExecRequest: {
+          type: 'object',
+          required: ['code'],
+          properties: {
+            code: { type: 'string' },
+            fileName: { type: 'string' },
+            timeoutMs: { type: 'integer', default: 30000 },
+            memoryLimit: { type: 'string' },
+          },
+        },
+        SandboxFileRequest: {
+          type: 'object',
+          required: ['file'],
+          properties: { file: { type: 'string' }, target: { type: 'string' }, timeoutMs: { type: 'integer', default: 30000 }, memoryLimit: { type: 'string' } },
+        },
+        SandboxResult: {
+          type: 'object',
+          properties: {
+            stdout: { type: 'string' },
+            stderr: { type: 'string' },
+            exitCode: { type: 'integer' },
+            passed: { type: 'boolean' },
+            timedOut: { type: 'boolean' },
+            durationMs: { type: 'integer' },
+          },
+        },
+        SkillSynthesizeRequest: {
+          type: 'object',
+          properties: {
+            sources: {
+              type: 'object',
+              properties: {
+                brainstorm: { type: 'array', items: { type: 'object' } },
+                sprintItems: { type: 'array', items: { type: 'object' } },
+                feedback: { type: 'array', items: { type: 'object' } },
+              },
+            },
+          },
+        },
+        SkillSynthesizeResponse: {
+          type: 'object',
+          properties: {
+            skills: { type: 'array', items: { type: 'object' } },
+            total: { type: 'integer' },
+            new: { type: 'integer' },
+          },
+        },
+        SkillListResponse: {
+          type: 'object',
+          properties: { skills: { type: 'array', items: { type: 'object' } }, total: { type: 'integer' } },
+        },
+        SkillRankedResponse: {
+          type: 'object',
+          properties: { skills: { type: 'array', items: { type: 'object' } }, total: { type: 'integer' } },
         },
       },
     },
