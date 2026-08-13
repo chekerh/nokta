@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { execFile as execFileCb } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
@@ -19,11 +19,7 @@ const SCRIPT_PATH = path.resolve(
 
 function runPythonScript(args) {
   return new Promise((resolve, reject) => {
-    // Escape arguments
-    const cmdArgs = args.map((arg) => `"${arg.replace(/"/g, '\\"')}"`).join(' ');
-    const cmd = `python3 "${SCRIPT_PATH}" ${cmdArgs}`;
-
-    exec(cmd, { cwd: path.dirname(SCRIPT_PATH), maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFileCb('python3', [SCRIPT_PATH, ...args], { cwd: path.dirname(SCRIPT_PATH), maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
         return reject(new Error(stderr || err.message));
       }
@@ -36,6 +32,7 @@ export function registerUiUxRoutes(app, log, sprintEngine) {
   // Check if UI/UX Pro Max skill is installed and active
   app.get(
     '/api/v1/uiux/status',
+    authMiddleware(),
     asyncHandler(async (req, res) => {
       try {
         await runPythonScript(['--help']);

@@ -17,7 +17,7 @@ import { registerGateRoutes } from './routes/gates.mjs';
 import { registerTrailRoutes } from './routes/trail.mjs';
 import { registerSearchRoutes } from './routes/search.mjs';
 import { registerContextRoutes } from './routes/context.mjs';
-import { registerHealthRoute } from './routes/health.mjs';
+import { registerHealthRoute, trackRoute } from './routes/health.mjs';
 import { registerMcpRoutes } from './routes/mcp.mjs';
 import { registerCodeActionRoutes } from './routes/code-actions.mjs';
 import { getOpenApiSpec } from './lib/openapi.mjs';
@@ -39,6 +39,13 @@ import { loadBlacklist, startBlacklistCleanup } from './lib/token-blacklist.mjs'
 import { registerTrustRoutes } from './routes/trust.mjs';
 import { DecisionEngine } from './lib/decision-engine.mjs';
 import { registerDecisionRoutes } from './routes/decisions.mjs';
+import { ProjectManager } from './lib/project-manager.mjs';
+import { UserBrain } from './lib/user-brain.mjs';
+import { registerProjectRoutes } from './routes/projects.mjs';
+import { registerBrainRoutes } from './routes/brain.mjs';
+import { registerAdversarialRoutes } from './routes/adversarial.mjs';
+import { registerSandboxRoutes } from './routes/sandbox.mjs';
+import { registerSkillEvolutionRoutes } from './routes/skill-evolution.mjs';
 
 export async function createServer(options = {}) {
   const port = options.port || 4217;
@@ -55,7 +62,10 @@ export async function createServer(options = {}) {
     : [/^https?:\/\/localhost/, /^https?:\/\/127\.0\.0\.1/];
   app.use(cors({ origin: corsOrigins }));
 
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({
+    limit: '1mb',
+    verify: (req, _res, buf) => { req.rawBody = buf; },
+  }));
 
   const authToken = process.env.NOKTA_API_KEY;
   if (authToken) {
@@ -79,6 +89,7 @@ export async function createServer(options = {}) {
   startBlacklistCleanup();
 
   registerAuthRoutes(app);
+  trackRoute('auth');
 
   const providerManager = new ProviderManager({ log });
   await providerManager.initDefaults();
@@ -89,39 +100,74 @@ export async function createServer(options = {}) {
   const chatHandler = new ChatHandler(providerManager, { projectRoot, log, costTracker, gateKeeper });
 
   registerChatRoutes(app, chatHandler, providerManager);
+  trackRoute('chat');
   registerCompleteRoutes(app, providerManager);
+  trackRoute('complete');
   registerAgentRoutes(app, providerManager, log);
+  trackRoute('agents');
   registerProviderRoutes(app, providerManager);
+  trackRoute('providers');
   registerCostRoutes(app, costTracker);
+  trackRoute('costs');
   registerGateRoutes(app, gateKeeper);
+  trackRoute('gates');
   registerTrailRoutes(app);
+  trackRoute('trail');
 
   app.get('/api/v1/rate-limits', (req, res) => {
     const stats = getAllProviderBucketStats();
     res.json({ providers: stats });
   });
   registerSearchRoutes(app);
+  trackRoute('search');
   registerContextRoutes(app);
+  trackRoute('context');
   registerMcpRoutes(app, log);
+  trackRoute('mcp');
   registerCodeActionRoutes(app, chatHandler);
+  trackRoute('code-actions');
   registerHealthRoute(app, providerManager);
   registerSkillRoutes(app, log);
+  trackRoute('skills');
   registerUiUxRoutes(app, log);
+  trackRoute('uiux');
   registerTrustRoutes(app);
+  trackRoute('trust');
 
   const { registerBillingRoutes } = await import('./routes/billing.mjs');
   await registerBillingRoutes(app);
+  trackRoute('billing');
+
+  const projectManager = new ProjectManager({ log });
+  registerProjectRoutes(app, projectManager);
+  trackRoute('projects');
+
+  const userBrain = new UserBrain({ log });
+  registerBrainRoutes(app, userBrain);
+  trackRoute('brain');
+
+  registerAdversarialRoutes(app, chatHandler, log);
+  trackRoute('adversarial');
+
+  registerSandboxRoutes(app, log);
+  trackRoute('sandbox');
+
+  registerSkillEvolutionRoutes(app, projectRoot, log);
+  trackRoute('skill-evolution');
 
   const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler });
   registerPlannerRoutes(app, sprintEngine);
+  trackRoute('planner');
 
   const decisionEngine = new DecisionEngine(projectRoot, { log });
   registerDecisionRoutes(app, decisionEngine);
+  trackRoute('decisions');
 
   const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler, sprintEngine });
   const jobQueue = new AgentJobQueue({ concurrency: 2, log });
   jobQueue.start();
   registerAgentRunRoutes(app, orchestrator, log, jobQueue);
+  trackRoute('agent-runs');
 
   // Autonomous file watcher — watches, updates sprints, and creates agent runs
   const watcher = new AutoWatcher(projectRoot, {
@@ -170,7 +216,7 @@ export async function createServer(options = {}) {
     if (!err.status) {
       log.error('Unhandled error', { requestId: req.id, error: err.message, method: req.method, path: req.path });
     }
-    res.status(status).json({ error: message, status, requestId: req.id });
+    res.status(status).json({ error: status === 500 ? 'Internal server error' : message, status, requestId: req.id });
   });
 
   return { app, providerManager, chatHandler, sprintEngine, port };
