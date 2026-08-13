@@ -84,15 +84,23 @@ export class SandboxManager {
     const workspaceDir = path.dirname(filePath);
 
     const cmd = [
-      'docker', 'run', '--rm',
-      '--name', containerId,
-      '-v', `${workspaceDir}:/workspace`,
-      '--workdir', '/workspace',
-      '--memory', options.memoryLimit || this.memoryLimit,
-      '--network', 'none',
+      'docker',
+      'run',
+      '--rm',
+      '--name',
+      containerId,
+      '-v',
+      `${workspaceDir}:/workspace`,
+      '--workdir',
+      '/workspace',
+      '--memory',
+      options.memoryLimit || this.memoryLimit,
+      '--network',
+      'none',
       '--read-only',
       this.image,
-      'node', fileName,
+      'node',
+      fileName,
     ];
 
     return new Promise((resolve) => {
@@ -123,25 +131,29 @@ export class SandboxManager {
 
       proc.on('error', (err) => {
         if (timer) clearTimeout(timer);
-        resolve(new SandboxResult({
-          stdout,
-          stderr,
-          exitCode: -1,
-          error: err.message,
-          timedOut,
-          durationMs: Date.now() - start,
-        }));
+        resolve(
+          new SandboxResult({
+            stdout,
+            stderr,
+            exitCode: -1,
+            error: err.message,
+            timedOut,
+            durationMs: Date.now() - start,
+          }),
+        );
       });
 
       proc.on('close', (code) => {
         if (timer) clearTimeout(timer);
-        resolve(new SandboxResult({
-          stdout,
-          stderr,
-          exitCode: code,
-          timedOut,
-          durationMs: Date.now() - start,
-        }));
+        resolve(
+          new SandboxResult({
+            stdout,
+            stderr,
+            exitCode: code,
+            timedOut,
+            durationMs: Date.now() - start,
+          }),
+        );
       });
     });
   }
@@ -177,25 +189,29 @@ export class SandboxManager {
 
       proc.on('error', (err) => {
         if (timer) clearTimeout(timer);
-        resolve(new SandboxResult({
-          stdout,
-          stderr,
-          exitCode: -1,
-          error: err.message,
-          timedOut,
-          durationMs: Date.now() - start,
-        }));
+        resolve(
+          new SandboxResult({
+            stdout,
+            stderr,
+            exitCode: -1,
+            error: err.message,
+            timedOut,
+            durationMs: Date.now() - start,
+          }),
+        );
       });
 
       proc.on('close', (code) => {
         if (timer) clearTimeout(timer);
-        resolve(new SandboxResult({
-          stdout,
-          stderr,
-          exitCode: code,
-          timedOut,
-          durationMs: Date.now() - start,
-        }));
+        resolve(
+          new SandboxResult({
+            stdout,
+            stderr,
+            exitCode: code,
+            timedOut,
+            durationMs: Date.now() - start,
+          }),
+        );
       });
     });
   }
@@ -209,7 +225,13 @@ export class SandboxManager {
         result = await this._runDocker(filePath, options);
         if (result.exitCode !== 0 && result.stderr && result.error === null) {
           const dockerErr = result.stderr.toLowerCase();
-          if (dockerErr.includes('docker') || dockerErr.includes('socket') || dockerErr.includes('credential') || dockerErr.includes('image') || dockerErr.includes('daemon')) {
+          if (
+            dockerErr.includes('docker') ||
+            dockerErr.includes('socket') ||
+            dockerErr.includes('credential') ||
+            dockerErr.includes('image') ||
+            dockerErr.includes('daemon')
+          ) {
             this.log.warn(`Docker failed, falling back to Node: ${result.stderr.slice(0, 200)}`);
             result = await this._runNode(filePath, options);
           }

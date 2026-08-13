@@ -5,7 +5,8 @@ const _SCHEMA_VERSION = 3;
 
 const MIGRATIONS = [
   // v1: Initial schema
-  { up: `
+  {
+    up: `
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
@@ -122,7 +123,8 @@ const MIGRATIONS = [
     config TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
-  `, down: `
+  `,
+    down: `
   DROP TABLE IF EXISTS user_configs;
   DROP TABLE IF EXISTS sprint_items;
   DROP TABLE IF EXISTS agent_run_steps;
@@ -131,9 +133,11 @@ const MIGRATIONS = [
   DROP TABLE IF EXISTS provider_keys;
   DROP TABLE IF EXISTS sessions;
   DROP TABLE IF EXISTS users;
-  ` },
+  `,
+  },
   // v2: Multi-project and User Brain support
-  { up: `
+  {
+    up: `
   CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -153,12 +157,15 @@ const MIGRATIONS = [
   );
 
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
-  `, down: `
+  `,
+    down: `
   DROP TABLE IF EXISTS user_brain;
   DROP TABLE IF EXISTS projects;
-  ` },
+  `,
+  },
   // v3: Security hardening + Trust Architecture
-  { up: `
+  {
+    up: `
   CREATE TABLE IF NOT EXISTS token_blacklist (
     token_id TEXT PRIMARY KEY,
     expires_at TEXT NOT NULL,
@@ -239,7 +246,8 @@ const MIGRATIONS = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_relationships_projects ON project_relationships(project_a, project_b);
-  `, down: `
+  `,
+    down: `
   DROP TABLE IF EXISTS project_relationships;
   DROP TABLE IF EXISTS shared_patterns;
   DROP TABLE IF EXISTS decision_trail;
@@ -247,7 +255,8 @@ const MIGRATIONS = [
   DROP TABLE IF EXISTS scope_declarations;
   DROP TABLE IF EXISTS model_pricing;
   DROP TABLE IF EXISTS token_blacklist;
-  ` },
+  `,
+  },
 ];
 
 export function migrate() {

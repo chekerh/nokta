@@ -19,19 +19,23 @@ function authHeaders() {
 
 function httpGet(url, timeout = 5000) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, {
-      headers: { ...authHeaders() },
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => (data += chunk));
-      res.on('end', () => {
-        try {
-          resolve({ status: res.statusCode, body: JSON.parse(data) });
-        } catch {
-          resolve({ status: res.statusCode, body: data });
-        }
-      });
-    });
+    const req = http.get(
+      url,
+      {
+        headers: { ...authHeaders() },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, body: JSON.parse(data) });
+          } catch {
+            resolve({ status: res.statusCode, body: data });
+          }
+        });
+      },
+    );
     req.on('error', reject);
     req.setTimeout(timeout, () => {
       req.destroy();

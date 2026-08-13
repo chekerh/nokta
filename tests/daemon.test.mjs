@@ -13,19 +13,23 @@ function findPort() {
 
 function httpGet(url, timeout = 3000) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, {
-      headers: { ...authHeaders() },
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => (data += chunk));
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch {
-          resolve(data);
-        }
-      });
-    });
+    const req = http.get(
+      url,
+      {
+        headers: { ...authHeaders() },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            resolve(data);
+          }
+        });
+      },
+    );
     req.on('error', reject);
     req.setTimeout(timeout, () => {
       req.destroy();
@@ -41,7 +45,7 @@ function httpPost(url, body, timeout = 3000) {
       url,
       {
         method: 'POST',
-         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), ...authHeaders() },
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), ...authHeaders() },
       },
       (res) => {
         let data = '';
@@ -67,19 +71,23 @@ function httpPost(url, body, timeout = 3000) {
 
 function httpGetNoAuth(url, timeout = 3000) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, {
-      headers: {},
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => (data += chunk));
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch {
-          resolve(data);
-        }
-      });
-    });
+    const req = http.get(
+      url,
+      {
+        headers: {},
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            resolve(data);
+          }
+        });
+      },
+    );
     req.on('error', reject);
     req.setTimeout(timeout, () => {
       req.destroy();

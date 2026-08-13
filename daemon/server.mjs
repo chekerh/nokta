@@ -62,10 +62,14 @@ export async function createServer(options = {}) {
     : [/^https?:\/\/localhost/, /^https?:\/\/127\.0\.0\.1/];
   app.use(cors({ origin: corsOrigins }));
 
-  app.use(express.json({
-    limit: '1mb',
-    verify: (req, _res, buf) => { req.rawBody = buf; },
-  }));
+  app.use(
+    express.json({
+      limit: '1mb',
+      verify: (req, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
 
   const authToken = process.env.NOKTA_API_KEY;
   if (authToken) {

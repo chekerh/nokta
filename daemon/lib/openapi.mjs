@@ -252,7 +252,12 @@ export function getOpenApiSpec(version = '0.2.0') {
       '/api/v1/projects': {
         get: {
           summary: 'List registered projects',
-          responses: { 200: { description: 'Project list', content: { 'application/json': { schema: { $ref: '#/components/schemas/ProjectListResponse' } } } } },
+          responses: {
+            200: {
+              description: 'Project list',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/ProjectListResponse' } } },
+            },
+          },
         },
         post: {
           summary: 'Register a new project',
@@ -260,7 +265,12 @@ export function getOpenApiSpec(version = '0.2.0') {
             required: true,
             content: { 'application/json': { schema: { $ref: '#/components/schemas/ProjectCreateRequest' } } },
           },
-          responses: { 201: { description: 'Project created', content: { 'application/json': { schema: { $ref: '#/components/schemas/ProjectResponse' } } } } },
+          responses: {
+            201: {
+              description: 'Project created',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/ProjectResponse' } } },
+            },
+          },
         },
       },
       '/api/v1/projects/{id}': {
@@ -271,75 +281,160 @@ export function getOpenApiSpec(version = '0.2.0') {
         },
       },
       '/api/v1/brain': {
-        get: { summary: 'Get user brain (operational DNA + learned patterns)', responses: { 200: { description: 'User brain data', content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainResponse' } } } } } },
+        get: {
+          summary: 'Get user brain (operational DNA + learned patterns)',
+          responses: {
+            200: {
+              description: 'User brain data',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainResponse' } } },
+            },
+          },
+        },
       },
       '/api/v1/brain/dna': {
         patch: {
           summary: 'Update operational DNA',
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainDNARequest' } } } },
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainDNARequest' } } },
+          },
           responses: { 200: { description: 'DNA updated' } },
         },
       },
       '/api/v1/brain/patterns': {
         post: {
           summary: 'Add a learned pattern',
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainPatternRequest' } } } },
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainPatternRequest' } } },
+          },
           responses: { 201: { description: 'Pattern added' } },
         },
       },
       '/api/v1/brain/context': {
-        get: { summary: 'Compile global context for LLM prompts', responses: { 200: { description: 'Compiled context', content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainContextResponse' } } } } } },
+        get: {
+          summary: 'Compile global context for LLM prompts',
+          responses: {
+            200: {
+              description: 'Compiled context',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/BrainContextResponse' } } },
+            },
+          },
+        },
       },
       '/api/v1/search/semantic': {
         post: {
           summary: 'Semantic vector search (TF-IDF cosine similarity)',
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SemanticSearchRequest' } } } },
-          responses: { 200: { description: 'Semantic search results', content: { 'application/json': { schema: { $ref: '#/components/schemas/SemanticSearchResponse' } } } } },
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/SemanticSearchRequest' } } },
+          },
+          responses: {
+            200: {
+              description: 'Semantic search results',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/SemanticSearchResponse' } } },
+            },
+          },
         },
       },
       '/api/v1/adversarial/review': {
         post: {
           summary: 'Full adversarial review cycle (critic → implementer → critique)',
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialReviewRequest' } } } },
-          responses: { 200: { description: 'Review result with final code', content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialReviewResponse' } } } } },
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialReviewRequest' } } },
+          },
+          responses: {
+            200: {
+              description: 'Review result with final code',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialReviewResponse' } } },
+            },
+          },
         },
       },
       '/api/v1/adversarial/critique': {
         post: {
           summary: 'Single critique pass (no iteration)',
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialCritiqueRequest' } } } },
-          responses: { 200: { description: 'Critique issues', content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialCritiqueResponse' } } } } },
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialCritiqueRequest' } } },
+          },
+          responses: {
+            200: {
+              description: 'Critique issues',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/AdversarialCritiqueResponse' } } },
+            },
+          },
         },
       },
       '/api/v1/sandbox/exec': {
         post: {
           summary: 'Execute JavaScript code in sandbox',
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxExecRequest' } } } },
-          responses: { 200: { description: 'Execution result', content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxResult' } } } } },
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxExecRequest' } } },
+          },
+          responses: {
+            200: {
+              description: 'Execution result',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxResult' } } },
+            },
+          },
         },
       },
       '/api/v1/sandbox/exec-file': {
         post: {
           summary: 'Execute a file in sandbox',
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxFileRequest' } } } },
-          responses: { 200: { description: 'Execution result', content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxResult' } } } } },
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxFileRequest' } } },
+          },
+          responses: {
+            200: {
+              description: 'Execution result',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/SandboxResult' } } },
+            },
+          },
         },
       },
       '/api/v1/skills/synthesize': {
         post: {
           summary: 'Synthesize skills from brainstorm, sprint items, and feedback',
-          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillSynthesizeRequest' } } } },
-          responses: { 200: { description: 'Synthesis result', content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillSynthesizeResponse' } } } } },
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillSynthesizeRequest' } } },
+          },
+          responses: {
+            200: {
+              description: 'Synthesis result',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillSynthesizeResponse' } } },
+            },
+          },
         },
       },
       '/api/v1/skills/learned': {
-        get: { summary: 'Get all learned skills', responses: { 200: { description: 'Learned skills list', content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillListResponse' } } } } } },
+        get: {
+          summary: 'Get all learned skills',
+          responses: {
+            200: {
+              description: 'Learned skills list',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillListResponse' } } },
+            },
+          },
+        },
       },
       '/api/v1/skills/ranked': {
         get: {
           summary: 'Get skills ranked by effectiveness',
-          parameters: [{ name: 'feedback', in: 'query', schema: { type: 'string' }, description: 'Optional JSON feedback data' }],
-          responses: { 200: { description: 'Ranked skills', content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillRankedResponse' } } } } },
+          parameters: [
+            { name: 'feedback', in: 'query', schema: { type: 'string' }, description: 'Optional JSON feedback data' },
+          ],
+          responses: {
+            200: {
+              description: 'Ranked skills',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/SkillRankedResponse' } } },
+            },
+          },
         },
       },
     },
@@ -536,7 +631,12 @@ export function getOpenApiSpec(version = '0.2.0') {
         AdversarialCritiqueRequest: {
           type: 'object',
           required: ['code'],
-          properties: { code: { type: 'string' }, file: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' } },
+          properties: {
+            code: { type: 'string' },
+            file: { type: 'string' },
+            provider: { type: 'string' },
+            model: { type: 'string' },
+          },
         },
         AdversarialCritiqueResponse: {
           type: 'object',
@@ -572,7 +672,12 @@ export function getOpenApiSpec(version = '0.2.0') {
         SandboxFileRequest: {
           type: 'object',
           required: ['file'],
-          properties: { file: { type: 'string' }, target: { type: 'string' }, timeoutMs: { type: 'integer', default: 30000 }, memoryLimit: { type: 'string' } },
+          properties: {
+            file: { type: 'string' },
+            target: { type: 'string' },
+            timeoutMs: { type: 'integer', default: 30000 },
+            memoryLimit: { type: 'string' },
+          },
         },
         SandboxResult: {
           type: 'object',

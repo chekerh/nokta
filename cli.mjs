@@ -549,7 +549,7 @@ async function cmdSandbox(args) {
   const code = args.join(' ');
   if (!code) {
     console.error('Usage: nokta sandbox "<javascript-code>"');
-    console.error('Example: nokta sandbox "console.log(\"hello\")"' );
+    console.error('Example: nokta sandbox "console.log(\"hello\")"');
     process.exit(1);
   }
   const { SandboxManager } = await import('./daemon/lib/sandbox.mjs');
@@ -593,7 +593,7 @@ async function cmdMigrate(args) {
     console.log(`Current version: v${status.currentVersion}`);
     console.log(`Total migrations: ${status.totalMigrations}`);
     console.log('\nApplied migrations:');
-    status.appliedMigrations.forEach(v => console.log(`  v${v.version} - ${v.applied_at}`));
+    status.appliedMigrations.forEach((v) => console.log(`  v${v.version} - ${v.applied_at}`));
     return;
   }
 
@@ -679,20 +679,20 @@ const commands = {
   gates: cmdGates,
   detect: cmdDetect,
   'review-pr': cmdReviewPr,
-    'review-branch': cmdReviewBranch,
-    daemon: cmdDaemon,
-    trail: cmdTrail,
-    decisions: cmdDecisions,
-    kanban: cmdKanban,
-    chat: cmdChat,
-    agent: cmdAgent,
-    index: cmdIndex,
-    search: cmdSearch,
-    'review-adversarial': cmdReviewAdversarial,
-    sandbox: cmdSandbox,
-    skills: cmdSkills,
-    migrate: cmdMigrate,
-  };
+  'review-branch': cmdReviewBranch,
+  daemon: cmdDaemon,
+  trail: cmdTrail,
+  decisions: cmdDecisions,
+  kanban: cmdKanban,
+  chat: cmdChat,
+  agent: cmdAgent,
+  index: cmdIndex,
+  search: cmdSearch,
+  'review-adversarial': cmdReviewAdversarial,
+  sandbox: cmdSandbox,
+  skills: cmdSkills,
+  migrate: cmdMigrate,
+};
 
 async function main() {
   const args = process.argv.slice(2);

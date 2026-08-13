@@ -7,23 +7,23 @@
 
 ## Current State Summary
 
-| Category               | Status      | Notes                                         |
-| ---------------------- | ----------- | --------------------------------------------- |
-| Lint (eslint)          | ✅ Pass     | `--max-warnings 0` clean                       |
-| Tests (node --test)    | ✅ 140/140  | All pass                                      |
-| Daemon startup         | ✅ Starts   | Health check responds                         |
-| Core sprint engine     | ✅ Done     | SprintEngine.mjs with full CRUD + estimate    |
-| Planner API routes     | ✅ Done     | All 15 route handlers in planner.mjs           |
-| Project Manager API    | ✅ Done     | `/api/v1/projects` (new)                      |
-| User Brain API         | ✅ Done     | `/api/v1/brain/*` (new)                       |
-| Semantic Search        | ✅ Done     | TF-IDF vector search + CLI `nokta search` + Web UI panel  |
-| Adversarial Review     | ✅ Done     | Critic → Implementer → Critique loop + Web UI panel      |
-| Sandbox Execution      | ✅ Done     | Safe code execution with Docker/Node fallback + UI       |
-| Skill Evolution        | ✅ Done     | Skill synthesis + ranking + CLI `nokta skills` + UI      |
-| Reports module         | ✅ Done     | SVG charts in reports.js                      |
-| Web UI                 | ✅ Done     | New tabs for search, sandbox, adversarial, skills         |
-| CLI (`cli.mjs`)        | ✅ Done     | 14 commands including `nokta search`, `nokta sandbox`, `nokta skills`  |
-| Security               | ✅ Done     | All 6 Dependabot alerts fixed                 |
+| Category            | Status     | Notes                                                                 |
+| ------------------- | ---------- | --------------------------------------------------------------------- |
+| Lint (eslint)       | ✅ Pass    | `--max-warnings 0` clean                                              |
+| Tests (node --test) | ✅ 140/140 | All pass                                                              |
+| Daemon startup      | ✅ Starts  | Health check responds                                                 |
+| Core sprint engine  | ✅ Done    | SprintEngine.mjs with full CRUD + estimate                            |
+| Planner API routes  | ✅ Done    | All 15 route handlers in planner.mjs                                  |
+| Project Manager API | ✅ Done    | `/api/v1/projects` (new)                                              |
+| User Brain API      | ✅ Done    | `/api/v1/brain/*` (new)                                               |
+| Semantic Search     | ✅ Done    | TF-IDF vector search + CLI `nokta search` + Web UI panel              |
+| Adversarial Review  | ✅ Done    | Critic → Implementer → Critique loop + Web UI panel                   |
+| Sandbox Execution   | ✅ Done    | Safe code execution with Docker/Node fallback + UI                    |
+| Skill Evolution     | ✅ Done    | Skill synthesis + ranking + CLI `nokta skills` + UI                   |
+| Reports module      | ✅ Done    | SVG charts in reports.js                                              |
+| Web UI              | ✅ Done    | New tabs for search, sandbox, adversarial, skills                     |
+| CLI (`cli.mjs`)     | ✅ Done    | 14 commands including `nokta search`, `nokta sandbox`, `nokta skills` |
+| Security            | ✅ Done    | All 6 Dependabot alerts fixed                                         |
 
 ## Execution Order (Priority Queue)
 
@@ -46,25 +46,25 @@
 
 All 15 endpoints in `daemon/routes/planner.mjs` implemented and wired to `SprintEngine`.
 
-| Endpoint                                | Status | Test |
-| --------------------------------------- | ------ | ---- |
-| `GET /api/v1/planner/items`             | ✅     | ✅   |
-| `POST /api/v1/planner/items`            | ✅     | ✅   |
-| `GET /api/v1/planner/items/:id`         | ✅     | ✅   |
-| `PATCH /api/v1/planner/items/:id`       | ✅     | ✅   |
-| `DELETE /api/v1/planner/items/:id`      | ✅     | ✅   |
-| `PATCH /api/v1/planner/items/:id/estimate` | ✅   | ✅   |
-| `POST /api/v1/planner/items/:id/feedback` | ✅   | ✅   |
-| `POST /api/v1/planner/sprints`          | ✅     | ✅   |
-| `GET /api/v1/planner/sprints/:id`       | ✅     | ✅   |
-| `GET /api/v1/planner/sprints/:id/items` | ✅     | ✅   |
-| `GET /api/v1/planner/epics`             | ✅     | ✅   |
-| `POST /api/v1/planner/epics`            | ✅     | ✅   |
-| `GET /api/v1/planner/initiatives`       | ✅     | ✅   |
-| `POST /api/v1/planner/initiatives`      | ✅     | ✅   |
-| `POST /api/v1/planner/brainstorm`       | ✅     | ✅   |
-| `GET /api/v1/planner/summary`           | ✅     | ✅   |
-| `GET /api/v1/planner/sprints/:id/report` | ✅    | ✅   |
+| Endpoint                                   | Status | Test |
+| ------------------------------------------ | ------ | ---- |
+| `GET /api/v1/planner/items`                | ✅     | ✅   |
+| `POST /api/v1/planner/items`               | ✅     | ✅   |
+| `GET /api/v1/planner/items/:id`            | ✅     | ✅   |
+| `PATCH /api/v1/planner/items/:id`          | ✅     | ✅   |
+| `DELETE /api/v1/planner/items/:id`         | ✅     | ✅   |
+| `PATCH /api/v1/planner/items/:id/estimate` | ✅     | ✅   |
+| `POST /api/v1/planner/items/:id/feedback`  | ✅     | ✅   |
+| `POST /api/v1/planner/sprints`             | ✅     | ✅   |
+| `GET /api/v1/planner/sprints/:id`          | ✅     | ✅   |
+| `GET /api/v1/planner/sprints/:id/items`    | ✅     | ✅   |
+| `GET /api/v1/planner/epics`                | ✅     | ✅   |
+| `POST /api/v1/planner/epics`               | ✅     | ✅   |
+| `GET /api/v1/planner/initiatives`          | ✅     | ✅   |
+| `POST /api/v1/planner/initiatives`         | ✅     | ✅   |
+| `POST /api/v1/planner/brainstorm`          | ✅     | ✅   |
+| `GET /api/v1/planner/summary`              | ✅     | ✅   |
+| `GET /api/v1/planner/sprints/:id/report`   | ✅     | ✅   |
 
 ## Phase 2 — Sprint Engine Completeness ✅ COMPLETE
 
@@ -120,10 +120,12 @@ All 15 endpoints in `daemon/routes/planner.mjs` implemented and wired to `Sprint
 ## Phase 6 — Quality & Polish 🟡 TODO
 
 ### 6.1 OpenAPI Documentation
+
 - `docs/openapi.yaml` — Full OpenAPI 3.0 spec
 - `daemon/routes/openapi.mjs` — Serve at `/api/v1/docs`
 
 ### 6.3 Security Hardening ✅ COMPLETE
+
 - Added `authMiddleware()` to all sensitive routes (chat, sandbox, adversarial, costs, gates, decisions, trail, planner, agents, code-actions, context, mcp, search, uiux, skills, skill-evolution, projects, brain)
 - Added `authMiddleware(false)` for optional auth (providers listing)
 - `NOKTA_API_KEY` Bearer token now works as alternative to JWT in `authMiddleware`
@@ -131,6 +133,7 @@ All 15 endpoints in `daemon/routes/planner.mjs` implemented and wired to `Sprint
 - Removed duplicate `trackRoute('brain')` call
 
 ### 6.4 Migration Rollback ✅ COMPLETE
+
 - `MIGRATIONS` array converted to objects with `{ up, down }` SQL strings
 - `migrateDown(targetVersion)` function exported from schema.mjs
 - CLI: `nokta migrate down [version]` rolls back to specified version

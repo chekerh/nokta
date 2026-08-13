@@ -19,12 +19,17 @@ const SCRIPT_PATH = path.resolve(
 
 function runPythonScript(args) {
   return new Promise((resolve, reject) => {
-    execFileCb('python3', [SCRIPT_PATH, ...args], { cwd: path.dirname(SCRIPT_PATH), maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        return reject(new Error(stderr || err.message));
-      }
-      resolve(stdout);
-    });
+    execFileCb(
+      'python3',
+      [SCRIPT_PATH, ...args],
+      { cwd: path.dirname(SCRIPT_PATH), maxBuffer: 10 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (err) {
+          return reject(new Error(stderr || err.message));
+        }
+        resolve(stdout);
+      },
+    );
   });
 }
 

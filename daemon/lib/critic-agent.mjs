@@ -141,9 +141,7 @@ ${JSON.stringify(feedback, null, 2)}
       const critique = await this.critique(currentCode, { file, provider, model });
       rounds.push({ round: i + 1, type: 'critique', result: critique });
 
-      const criticalOrHigh = critique.issues.filter((issue) =>
-        ['critical', 'high'].includes(issue.severity),
-      );
+      const criticalOrHigh = critique.issues.filter((issue) => ['critical', 'high'].includes(issue.severity));
 
       if (criticalOrHigh.length === 0) {
         this.log.info(`Adversarial review passed on round ${i + 1}`);
