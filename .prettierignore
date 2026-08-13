@@ -19,6 +19,18 @@ upstream/
 *.bak
 *.lock
 
+# Graphify outputs
+.graphify_*.json
+.graphify_*.txt
+graphify-out/
+
+# Docs
+docs/REMAINING_WORK.md
+
+# Runtime
+.nokta/agent-runs.json
+.nokta/daemon.pid
+
 # Context
 .ai/compiled-context.md
 
