@@ -4,11 +4,7 @@
 
 ### Active Tasks
 
-| ID       | Task                                                | Priority | Status  | Started |
-| -------- | --------------------------------------------------- | -------- | ------- | ------- |
-| TASK-003 | Implement estimate function in sprint-engine        | HIGH     | PENDING | -       |
-| TASK-004 | Implement auto-prioritize function in sprint-engine | HIGH     | PENDING | -       |
-| TASK-005 | Wire file watcher to sprint engine autoUpdate       | HIGH     | PENDING | -       |
+_None._
 
 ### Completed Tasks
 
@@ -17,6 +13,10 @@
 | TASK-000 | Analyze Nokta project status and create roadmap                                                         | HIGH     | COMPLETED | 2026-08-09 |
 | TASK-001 | Implement missing planner API routes (CRUD for items, sprints, epics, initiatives, brainstorm, reports) | HIGH     | COMPLETED | 2026-08-09 |
 | TASK-002 | Write tests for planner routes                                                                          | HIGH     | COMPLETED | 2026-08-09 |
+| TASK-003 | Implement estimate function in sprint-engine                                                             | HIGH     | COMPLETED | 2026-08-19 |
+| TASK-004 | Implement auto-prioritize function in sprint-engine                                                      | HIGH     | COMPLETED | 2026-08-19 |
+| TASK-005 | Wire file watcher to sprint engine autoUpdate                                                            | HIGH     | COMPLETED | 2026-08-19 |
+| TASK-006 | Implement reports module (Canvas charts + Reports tab)                                                   | HIGH     | COMPLETED | 2026-08-19 |
 
 ## Task Details
 
@@ -42,18 +42,23 @@
 
 ### TASK-003: Implement estimate function
 
-- **Description:** Add story point estimation with user-override learning
-- **Status:** PENDING
-- **Depends on:** None (can work independently)
+- **Description:** Story point estimation with user-override learning
+- **Status:** COMPLETED
+- **Evidence:** `estimateItem` at `daemon/lib/sprint-engine.mjs:683`, all tests pass
 
 ### TASK-004: Implement auto-prioritize function
 
-- **Description:** Add dependency-based, deadline-based, code health, and user history prioritization
-- **Status:** PENDING
-- **Depends on:** None (can work independently)
+- **Description:** Dependency-based, deadline-based, code health, and user history prioritization
+- **Status:** COMPLETED
+- **Evidence:** `autoPrioritize` at `daemon/lib/sprint-engine.mjs:739`, all tests pass
 
 ### TASK-005: Wire file watcher to sprint engine
 
-- **Description:** AutoWatcher is already wired (server.mjs line 127-133). Verify autoUpdate integration.
-- **Status:** PENDING
-- **Depends on:** None
+- **Description:** AutoWatcher wired in server; autoUpdate integration verified
+- **Status:** COMPLETED
+
+### TASK-006: Implement reports module
+
+- **Description:** Canvas-based sprint burndown, velocity tracking, completion rate; Reports tab in UI
+- **Status:** COMPLETED
+- **Evidence:** `daemon/public/lib/reports.js` (344 lines), Reports tab at `daemon/public/index.html:771`
