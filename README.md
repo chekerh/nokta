@@ -51,6 +51,18 @@ Check trail gates for a project:
 node compiler/nokta-gates.mjs --target /path/to/project
 ```
 
+Start the local multi-project workspace:
+
+```bash
+./run_app.sh --workspace
+```
+
+It serves the same workspace state on `http://127.0.0.1:4317` and `4318`,
+skipping occupied ports. Add repositories from the dashboard, choose Codex CLI
+models, configure checks, and let Nokta analyze, implement, test, repair once,
+and independently verify each task. Use `./run_app.sh --workspace --ports
+4500,4501` to choose a different port range.
+
 ## Core Workflow
 
 Every agent follows:

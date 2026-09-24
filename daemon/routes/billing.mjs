@@ -122,6 +122,9 @@ export async function registerBillingRoutes(app) {
         res.json({ url: session.url, sessionId: session.id });
       } else {
         // Without Stripe: direct upgrade
+        if (tier !== 'free' && process.env.NODE_ENV === 'production' && req.user?.role !== 'admin') {
+          throw new AppError('Direct tier upgrades require an active Stripe payment gateway in production', 400);
+        }
         prepare('UPDATE users SET tier = ? WHERE id = ?').run(tier, user.id);
         const updated = prepare('SELECT id, email, tier FROM users WHERE id = ?').get(user.id);
         res.json({

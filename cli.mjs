@@ -458,18 +458,15 @@ async function cmdAgent(args) {
     console.log(`Running agent task: ${task}`);
     const providerManager = new ProviderManager({ log });
     await providerManager.initDefaults();
-    const { JobQueue } = await import('./daemon/agent/job-queue.mjs');
-    const { JobWorker } = await import('./daemon/agent/job-worker.mjs');
-    const jobQueue = new JobQueue(log);
-    await jobQueue.init();
-    const worker = new JobWorker({ projectRoot, log, providerManager, jobQueue });
-    await worker.start();
-    const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, jobQueue });
+    const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager });
     const run = await orchestrator.runTask(task);
     console.log(`\nRun complete: ${run.status}`);
+    if (run.steps && Array.isArray(run.steps)) {
+      for (const step of run.steps) {
+        console.log(`  - [${step.status || 'pending'}] ${step.name}`);
+      }
+    }
     if (run.result) console.log(run.result);
-    await worker.stop();
-    await jobQueue.close();
     return;
   }
 

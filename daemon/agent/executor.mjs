@@ -62,7 +62,17 @@ export async function executeStep(run, step, context = {}) {
 
       case 'shell': {
         const cmd = step.command;
-        const cwd = step.cwd || context.projectRoot || process.cwd();
+        if (!cmd || typeof cmd !== 'string') {
+          throw new Error('Command is required for shell step');
+        }
+        if (/rm\s+(-rf|--recursive)\s+(\/|~\/|\*)/i.test(cmd) || />\s*\/dev\/(sd[a-z]|nvme)/i.test(cmd) || /mkfs/i.test(cmd)) {
+          throw new Error('Destructive shell command blocked by security guard');
+        }
+        const projectRoot = path.resolve(context.projectRoot || process.cwd());
+        let cwd = step.cwd ? path.resolve(projectRoot, step.cwd) : projectRoot;
+        if (!cwd.startsWith(projectRoot)) {
+          cwd = projectRoot;
+        }
         try {
           const stdout = execFileSync('bash', ['-c', cmd], {
             cwd,

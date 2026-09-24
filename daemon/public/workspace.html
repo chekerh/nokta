@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nokta — Project workspace</title>
+  <meta name="description" content="One workspace to plan, execute, test, and verify work across your local projects.">
+  <link rel="stylesheet" href="/lib/workspace.css">
+  <script type="module" src="/lib/workspace.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to workspace</a>
+<header class="topbar"><a class="brand" href="/" aria-label="Nokta workspace"><span class="brand-mark">n.</span> nokta <span class="brand-sub">workspace</span></a><div class="system-status"><span class="status-dot"></span><span id="connection">Connecting</span><span class="local-tag">Local workspace</span></div></header>
+<div class="shell">
+  <aside class="sidebar" aria-label="Projects">
+    <div class="sidebar-heading"><h2>Your projects</h2><span id="project-count">0</span></div>
+    <button class="button primary full" id="add-project">+ Add project</button>
+    <nav id="project-list" aria-label="Select a project"><p class="muted">Loading projects…</p></nav>
+    <div class="sidebar-bottom"><h3>Local toolkit</h3><p id="tools-status" class="muted">Checking Codex and skills…</p><p class="caption">One active task at a time. Nokta rotates between projects after each task.</p></div>
+  </aside>
+  <main id="main">
+    <div id="notice" role="status" class="notice" hidden></div>
+    <section id="welcome" class="welcome" hidden><span class="welcome-symbol" aria-hidden="true">n.</span><h1>Your projects.<br>One place to move them forward.</h1><p>Add a local repository, describe its goal, and choose your models. Nokta turns its needs into a plan, then implements, tests, and independently reviews each task.</p><button id="welcome-add" class="button primary">Add your first project</button><div class="workflow-preview"><span>Analyze</span><span>Plan</span><span>Implement</span><span>Test</span><span>Verify</span></div></section>
+    <section id="project-view" hidden>
+      <div class="project-heading"><div><p id="project-path" class="path"></p><h1 id="project-name"></h1><p id="project-goal" class="project-goal"></p></div><button id="edit-project" class="button secondary">Configure</button></div>
+      <div class="control-bar"><div class="actions"><button id="analyze" class="button secondary">Analyze needs</button><button id="start" class="button primary">Start autopilot</button><button id="pause" class="button secondary" disabled>Pause</button></div><span id="project-state" class="state"></span></div>
+      <p id="project-message" class="muted" role="status"></p>
+      <div class="run-summary"><span id="model-summary"></span><span id="budget-summary"></span></div>
+      <div class="board-heading"><h2>Project board</h2><span id="task-summary" class="muted"></span></div>
+      <p id="board-empty" class="empty-hint" hidden>No tasks yet. Analyze needs to build a plan, or start autopilot to analyze and run it.</p>
+      <div id="board" class="board" aria-label="Project Kanban board"></div>
+      <div class="evidence-grid"><section class="activity"><h2>Activity</h2><ol id="activity-list"></ol></section><section class="activity"><h2>Project context</h2><p id="analysis-summary" class="muted"></p><h3>Selected skills</h3><ul id="selected-skills"></ul><details><summary>Latest runner output</summary><pre id="runner-log">No run yet.</pre></details></section></div>
+    </section>
+  </main>
+</div>
+<dialog id="project-dialog">
+  <form id="project-form">
+    <div class="dialog-heading"><h2 id="form-title">Add a project</h2><button type="button" class="icon-button" data-close="project-dialog" aria-label="Close project form">×</button></div>
+    <p class="muted">Give Nokta a goal and the local folder it should work in.</p>
+    <label>Project name<input id="name" name="name" required maxlength="100" placeholder="Customer portal"></label>
+    <label>Repository folder<input id="rootPath" name="rootPath" required placeholder="/Users/mac/projects/customer-portal"></label>
+    <label>What should Nokta achieve?<textarea id="goal" name="goal" required maxlength="4000" rows="3" placeholder="Find the gaps needed for launch. Prioritize broken user flows and missing tests."></textarea></label>
+    <label>AI runner<select id="runner" name="runner"><option value="codex">Codex CLI — local login</option></select></label>
+    <div class="form-row"><label>Implementation model<input id="executionModel" name="executionModel" required placeholder="Exact model ID" maxlength="120"></label><label>Independent review model<input id="verificationModel" name="verificationModel" required placeholder="A different model ID" maxlength="120"></label></div>
+    <p class="caption">Use model IDs available to your Codex account. The reviewer must use a different model. Run <code>codex login</code> in your terminal first.</p>
+    <label>Checks to run after implementation<textarea id="checks" name="checks" rows="3" spellcheck="false" placeholder='[["npm", "test"], ["npm", "run", "build"]]'></textarea></label>
+    <p class="caption">JSON array of commands and arguments. Commands run in this project's folder when you start autopilot. Use <code>[]</code> for analysis only.</p>
+    <label>Task limit per run<select id="taskLimit" name="taskLimit"><option value="1">1 task</option><option value="3" selected>3 tasks</option><option value="5">5 tasks</option><option value="10">10 tasks</option></select></label>
+    <p class="caption">Starting autopilot allows local edits and the configured checks. Each task gets at most one automatic repair. Publishing and deployment are outside this workflow.</p>
+    <p id="form-error" class="form-error" role="alert"></p>
+    <div class="dialog-actions"><button type="button" class="button secondary" data-close="project-dialog">Cancel</button><button id="save-project" type="submit" class="button primary">Save project</button></div>
+  </form>
+</dialog>
+<dialog id="task-dialog"><div class="dialog-heading"><h2 id="task-title"></h2><button class="icon-button" data-close="task-dialog" aria-label="Close task details">×</button></div><div id="task-content"></div></dialog>
+</body>
+</html>

@@ -4,6 +4,10 @@ const API = window.location.origin;
 
 async function api(method, path, body) {
   var opts = {method:method,headers:{}};
+  var token = localStorage.getItem('nokta-token') || localStorage.getItem('nokta_token');
+  if (token) {
+    opts.headers['Authorization'] = 'Bearer ' + token;
+  }
   if (body) {opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
   var res = await fetch(API+path,opts);
   if (!res.ok) {

@@ -2,8 +2,17 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 
+function resolveSafeTarget(target) {
+  const projectRoot = path.resolve(process.cwd());
+  const resolved = path.resolve(projectRoot, target || '.');
+  if (!resolved.startsWith(projectRoot)) {
+    throw new AppError('Path traversal detected in target', 403);
+  }
+  return resolved;
+}
+
 function getTrailDir(target) {
-  return path.join(target || process.cwd(), '.ai', 'trail');
+  return path.join(resolveSafeTarget(target), '.ai', 'trail');
 }
 
 function getIndexPath(target) {
