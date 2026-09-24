@@ -30,7 +30,7 @@ import { SprintEngine } from './lib/sprint-engine.mjs';
 import { AgentOrchestrator } from './agent/orchestrator.mjs';
 import { AutoWatcher } from './lib/auto-watcher.mjs';
 import { AgentJobQueue } from './agent/job-queue.mjs';
-import { authMiddleware } from './lib/auth.mjs';
+import { authMiddleware, verifyToken } from './lib/auth.mjs';
 import { runDiscovery } from './lib/discovery.mjs';
 import { requestIdMiddleware } from './lib/request-id.mjs';
 import { registerCleanup } from './lib/shutdown.mjs';
@@ -74,12 +74,29 @@ export async function createServer(options = {}) {
   const authToken = process.env.NOKTA_API_KEY;
   if (authToken) {
     app.use((req, res, next) => {
-      if (req.path === '/health') return next();
-      const provided = req.headers['authorization']?.replace(/^Bearer\s+/i, '');
-      if (provided !== authToken) {
-        return res.status(401).json({ error: 'Unauthorized', status: 401 });
+      if (
+        req.path === '/health' ||
+        req.path === '/api/v1/auth/login' ||
+        req.path === '/api/v1/auth/register' ||
+        req.path === '/api/v1/openapi.json' ||
+        req.path === '/api/v1/docs' ||
+        req.path === '/api/v1/billing/config' ||
+        req.path.startsWith('/lib/') ||
+        req.path.startsWith('/assets/') ||
+        req.path === '/' ||
+        req.path === '/index.html' ||
+        req.path === '/settings.html'
+      ) {
+        return next();
       }
-      next();
+      const provided = req.headers['authorization']?.replace(/^Bearer\s+/i, '');
+      if (provided === authToken) {
+        return next();
+      }
+      if (provided && verifyToken(provided)) {
+        return next();
+      }
+      return res.status(401).json({ error: 'Unauthorized', status: 401 });
     });
   }
 
@@ -141,6 +158,10 @@ export async function createServer(options = {}) {
   const { registerBillingRoutes } = await import('./routes/billing.mjs');
   await registerBillingRoutes(app);
   trackRoute('billing');
+
+  const { registerAdminRoutes } = await import('./routes/admin.mjs');
+  registerAdminRoutes(app);
+  trackRoute('admin');
 
   const projectManager = new ProjectManager({ log });
   registerProjectRoutes(app, projectManager);

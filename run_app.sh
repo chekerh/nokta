@@ -7,6 +7,7 @@
 #   ./run_app.sh --test       Run lint + tests only, then exit
 #   ./run_app.sh --stop       Stop the running daemon
 #   ./run_app.sh --status     Check if daemon is running
+#   ./run_app.sh --workspace  Start the multi-project workspace on available ports
 #   ./run_app.sh --help       Show this help
 
 set -euo pipefail
@@ -48,6 +49,7 @@ show_help() {
   echo "  --test       Run lint + tests only, then exit"
   echo "  --stop       Stop the running daemon"
   echo "  --status     Check if daemon is running"
+  echo "  --workspace  Start multi-project workspace (ports 4317,4318 by default)"
   echo "  --help       Show this help message"
   echo ""
   echo "Environment variables (set in .env or export):"
@@ -293,6 +295,10 @@ main() {
     --status)
       check_status
       exit $?
+      ;;
+    --workspace)
+      shift
+      exec node scripts/start-workspace.mjs "$@"
       ;;
     --test)
       show_banner

@@ -26,7 +26,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
 
   app.post(
     '/api/v1/agent-runs',
-    authMiddleware(false),
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       if (req.user?.id && !canStartRun(req.user.id)) {
         const count = getActiveRunCount(req.user.id);
@@ -65,7 +65,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
 
   app.post(
     '/api/v1/agent-runs/:id/execute',
-    authMiddleware(false),
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       await orchestrator.load();
       const run = orchestrator.getRun(req.params.id, req.user?.id);
@@ -95,7 +95,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
 
   app.post(
     '/api/v1/agent-runs/:id/cancel',
-    authMiddleware(false),
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       await orchestrator.load();
       const run = await orchestrator.cancelRun(req.params.id, req.user?.id);
@@ -106,7 +106,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
 
   app.delete(
     '/api/v1/agent-runs/:id',
-    authMiddleware(false),
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       await orchestrator.load();
       await orchestrator.deleteRun(req.params.id, req.user?.id);
@@ -116,7 +116,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
 
   app.post(
     '/api/v1/agent-runs/generate',
-    authMiddleware(false),
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       const { goal, metadata } = req.body;
       if (!goal) throw new AppError('goal is required', 400);
@@ -127,7 +127,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
 
   app.post(
     '/api/v1/agent-runs/auto',
-    authMiddleware(false),
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       const { goal, metadata } = req.body;
       if (!goal) throw new AppError('goal is required', 400);

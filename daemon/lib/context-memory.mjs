@@ -1,4 +1,10 @@
 import { prepare } from '../db/connection.mjs';
+import { fileURLToPath } from 'node:url';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const _PATTERNS_PATH = path.join(__dirname, '..', '..', '..', '.nokta', 'learned', 'patterns.json');
 
 export class ContextMemory {
   constructor({ log } = {}) {
@@ -23,7 +29,41 @@ export class ContextMemory {
     return this.store(userId, projectRoot, 'pattern', pattern.name, pattern.description, {
       examples: pattern.examples,
       category: pattern.category,
+      storyPoints: pattern.storyPoints || 1,
     });
+  }
+
+  async getLearnedPatterns() {
+    const patternsPath = path.join(this.projectRoot, '.nokta', 'learned', 'patterns.json');
+    try {
+      return JSON.parse(await fs.readFile(patternsPath, 'utf8'));
+    } catch {
+      return {
+        conventions: [],
+        acceptedItems: 0,
+        rejectedItems: 0,
+        editedItems: 0,
+        commonLabels: [],
+        commonPriorities: {},
+        commonStoryPoints: {},
+        commonPatterns: {},
+      };
+    }
+  }
+
+  async updateLearnedPattern(patternName, value, confidence = 0.5) {
+    const patternsPath = path.join(this.projectRoot, '.nokta', 'learned', 'patterns.json');
+    const dir = path.dirname(patternsPath);
+    try {
+      await fs.mkdir(dir, { recursive: true });
+    } catch {}
+    let patterns = {};
+    try {
+      patterns = JSON.parse(await fs.readFile(patternsPath, 'utf8'));
+    } catch {}
+    patterns[patternName] = { value, confidence, updatedAt: new Date().toISOString() };
+    await fs.writeFile(patternsPath, JSON.stringify(patterns, null, 2));
+    return patterns[patternName];
   }
 
   storeError(userId, projectRoot, error) {

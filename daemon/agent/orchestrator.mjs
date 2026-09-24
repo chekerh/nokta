@@ -245,6 +245,12 @@ Project context: ${JSON.stringify(context)}`;
       },
       { type: 'shell', name: 'Check git status', command: 'git status --short', ignoreFailure: true },
       {
+        type: 'condition',
+        name: 'Check for uncommitted changes',
+        condition: 'git:hasChanges',
+        failOnFalse: false,
+      },
+      {
         type: 'prompt',
         name: 'Generate implementation plan',
         messages: [],
@@ -257,18 +263,52 @@ Project context: ${JSON.stringify(context)}`;
         command: 'npm test 2>/dev/null || echo "No test command found"',
         ignoreFailure: true,
       },
+      {
+        type: 'review',
+        name: 'Review implementation plan',
+        branch: 'HEAD',
+      },
     ];
+  }
+
+  autoPrioritize(steps) {
+    const prioritized = [...steps];
+    for (let i = 0; i < prioritized.length; i++) {
+      const step = prioritized[i];
+      if (step.type === 'shell' && step.name?.includes('Run tests')) {
+        step.priority = 'high';
+      }
+      if (step.type === 'condition' && step.name?.includes('Check for uncommitted changes')) {
+        step.priority = 'high';
+      }
+      if (step.type === 'prompt' && step.name?.includes('Generate implementation plan')) {
+        step.priority = 'high';
+      }
+      if (step.type === 'review') {
+        step.priority = 'medium';
+      }
+    }
+    return prioritized.sort((a, b) => {
+      const order = { high: 0, medium: 1, low: 2 };
+      return (order[a.priority] || 1) - (order[b.priority] || 1);
+    });
   }
 
   async autoGenerateRun(goal, trigger = 'automatic', metadata = {}) {
     const steps = await this.generateSteps(goal, metadata);
+    const prioritized = this.autoPrioritize(steps);
     const run = await this.createRun({
       goal,
-      steps,
+      steps: prioritized,
       trigger,
       metadata,
       userId: metadata.userId,
     });
     return run;
+  }
+
+  async runTask(goal, metadata = {}) {
+    const run = await this.autoGenerateRun(goal, 'cli', metadata);
+    return await this.executeRun(run.id);
   }
 }

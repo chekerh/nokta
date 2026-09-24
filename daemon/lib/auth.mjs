@@ -85,7 +85,6 @@ export function createToken(payload) {
 
 export function verifyToken(token) {
   try {
-    if (isBlacklisted(token)) return null;
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const secret = getSecret();
@@ -95,6 +94,7 @@ export function verifyToken(token) {
     if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (payload.jti && isBlacklisted(payload.jti)) return null;
     return payload;
   } catch {
     return null;
@@ -142,4 +142,16 @@ export function blacklistCurrentToken(req) {
       blacklistToken(payload.jti, new Date(payload.exp * 1000).toISOString());
     }
   }
+}
+
+export function requireRole(role) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required', status: 401 });
+    }
+    if (req.user.role !== role) {
+      return res.status(403).json({ error: `Forbidden: requires ${role} role`, status: 403 });
+    }
+    next();
+  };
 }

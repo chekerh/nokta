@@ -17,6 +17,27 @@ export const REQUIRED_TRAIL_HEADINGS = [
   'Handoff Summary',
 ];
 
+export const DEPLOYMENT_GATES = [
+  'trail.index',
+  'trail.active-session',
+  'trail.section.objective',
+  'trail.section.current-phase',
+  'trail.section.scope-constraints',
+  'trail.section.evidence-read',
+  'trail.section.commands-run-and-outcomes',
+  'trail.section.decisions-made',
+  'trail.section.what-worked',
+  'trail.section.what-failed',
+  'trail.section.risks-and-blockers',
+  'trail.section.validation-status',
+  'trail.section.next-action',
+  'trail.section.handoff-summary',
+  'trail.section.deployment-target',
+  'trail.section.environment-config',
+  'verification.status',
+  'handoff.summary',
+];
+
 function extractActiveSession(indexContent) {
   const match = indexContent.match(/Active session:\s*`?([^`\n]+)`?/i);
   return match?.[1]?.trim() ?? null;

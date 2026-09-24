@@ -1,7 +1,7 @@
 # Nokta — Production Readiness Roadmap
 
 > **Status:** All phases through 5.4 + Phase 6.1/6.2 complete. Production ready.
-> **Tests:** 148/148 ✅ | **Lint:** 0 errors ✅ | **Daemon:** Starts clean ✅
+> **Tests:** 150/150 ✅ | **Lint:** 0 errors ✅ | **Daemon:** Starts clean ✅
 
 > **Status:** All phases through 5.4 + Phase 6.1/6.2/6.3/6.4 complete. Production ready.
 
@@ -100,29 +100,30 @@ All 15 endpoints in `daemon/routes/planner.mjs` implemented and wired to `Sprint
 - `daemon/routes/adversarial.mjs` — API: `POST /api/v1/adversarial/review`, `POST /api/v1/adversarial/critique`
 - `cli.mjs` — `nokta review-adversarial <file>` command
 
-## Phase 5.3 — Sandbox Layer 🟡 TODO
+## Phase 5.3 — Sandbox Layer ✅ COMPLETE
 
 **Description:** Secure containerized execution for generated code
 
-- `daemon/lib/sandbox.mjs` — Docker/WASM sandbox manager
-- `daemon/lib/sandbox-exec.mjs` — Safe code execution environment
+- `daemon/lib/sandbox.mjs` — Docker-backed sandbox manager with node fallback
 - `daemon/routes/sandbox.mjs` — API: `POST /api/v1/sandbox/exec`
-- Security: isolation, timeout, resource limits
+- Security: docker isolation (when available), timeouts, resource limits, cleanup
+- Verified: unit tests + E2E test + CLI `nokta sandbox` (3 CLI tests)
 
-## Phase 5.4 — Evolution Layer 🟡 TODO
+## Phase 5.4 — Evolution Layer ✅ COMPLETE
 
 **Description:** Skill synthesis from successful agent patterns
 
-- `daemon/lib/skill-synthesizer.mjs` — Extract skills from agent logs
-- `daemon/lib/skill-ranking.mjs` — Rank skills by effectiveness
-- `daemon/routes/skills/synthesize.mjs` — API: `POST /api/v1/skills/synthesize`
+- `daemon/lib/skill-synthesizer.mjs` — `synthesizeSkills`, `getSkills`, `rankSkills`
+- `daemon/routes/skill-evolution.mjs` — API: `POST /api/v1/skills/synthesize`
+- `daemon/routes/skills.mjs` — skill management + retrieval
 
 ## Phase 6 — Quality & Polish 🟡 TODO
 
-### 6.1 OpenAPI Documentation
+### 6.1 OpenAPI Documentation ✅ COMPLETE
 
-- `docs/openapi.yaml` — Full OpenAPI 3.0 spec
-- `daemon/routes/openapi.mjs` — Serve at `/api/v1/docs`
+- Live OpenAPI 3.0 spec served from `daemon/lib/openapi.mjs` at `/api/v1/openapi.json`
+- Swagger UI served at `/api/v1/docs`
+- (Static `docs/openapi.yaml` not maintained; live spec is the source of truth)
 
 ### 6.3 Security Hardening ✅ COMPLETE
 
@@ -142,7 +143,7 @@ All 15 endpoints in `daemon/routes/planner.mjs` implemented and wired to `Sprint
 ## Phase 7 — Integration Tests
 
 - Full daemon boot → route health → shutdown ✅
-- Multi-step workflow: detect → plan → agents → feedback
+- Multi-step workflow: detect → plan → agents → feedback ✅
 - Semantic search E2E test ✅
 - Adversarial review E2E test ✅
 - Sandbox exec E2E test ✅
@@ -153,11 +154,11 @@ All 15 endpoints in `daemon/routes/planner.mjs` implemented and wired to `Sprint
 
 ```bash
 npm run lint           # ✅ 0 errors
-npm test               # ✅ 140 pass, 0 fail
+npm test               # ✅ 150 pass, 0 fail
 npm audit              # ✅ 0 vulnerabilities
 node daemon/server.mjs # ✅ Starts clean
 ```
 
 ## Next Action
 
-Implementing **Phase 5.2: Adversarial Layer** — critic agent for code review.
+All roadmap phases complete. Remaining candidates: OKR metric validation from `docs/roadmap.md` (concurrent projects, latency budgets, coverage targets) and continuous polish items discovered by the next discovery cycle.

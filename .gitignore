@@ -7,6 +7,11 @@ build/
 *.log
 *.bak
 *.bak2
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
 .ai/compiled-context.md
 .nokta/.encryption-key
 .nokta/.jwt-secret
@@ -34,3 +39,12 @@ docs/REMAINING_WORK.md
 # Embedded git repos in upstream/
 upstream/*/
 
+# Landing app (Vite) build artifacts + deps
+landing/node_modules/
+landing/dist/
+
+
+# Personal multi-project workspace state and logs
+.nokta/workspace.json
+.nokta/workspace.pid
+.nokta/workspace-runtime.json

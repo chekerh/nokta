@@ -1,13 +1,37 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const AGENTS_DIR = path.resolve(__dirname, '..', '..', 'agents');
+
+async function loadAgentPacks() {
+  try {
+    const files = await fs.readdir(AGENTS_DIR);
+    const agentFiles = files.filter((f) => f.endsWith('.agent.json'));
+    const list = [];
+    for (const file of agentFiles) {
+      try {
+        const raw = await fs.readFile(path.join(AGENTS_DIR, file), 'utf8');
+        list.push(JSON.parse(raw));
+      } catch {}
+    }
+    return list;
+  } catch {
+    return [];
+  }
+}
 
 export function registerAgentRoutes(app, providerManager, _log) {
   app.get(
     '/api/v1/agents',
     asyncHandler(async (req, res) => {
+      const realAgents = await loadAgentPacks();
       const providers = providerManager.list();
       const health = await providerManager.health();
 
-      const agents = providers.map((p) => ({
+      const providerAgents = providers.map((p) => ({
         id: p.id,
         name: p.name,
         type: p.id,
@@ -23,7 +47,12 @@ export function registerAgentRoutes(app, providerManager, _log) {
         installedModels: ollamaProvider?.models || [],
       };
 
-      res.json({ agents, ollamaStatus });
+      res.json({
+        agents: realAgents.length > 0 ? realAgents : providerAgents,
+        fleet: realAgents,
+        providers: providerAgents,
+        ollamaStatus,
+      });
     }),
   );
 
