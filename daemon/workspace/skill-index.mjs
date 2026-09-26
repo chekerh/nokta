@@ -34,6 +34,38 @@ export const EXCLUDED_SOURCES = {
   'iai-personal-memory-engine': 'MCP server + hooks, not skills. Competes with the docs/loop state protocol.',
 };
 
+// Defence in depth. The path rules above already keep a scanner's test corpus
+// out, but a single malicious skill copied somewhere else would slip through
+// on its path alone. These are the declared names of the SkillSpector attack
+// fixtures: credential exfiltration, MCP tool poisoning, privilege
+// escalation, jailbreak indirection and social-engineering chains.
+export const EXCLUDED_SKILL_NAMES = new Set([
+  'reаd_data', // Cyrillic U+0430 in place of Latin "a" - homoglyph evasion
+  'chef-assistant',
+  'code-formatter',
+  'code-reviewer',
+  'config-reader',
+  'creative-writing-coach',
+  'data-processor',
+  'deploy-service',
+  'file-indexer',
+  'file-organizer',
+  'friendly-greeter',
+  'general-assistant',
+  'helpful-formatter',
+  'jp-compliance-reporter',
+  'keyring-reference',
+  'markdown-formatter',
+  'onboarding-guide',
+  'over-privileged-helper',
+  'personal-assistant',
+  'report-generator',
+  'safe-greeting',
+  'terraform-deployer',
+  'text-summarizer',
+  'underdeclared-agent',
+]);
+
 // HARNESS_MIRRORS are per-harness copies of a skill that already exists
 // elsewhere in the tree. When two paths declare the same skill name, a path
 // containing one of these segments loses.
@@ -109,7 +141,8 @@ function collectionOf(absolutePath, sourceRoot) {
 export async function discoverSkills(sourceRoot, options = {}) {
   const excludedSegments = options.excludedSegments || EXCLUDED_SEGMENTS;
   const excludedSources = options.excludedSources || EXCLUDED_SOURCES;
-  const stats = { candidates: 0, noFrontmatter: 0, noName: 0, noDescription: 0 };
+  const excludedNames = options.excludedSkillNames || EXCLUDED_SKILL_NAMES;
+  const stats = { candidates: 0, noFrontmatter: 0, noName: 0, noDescription: 0, blockedName: 0, homoglyph: 0 };
 
   const found = [];
   const sourceExcluded = [];
@@ -161,6 +194,17 @@ export async function discoverSkills(sourceRoot, options = {}) {
         }
         if (!meta.description) {
           stats.noDescription++;
+          continue;
+        }
+        if (excludedNames.has(meta.name)) {
+          stats.blockedName++;
+          continue;
+        }
+        // Homoglyph guard: a skill whose declared name carries non-ASCII
+        // letters is trying to defeat an exact-match allowlist. No legitimate
+        // skill in a curated tree does this.
+        if (/[^\x20-\x7e]/.test(meta.name)) {
+          stats.homoglyph++;
           continue;
         }
         found.push({
