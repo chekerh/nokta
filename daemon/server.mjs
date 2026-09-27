@@ -194,16 +194,24 @@ export async function createServer(options = {}) {
   registerAgentRunRoutes(app, orchestrator, log, jobQueue);
   trackRoute('agent-runs');
 
-  // Autonomous file watcher — watches, updates sprints, and creates agent runs
-  const watcher = new AutoWatcher(projectRoot, {
-    log,
-    debounceMs: 2000,
-    orchestrator,
-    sprintEngine,
-  });
-  watcher.start();
-
-  registerCleanup(() => watcher.stop());
+  // Autonomous file watcher — watches, updates sprints, and creates agent runs.
+  // It reacts to ANY file change, including edits a human is making by hand,
+  // and the run it triggers can commit the working tree. Set
+  // NOKTA_AUTO_WATCHER=false to keep the daemon read-mostly while doing
+  // manual work. Defaults to enabled so autonomous operation is unchanged.
+  const autoWatcherEnabled = process.env.NOKTA_AUTO_WATCHER !== 'false';
+  if (autoWatcherEnabled) {
+    const watcher = new AutoWatcher(projectRoot, {
+      log,
+      debounceMs: 2000,
+      orchestrator,
+      sprintEngine,
+    });
+    watcher.start();
+    registerCleanup(() => watcher.stop());
+  } else {
+    log.info('AutoWatcher disabled via NOKTA_AUTO_WATCHER=false', { module: 'daemon' });
+  }
   registerCleanup(() => jobQueue.stop());
 
   startAutoBackup();
