@@ -307,7 +307,16 @@ export class AgentOrchestrator extends EventEmitter {
 Available step types:
 - prompt: Call an AI model with messages. Fields: messages (array of {role, content}), systemPrompt (optional).
 - shell: Run a shell command. Fields: command (string), cwd (optional), timeout (ms, default 30000), ignoreFailure (optional).
-- edit: Edit a file. Fields: file (path relative to project root), content (new content), oldString (optional, for replacement).
+- edit: Edit a file. Fields: file (path relative to project root), content, oldString (optional), overwrite (optional).
+  HOW TO USE THIS CORRECTLY — this is the most important rule in this prompt:
+  * To CHANGE PART of a file that already exists: you MUST supply oldString (the exact existing
+    text to replace) and content (the text that replaces it). content is ONLY the replacement
+    snippet, not the whole file.
+  * To CREATE a brand-new file: supply content as the complete file body and omit oldString.
+  * To REPLACE an entire existing file: supply content as the complete new file body plus
+    "overwrite": true. Without "overwrite": true this is rejected, because a plan that emits
+    only the snippet it wants to add silently deletes the rest of the file.
+  Never emit only the few lines you want to add as content for a file that already exists.
 - review: Review current changes. Fields: branch (optional, default HEAD), diff (optional).
 - pr: Create a GitHub PR. Fields: owner, repo, title, body, head, base.
 - condition: Check a condition. Fields: condition (string like "git:hasChanges"), failOnFalse (optional).

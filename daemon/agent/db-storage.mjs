@@ -137,13 +137,31 @@ export function updateRunStatus(runId, updates) {
   }
 }
 
+// Step output is not always a string. `review` stores the review summary object,
+// `condition` stores a boolean, and a provider can return structured content.
+// node:sqlite refuses to bind an object or a boolean, failing the whole run with
+// "Provided value cannot be bound to SQLite parameter 2" and no indication of
+// which step or value was at fault. Anything that is not a plain string is
+// serialised, so the column stays text and the step keeps its result.
+function bindableOutput(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value === 'number') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 export function insertStepResult(runId, stepIndex, stepResult) {
   prepare(
     `UPDATE agent_run_steps SET status = ?, output = ?, error = ?, duration_ms = ?, completed_at = datetime('now')
      WHERE run_id = ? AND step_index = ?`,
   ).run(
     stepResult.status,
-    stepResult.output || null,
+    bindableOutput(stepResult.output),
     stepResult.error || null,
     stepResult.durationMs || null,
     runId,

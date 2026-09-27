@@ -32,7 +32,7 @@ work below.
 
 | Area                        | State   | Evidence                                                            |
 | --------------------------- | ------- | ------------------------------------------------------------------- |
-| Authenticated run execution | working | 245 tests; `tests/agent-run-db.test.mjs`                            |
+| Authenticated run execution | working | 280 tests, 0 failing; `tests/agent-run-db.test.mjs`                 |
 | Run loop repairs            | working | `1a3d2c8` — 217/223 tests green at commit                           |
 | Planner grounding           | working | `18f2390` — real repo structure + curated skills in the prompt      |
 | Run isolation               | working | `abad165` — replayed the destructive goal; live tree byte-identical |
@@ -41,6 +41,10 @@ work below.
 | Citation auditing           | working | invented paths detected and flagged on the run                      |
 | Curated skill index         | working | 351 skills; `graphify` and ECC skills resolve and rank              |
 | Agent catalog               | working | 267 packs, all resolvable by id, title slug, and filename           |
+| Fail-closed scope           | working | `c268952` — 13 scope tests, 4 executor regressions                  |
+| Run dispatch on create      | working | create/`auto`/`execute` share `dispatch()`; 10 route tests          |
+| Queued `review` step        | working | engine wired into the worker; summary object persisted as JSON      |
+| Destructive `edit` blocked  | working | whole-file replace needs `overwrite: true`; JS is parse-checked     |
 
 ### Isolation model
 
@@ -124,22 +128,80 @@ critical directories stay blocked regardless. Plans with no `edit` step — whic
 is most of them, including every agent pack — are unaffected, as is the
 no-chat fallback plan.
 
-### 2. Fix the `review` step crash — P1
+### 2. ~~Fix the `review` step crash~~ — done
 
-Found while verifying the above. A planner output of `['scope', 'edit',
-'review']` completes the first two and then fails the run with
-`Cannot read properties of null (reading 'reviewPR')`: the `review` case reads
-`context.sprintEngine`, which is null on this path. Every plan that includes a
-review step fails, so the crash is on a common shape rather than an edge case.
-A one-line guard, but it belongs in its own change.
+The crash had two independent causes, one behind the other, so the obvious
+one-line fix was not the whole repair.
 
-### 3. `POST /api/v1/agent-runs` creates a run and does not start it — P1
+1. `review` destructured `context.sprintEngine` and called `reviewPR` on it.
+   `daemon/server.mjs` builds a `SprintEngine`; `daemon/agent/job-worker.mjs`
+   did not. Every plan shaped `['scope', 'edit', 'review']` therefore died with
+   `Cannot read properties of null (reading 'reviewPR')` after the steps that
+   mattered had already succeeded. The worker now constructs and injects the
+   same engine the inline path uses, and `review` without an engine records
+   `skipped` with an explicit reason instead of throwing.
+2. Behind that, `review` stores the review summary — an object — as
+   `stepResult.output`, and `insertStepResult` bound it straight to
+   `node:sqlite`. That failed the run with `Provided value cannot be bound to
+SQLite parameter 2`, naming neither the step nor the value. Non-string
+   output is now serialised before binding.
 
-The endpoint generates steps, creates the run, and returns 201 — and the run then
-sits in `created` indefinitely, because enqueueing only happens on the separate
-`/execute` route. Reading the primary create endpoint, the natural expectation is
-that a run begins. Either enqueue here or make the response say plainly that
-execution is a separate call.
+`executeStep` also assigned `status = 'completed'` after the switch
+unconditionally, which overwrote the `skipped` decision; it now only fills in a
+status that is still `running`.
+
+Covered by 4 new tests, including one that persists a real review summary
+object through the database and reads it back.
+
+### 3. ~~`POST /api/v1/agent-runs` creates a run and does not start it~~ — done
+
+Creating a run now dispatches it. `dispatch()` is shared with `/auto` and
+`/execute`, so all three paths enqueue identically and fall back to inline
+execution when there is no job queue. The response carries `started` so the
+caller can tell what happened.
+
+`draft: true` opts out and leaves the run in `created` for `/execute` to start
+later, which preserves the old two-call flow deliberately rather than by
+accident. Re-executing a run that is already `running` or `queued` is rejected
+with 409 instead of starting a second copy of the same run.
+
+Covered by 10 new route tests.
+
+### 3a. An `edit` step could silently delete most of a file — P0
+
+Found while verifying the two items above, and the more serious of the two.
+A plan for "add a `/health` endpoint to `daemon/server.mjs`" produced an `edit`
+step whose `content` was only the new function. `edit` writes `content` as the
+**entire file** unless the step also supplies `oldString`, so a 5-line stub
+replaced a 258-line module: 257 lines deleted, silently. The only reason it was
+noticed at all is that a later `npm run lint` step in the same run failed.
+
+`ScopeEnforcer` bounds _which_ files a run may touch. Nothing bounded _what
+happens to their contents_, so the P0 fix above did not prevent this.
+
+- `edit` on an existing file now requires `oldString`, or an explicit
+  `"overwrite": true`. The refusal names the file and its current line count.
+- JavaScript is parsed with `node --check` before it is written, so content that
+  does not parse fails the step and leaves the original file intact. The
+  temporary check file is always removed.
+- The planner prompt now states the contract explicitly: `content` is a
+  replacement snippet when `oldString` is present, and the complete file body
+  only for a new file or an opted-in overwrite.
+
+Covered by 4 new tests, including one that asserts the original file is
+byte-identical after a refused overwrite.
+
+Live verification after the fix, against a real 10-line file:
+
+- The planner emitted an `edit` for that existing file **without** `oldString`,
+  again, despite the prompt change above. The run failed with `Refusing to
+replace all of daemon/lib/route-utils.mjs (10 existing lines)`, and the live
+  file was byte-identical afterwards.
+
+That is the point worth recording: the prompt change is best-effort and the
+model does not reliably follow it, so the executor guard is what actually
+protects the file. Relying on the prompt alone would have lost the file again
+on the very next run.
 
 ### 4. Replace prompt-only evidence with a tool-calling run — P1
 

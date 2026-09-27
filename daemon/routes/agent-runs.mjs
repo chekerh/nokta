@@ -4,6 +4,24 @@ import { canStartRun, getActiveRunCount } from '../lib/run-limit.mjs';
 import { normalizeSteps } from '../agent/orchestrator.mjs';
 
 export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) {
+  // Starting a run is the same three lines whichever route asks for it, and it
+  // was about to be a third copy. The queue is preferred because a queued run
+  // executes in a separate worker process; the inline path is a fallback for
+  // callers that build the routes without one.
+  const dispatch = (runId, userId) => {
+    if (jobQueue) {
+      jobQueue.enqueue(runId, { projectRoot: orchestrator.projectRoot, userId }).catch(async (err) => {
+        log.error(`Job queue execution failed for ${runId}: ${err.message}`);
+        await orchestrator.failRun(runId, userId, err);
+      });
+    } else {
+      orchestrator.executeRun(runId, userId).catch(async (err) => {
+        log.error(`Agent run execution failed: ${err.message}`);
+        await orchestrator.failRun(runId, userId, err);
+      });
+    }
+  };
+
   app.get(
     '/api/v1/agent-runs',
     authMiddleware(false),
@@ -34,7 +52,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
         throw new AppError(`Max concurrent runs reached (${count}/5). Wait for active runs to complete.`, 429);
       }
 
-      const { goal, steps, provider, model, trigger, metadata } = req.body;
+      const { goal, steps, provider, model, trigger, metadata, draft } = req.body;
       if (!goal && !steps) throw new AppError('goal or steps is required', 400);
       let runSteps = steps;
       if (!runSteps) {
@@ -51,7 +69,16 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
         metadata,
         userId: req.user?.id,
       });
-      res.status(201).json({ run });
+
+      // Creating a run started nothing, so a POST followed by waiting produced
+      // a run stuck in `created` indefinitely. It now starts, and `draft: true`
+      // is the opt-out for callers that only want to persist a plan.
+      let started = false;
+      if (!draft) {
+        dispatch(run.id, req.user?.id);
+        started = true;
+      }
+      res.status(201).json({ run: started ? { ...run, status: 'running' } : run, started });
     }),
   );
 
@@ -73,26 +100,12 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
       await orchestrator.load();
       const run = orchestrator.getRun(req.params.id, req.user?.id);
       if (!run) throw new AppError('Run not found', 404);
-
-      if (jobQueue) {
-        jobQueue
-          .enqueue(run.id, {
-            projectRoot: orchestrator.projectRoot,
-            userId: req.user?.id,
-          })
-          .catch(async (err) => {
-            log.error(`Job queue execution failed for ${run.id}: ${err.message}`);
-            await orchestrator.failRun(run.id, req.user?.id, err);
-          });
-        res.json({ run: { ...run, status: 'running' } });
-      } else {
-        // Fall back to inline execution
-        orchestrator.executeRun(run.id, req.user?.id).catch(async (err) => {
-          log.error(`Agent run execution failed: ${err.message}`);
-          await orchestrator.failRun(run.id, req.user?.id, err);
-        });
-        res.json({ run: { ...run, status: 'running' } });
+      if (run.status === 'running' || run.status === 'queued') {
+        throw new AppError(`Run is already ${run.status}`, 409);
       }
+
+      dispatch(run.id, req.user?.id);
+      res.json({ run: { ...run, status: 'running' } });
     }),
   );
 
@@ -143,24 +156,9 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
         userId: req.user?.id,
       });
 
-      if (jobQueue) {
-        jobQueue
-          .enqueue(run.id, {
-            projectRoot: orchestrator.projectRoot,
-            userId: req.user?.id,
-          })
-          .catch(async (err) => {
-            log.error(`Job queue auto-run failed for ${run.id}: ${err.message}`);
-            await orchestrator.failRun(run.id, req.user?.id, err);
-          });
-      } else {
-        orchestrator.executeRun(run.id, req.user?.id).catch(async (err) => {
-          log.error(`Auto agent run failed: ${err.message}`);
-          await orchestrator.failRun(run.id, req.user?.id, err);
-        });
-      }
+      dispatch(run.id, req.user?.id);
 
-      res.status(201).json({ run });
+      res.status(201).json({ run: { ...run, status: 'running' }, started: true });
     }),
   );
 

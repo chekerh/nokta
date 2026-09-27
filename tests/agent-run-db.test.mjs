@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { getDb } from '../daemon/db/connection.mjs';
 
 // connection.mjs caches the resolved path and handle on first use, so the data
 // dir must be set before it is imported.
@@ -153,7 +154,7 @@ test('a scoped edit is allowed and a second file outside the scope is not (regre
   const scopeStep = { type: 'scope', name: 'scope', allowedFiles: ['allowed.mjs'] };
   assert.equal((await executeStep(run, scopeStep, context)).status, 'completed');
 
-  const good = { type: 'edit', name: 'ok', file: 'allowed.mjs', content: 'A2\n' };
+  const good = { type: 'edit', name: 'ok', file: 'allowed.mjs', content: 'A2\n', overwrite: true };
   assert.equal((await executeStep(run, good, context)).status, 'completed');
   assert.equal(await fs.readFile(path.join(repo, 'allowed.mjs'), 'utf8'), 'A2\n');
 
@@ -197,11 +198,213 @@ test('a trailing slash in allowedDirs does not silently deny everything (regress
 
   const result = await executeStep(
     run,
-    { type: 'edit', name: 'ok', file: 'daemon/server.mjs', content: 'EDITED\n' },
+    { type: 'edit', name: 'ok', file: 'daemon/server.mjs', content: 'EDITED\n', overwrite: true },
     context,
   );
   assert.equal(result.status, 'completed');
   assert.equal(await fs.readFile(path.join(repo, 'daemon', 'server.mjs'), 'utf8'), 'EDITED\n');
+});
+
+test('a review step without a review engine is skipped, not failed (regression)', async () => {
+  // Regression: the review case destructured context.sprintEngine and called
+  // reviewPR on it. Queued runs execute in job-worker.mjs, which did not
+  // construct a SprintEngine, so any plan containing a review step died with
+  // "Cannot read properties of null (reading 'reviewPR')" — taking the whole
+  // run with it after the useful steps had already succeeded.
+  const run = { ...baseRun(), id: `run-review-${Math.random().toString(36).slice(2, 8)}` };
+  const result = await executeStep(run, { type: 'review', name: 'Review' }, { projectRoot: os.tmpdir() });
+
+  assert.equal(result.status, 'skipped');
+  assert.match(result.output, /no review engine/i);
+  assert.equal(result.meta.skipped, true);
+});
+
+test('a review step with a review engine calls it', async () => {
+  const calls = [];
+  const sprintEngine = {
+    async reviewPR(branch, diff, opts) {
+      calls.push({ branch, diff, opts });
+      return { summary: { overall: 'approved', errors: 0, warnings: 1 }, comments: [{ severity: 'warning' }] };
+    },
+  };
+  const run = { ...baseRun(), id: `run-review2-${Math.random().toString(36).slice(2, 8)}` };
+  const result = await executeStep(
+    run,
+    { type: 'review', name: 'Review', branch: 'main', diff: 'diff --git a/x b/x' },
+    { projectRoot: os.tmpdir(), sprintEngine },
+  );
+
+  assert.equal(result.status, 'completed');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].branch, 'main');
+  assert.equal(calls[0].diff, 'diff --git a/x b/x');
+  // reviewPR returns a summary object, and the step stores it as output.
+  assert.equal(result.output.overall, 'approved');
+  assert.equal(result.meta.commentsCount, 1);
+  assert.equal(result.meta.errors, 0);
+});
+
+test('a run whose review is skipped still completes', async (t) => {
+  // The point of skipping rather than failing: the run keeps the value of every
+  // step that did succeed.
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-reviewskip-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+
+  const run = {
+    ...baseRun(),
+    id: `run-rs-${Math.random().toString(36).slice(2, 8)}`,
+    user_id: USER_ID,
+    steps: [
+      { type: 'scope', name: 'scope', allowedFiles: ['a.mjs'] },
+      { type: 'edit', name: 'edit', file: 'a.mjs', content: 'A\n' },
+      { type: 'review', name: 'Review' },
+    ],
+  };
+  dbStorage.insertRun(run);
+
+  // No sprintEngine passed, matching a worker that failed to build one.
+  const orchestrator = new AgentOrchestrator(repo, { isolation: false });
+  const result = await orchestrator.executeRun(run.id, USER_ID);
+
+  assert.equal(result.status, 'completed');
+  assert.equal(result.output.find((o) => o.type === 'edit').status, 'completed');
+  assert.equal(result.output.find((o) => o.type === 'review').status, 'skipped');
+});
+
+test('a review step persists its summary object to the database', async (t) => {
+  // Regression: `review` stores the review summary as an object on
+  // stepResult.output, and node:sqlite refuses to bind an object. The run died
+  // with "Provided value cannot be bound to SQLite parameter 2" only after the
+  // useful steps had succeeded, and the error named neither the step nor the
+  // value. The review step output must be serialised before it is bound.
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-reviewdb-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+
+  const sprintEngine = {
+    async reviewPR() {
+      return {
+        summary: { overall: 'approved', totalAdditions: 3, errors: 0, warnings: 0, linkedTasks: ['T-1'] },
+        comments: [{ severity: 'warning', file: 'a.mjs', message: 'nit' }],
+      };
+    },
+  };
+
+  const run = {
+    ...baseRun(),
+    id: `run-rdb-${Math.random().toString(36).slice(2, 8)}`,
+    user_id: USER_ID,
+    steps: [
+      { type: 'scope', name: 'scope', allowedFiles: ['a.mjs'] },
+      { type: 'edit', name: 'edit', file: 'a.mjs', content: 'A\n' },
+      { type: 'review', name: 'Review' },
+    ],
+  };
+  dbStorage.insertRun(run);
+
+  const orchestrator = new AgentOrchestrator(repo, { isolation: false, sprintEngine });
+  const result = await orchestrator.executeRun(run.id, USER_ID);
+
+  assert.equal(result.status, 'completed');
+
+  // The review output must come back out of SQLite, not be lost with the run.
+  const rows = getDb()
+    .prepare('SELECT status, output FROM agent_run_steps WHERE run_id = ? ORDER BY step_index')
+    .all(run.id);
+  assert.equal(rows.length, 3);
+  const reviewStep = rows[2];
+  assert.equal(typeof reviewStep.output, 'string', 'review output must be stored as text');
+  assert.equal(JSON.parse(reviewStep.output).overall, 'approved');
+});
+
+test('an edit cannot silently replace an existing file with a snippet', async (t) => {
+  // Regression: `edit` without oldString writes content as the whole file. The
+  // planner asked to "add a /health endpoint" and emitted only the new function
+  // as content, so a 258-line module was replaced by a 5-line stub and 257 lines
+  // were lost. Scope enforcement bounds which files may be touched, not what
+  // happens to their contents, so the write itself has to be guarded.
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-noeat-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+  await fs.writeFile(path.join(repo, 'server.mjs'), 'module.exports = {\n  a() {},\n};\n', 'utf8');
+
+  const run = { ...baseRun(), id: `run-eat-${Math.random().toString(36).slice(2, 8)}` };
+  const context = { projectRoot: repo };
+  await executeStep(run, { type: 'scope', name: 'scope', allowedFiles: ['server.mjs'] }, context);
+  const result = await executeStep(
+    run,
+    { type: 'edit', name: 'edit', file: 'server.mjs', content: 'module.exports = {};\n' },
+    context,
+  );
+
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /Refusing to replace all of server\.mjs/);
+  // The original file must be completely untouched.
+  assert.equal(await fs.readFile(path.join(repo, 'server.mjs'), 'utf8'), 'module.exports = {\n  a() {},\n};\n');
+});
+
+test('an edit may replace a whole file when it opts in explicitly', async (t) => {
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-ovw-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+  await fs.writeFile(path.join(repo, 'a.mjs'), 'const x = 1;\n', 'utf8');
+
+  const run = { ...baseRun(), id: `run-ovw-${Math.random().toString(36).slice(2, 8)}` };
+  const context = { projectRoot: repo };
+  await executeStep(run, { type: 'scope', name: 'scope', allowedFiles: ['a.mjs'] }, context);
+  const result = await executeStep(
+    run,
+    { type: 'edit', name: 'edit', file: 'a.mjs', content: 'const y = 2;\n', overwrite: true },
+    context,
+  );
+
+  assert.equal(result.status, 'completed');
+  assert.equal(await fs.readFile(path.join(repo, 'a.mjs'), 'utf8'), 'const y = 2;\n');
+});
+
+test('an edit creating a new file still works without oldString', async (t) => {
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-newf-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+
+  const run = { ...baseRun(), id: `run-newf-${Math.random().toString(36).slice(2, 8)}` };
+  const context = { projectRoot: repo };
+  await executeStep(run, { type: 'scope', name: 'scope', allowedFiles: ['nested/deep/new.mjs'] }, context);
+  const result = await executeStep(
+    run,
+    { type: 'edit', name: 'edit', file: 'nested/deep/new.mjs', content: 'export const n = 1;\n' },
+    context,
+  );
+
+  assert.equal(result.status, 'completed');
+  assert.equal(await fs.readFile(path.join(repo, 'nested/deep/new.mjs'), 'utf8'), 'export const n = 1;\n');
+});
+
+test('an edit that would leave unparseable JavaScript is refused', async (t) => {
+  // A broken write must fail the step, not land. The original file stays intact
+  // so the next step (a lint or test) still has something valid to read.
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-syn-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+  await fs.writeFile(path.join(repo, 'broken.mjs'), 'export const ok = 1;\n', 'utf8');
+
+  const run = { ...baseRun(), id: `run-syn-${Math.random().toString(36).slice(2, 8)}` };
+  const context = { projectRoot: repo };
+  await executeStep(run, { type: 'scope', name: 'scope', allowedFiles: ['broken.mjs'] }, context);
+  const result = await executeStep(
+    run,
+    {
+      type: 'edit',
+      name: 'edit',
+      file: 'broken.mjs',
+      oldString: 'export const ok = 1;\n',
+      content: 'function oops( {{{ \n',
+    },
+    context,
+  );
+
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /does not parse as JavaScript/);
+  assert.equal(await fs.readFile(path.join(repo, 'broken.mjs'), 'utf8'), 'export const ok = 1;\n');
+
+  // No syntax-check temp files may be left behind.
+  const leftovers = (await fs.readdir(repo)).filter((f) => f.includes('nokta-syntax-check'));
+  assert.deepEqual(leftovers, []);
 });
 
 test('executeRun isolates a real run in a worktree (regression)', async () => {
@@ -223,7 +426,7 @@ test('executeRun isolates a real run in a worktree (regression)', async () => {
     // of this test is containment, not scope policy.
     steps: [
       { type: 'scope', name: 'scope', allowedFiles: ['app.mjs'] },
-      { type: 'edit', name: 'clobber', file: 'app.mjs', content: 'CLOBBERED\n' },
+      { type: 'edit', name: 'clobber', file: 'app.mjs', content: 'CLOBBERED\n', overwrite: true },
     ],
   };
   dbStorage.insertRun(run);

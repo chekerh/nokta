@@ -127,6 +127,38 @@ function synthesizeUserTurn(run, step) {
   return parts.join('\n\n') || 'Proceed.';
 }
 
+/**
+ * Write file content, refusing to persist JavaScript that does not parse.
+ *
+ * The check runs against a temp sibling with the same extension so that
+ * `node --check` applies the right module goal. A step that would leave a file
+ * unparseable fails the step and leaves the original file untouched, which is
+ * what turns "the run broke my file" into "the run reported a bad step".
+ */
+async function writeChecked(resolved, content, stepResult, step) {
+  if (/\.(mjs|cjs|js)$/.test(resolved)) {
+    const tmp = path.join(
+      path.dirname(resolved),
+      `.nokta-syntax-check-${process.pid}-${Math.random().toString(36).slice(2)}.${path.extname(resolved).slice(1)}`,
+    );
+    try {
+      await fs.writeFile(tmp, content, 'utf8');
+      execFileSync('node', ['--check', tmp], { stdio: 'pipe', timeout: 10000 });
+    } catch (err) {
+      const detail = (err.stderr || err.stdout || err.message || '')
+        .toString()
+        .split('\n')
+        .slice(0, 4)
+        .join(' ')
+        .trim();
+      throw new Error(`Refusing to write ${step.file}: the content does not parse as JavaScript. ${detail}`);
+    } finally {
+      await fs.rm(tmp, { force: true }).catch(() => {});
+    }
+  }
+  await fs.writeFile(resolved, content, 'utf8');
+}
+
 export async function executeStep(run, step, context = {}) {
   const startTime = Date.now();
   const stepResult = {
@@ -310,10 +342,23 @@ export async function executeStep(run, step, context = {}) {
           if (updated === existing) {
             throw new Error(`No changes made to ${step.file}`);
           }
-          await fs.writeFile(resolved, updated, 'utf8');
+          await writeChecked(resolved, updated, stepResult, step);
           stepResult.output = `Replaced in ${step.file}`;
         } else {
-          await fs.writeFile(resolved, newContent, 'utf8');
+          // Without oldString the write replaces the entire file. A planner that
+          // emits only the snippet it wants to add — instead of the whole new file
+          // body — silently deletes everything else in the file. This happened for
+          // real: a 258-line module was replaced by a 5-line stub, 257 lines gone,
+          // and the damage was only noticed because a later lint step failed. Scope
+          // enforcement bounds which files may be touched, not what happens to their
+          // contents, so replacing an existing file has to be an explicit decision.
+          if (existing.length > 0 && step.overwrite !== true) {
+            const lines = existing.split('\n').length;
+            throw new Error(
+              `Refusing to replace all of ${step.file} (${lines} existing lines): an edit step must supply 'oldString' to replace part of a file, or an explicit "overwrite": true to replace the whole file`,
+            );
+          }
+          await writeChecked(resolved, newContent, stepResult, step);
           stepResult.output = `Wrote ${step.file}`;
         }
         stepResult.meta = { file: step.file };
@@ -333,6 +378,18 @@ export async function executeStep(run, step, context = {}) {
             diff = '';
           }
         }
+
+        // The review needs the sprint engine. Every construction site now
+        // provides it, but dereferencing null here crashed the entire run with
+        // "Cannot read properties of null" and told the reader nothing. A
+        // skipped review is recoverable; a failed run is not.
+        if (!sprintEngine) {
+          stepResult.status = 'skipped';
+          stepResult.output = 'Skipped: no review engine available in this run context';
+          stepResult.meta = { skipped: true, reason: 'sprintEngine unavailable' };
+          break;
+        }
+
         const result = await sprintEngine.reviewPR(branch, diff, {});
         stepResult.output = result.summary;
         stepResult.meta = { commentsCount: result.comments?.length || 0, errors: result.summary.errors };
@@ -451,7 +508,12 @@ export async function executeStep(run, step, context = {}) {
         throw new Error(`Unknown step type: ${step.type}`);
     }
 
-    stepResult.status = 'completed';
+    // A case that already decided its own terminal status — `skipped` for a
+    // review with no engine — keeps it. The unconditional assignment here used
+    // to overwrite that decision.
+    if (stepResult.status === 'running') {
+      stepResult.status = 'completed';
+    }
   } catch (err) {
     if (stepResult.status !== 'completed') {
       stepResult.status = 'failed';

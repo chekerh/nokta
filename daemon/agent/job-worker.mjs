@@ -2,6 +2,7 @@
 import { AgentOrchestrator } from './orchestrator.mjs';
 import { ProviderManager } from '../lib/provider-manager.mjs';
 import { ChatHandler } from '../lib/chat-handler.mjs';
+import { SprintEngine } from '../lib/sprint-engine.mjs';
 import { logger } from '../lib/logger.mjs';
 
 const log = logger.child({ service: 'job-worker' });
@@ -23,7 +24,17 @@ async function main() {
   await providerManager.initDefaults();
 
   const chatHandler = new ChatHandler(providerManager, { projectRoot, log });
-  const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler });
+  // Queued runs execute here, not in server.mjs, so anything the orchestrator
+  // needs must be constructed here too. Without the sprint engine the `review`
+  // step dereferenced null and failed the run, so every plan containing a
+  // review step was doomed whenever it went through the queue.
+  const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler });
+  const orchestrator = new AgentOrchestrator(projectRoot, {
+    log,
+    providerManager,
+    chatHandler,
+    sprintEngine,
+  });
 
   try {
     const result = await Promise.race([
