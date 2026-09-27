@@ -37,19 +37,30 @@ function getGitBranch() {
   });
 }
 
+// execSync defaults to a 1 MiB buffer, which any real PR-sized diff exceeds.
+// Exceeding it raises ENOBUFS, which the old bare `catch` turned into a
+// misleading "No diff found" rather than an error.
+const MAX_DIFF_BUFFER = 128 * 1024 * 1024;
+
+// Returns { diff } on success, or { diff: '', error } when git itself failed.
+// An empty diff and a failed diff are different outcomes and must not be
+// conflated.
 function getDiff(branch) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     import('node:child_process')
       .then(({ execSync }) => {
         try {
           const base = branch === 'main' ? 'HEAD~1' : 'main';
-          const diff = execSync(`git diff ${base}...HEAD`, { encoding: 'utf8' });
-          resolve(diff);
-        } catch {
-          resolve('');
+          const diff = execSync(`git diff ${base}...HEAD`, {
+            encoding: 'utf8',
+            maxBuffer: MAX_DIFF_BUFFER,
+          });
+          resolve({ diff });
+        } catch (error) {
+          resolve({ diff: '', error });
         }
       })
-      .catch(reject);
+      .catch((error) => resolve({ diff: '', error }));
   });
 }
 
@@ -59,7 +70,16 @@ async function cmdReviewPr(args) {
   const log = logger.child ? logger.child({ module: 'cli' }) : logger;
 
   log.info(`Reviewing branch: ${branch}`);
-  const diff = await getDiff(branch);
+  const { diff, error } = await getDiff(branch);
+
+  if (error) {
+    log.error('Could not compute the diff', {
+      branch,
+      cause: error.code || error.message,
+    });
+    process.exitCode = 1;
+    return;
+  }
 
   if (!diff) {
     console.log('No diff found. Make sure you have commits to review.');
@@ -106,7 +126,16 @@ async function cmdReviewBranch(args) {
   const log = logger.child ? logger.child({ module: 'cli' }) : logger;
 
   log.info(`Reviewing branch: ${branch}`);
-  const diff = await getDiff(branch);
+  const { diff, error } = await getDiff(branch);
+
+  if (error) {
+    log.error('Could not compute the diff', {
+      branch,
+      cause: error.code || error.message,
+    });
+    process.exitCode = 1;
+    return;
+  }
 
   if (!diff) {
     console.log('No diff found. Make sure you have commits to review.');

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -84,6 +86,31 @@ test('cli: daemon status returns non-zero when not running', () => {
 test('cli: review-branch shows changed files', () => {
   const { stdout } = runCli(['review-branch', 'main']);
   assert.ok(stdout.includes('Branch:'));
+});
+
+test('cli: review-branch handles a diff larger than the execSync buffer', () => {
+  // Regression: execSync defaults to a 1 MiB buffer, so a large diff raised
+  // ENOBUFS and the old bare `catch` reported "No diff found" for a branch
+  // that plainly had changes.
+  const { stdout } = runCli(['review-branch', 'main']);
+  assert.ok(
+    !stdout.includes('No diff found'),
+    'a real diff must never be reported as absent',
+  );
+});
+
+test('cli: review-branch reports a git failure instead of claiming no diff', (t) => {
+  // Run outside any git repository so the `git diff` inside getDiff fails.
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'nokta-not-a-repo-'));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+
+  const { stdout, stderr, exitCode } = runCli(['review-branch', 'main'], { cwd: outside });
+  const output = stdout + stderr;
+  assert.ok(
+    !output.includes('No diff found'),
+    'a failed git call must not be reported as an empty diff',
+  );
+  assert.equal(exitCode, 1, 'a failed diff must exit non-zero');
 });
 
 test('cli: unknown command shows help', () => {
