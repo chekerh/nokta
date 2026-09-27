@@ -3,10 +3,11 @@ import { createRunConfig, executeStep } from './executor.mjs';
 import * as fileStorage from './storage.mjs';
 import * as dbStorage from './db-storage.mjs';
 import { buildProjectContext, renderProjectContext } from './project-context.mjs';
+import { buildPackSteps, auditCitations } from './agent-pack.mjs';
 import { createRunWorktree } from './worktree.mjs';
 import { LocalSkills } from '../workspace/skills.mjs';
 
-export const STEP_TYPES = ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition'];
+export const STEP_TYPES = ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition', 'inspect'];
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
@@ -247,6 +248,13 @@ export class AgentOrchestrator extends EventEmitter {
       run.status = 'completed';
     }
 
+    // An agent pack's output is its deliverable, and the run row is the only
+    // durable place to keep it. Gated on agentId so ordinary runs are unaffected.
+    if (run.metadata?.agentId && run.status === 'completed') {
+      const deliverable = [...(run.output || [])].reverse().find((o) => o?.status === 'completed' && o?.output);
+      if (deliverable) await this.attachDeliverable(runId, userId, deliverable.output);
+    }
+
     run.updatedAt = new Date().toISOString();
     this._activeExecutions.delete(runId);
 
@@ -395,6 +403,68 @@ Produce the fewest steps that genuinely accomplish the goal. Prefer editing exis
       const order = { high: 0, medium: 1, low: 2 };
       return (order[a.priority] || 1) - (order[b.priority] || 1);
     });
+  }
+
+  // Executes an agent pack: its persona drives the run, its skills are attached
+  // from the curated index, and the deliverable is persisted onto the run. Steps
+  // are fixed by the pack rather than planned, so a pack run cannot invent its
+  // own edits — see agent-pack.mjs for why that matters.
+  async executeAgentPack({ pack, goal, userId = null, trigger = 'agent' }) {
+    const [projectContext, skills] = await Promise.all([
+      buildProjectContext(this.projectRoot).catch(() => null),
+      this.skills.select(goal).catch(() => []),
+    ]);
+    const steps = buildPackSteps({ pack, goal, skills, projectContext });
+    const run = await this.createRun({
+      goal,
+      steps,
+      trigger,
+      userId,
+      metadata: {
+        agentId: pack.id,
+        agentTitle: pack.title,
+        agentRole: pack.role || null,
+        skills: skills.map((s) => s.name),
+      },
+    });
+    return run;
+  }
+
+  // Persists the deliverable on the run. `result` has no column of its own, so it
+  // rides in metadata, which already round-trips through the DB — the same path
+  // the worktree info uses. Every file the deliverable names is resolved against
+  // the real project root and the ones that do not exist are reported, because a
+  // confident deliverable citing invented paths is the main failure mode here.
+  async attachDeliverable(runId, userId, deliverable) {
+    const run = this.getRun(runId, userId);
+    if (!run) return null;
+    let citations = { checked: 0, missing: [] };
+    try {
+      citations = await auditCitations(deliverable, this.projectRoot);
+    } catch (err) {
+      this.log.warn(`Citation audit failed for ${runId}: ${err.message}`);
+    }
+    const metadata = {
+      ...(run.metadata || {}),
+      deliverable: {
+        agentId: run.metadata?.agentId || null,
+        agentTitle: run.metadata?.agentTitle || null,
+        goal: run.goal,
+        content: String(deliverable || '').slice(0, 200000),
+        producedAt: new Date().toISOString(),
+        citations,
+        // Flag, do not rewrite: the text is what the agent said, and the point
+        // is that a reader can see which of its claims did not survive checking.
+        unverifiedPaths: citations.missing,
+      },
+    };
+    if (userId) dbStorage.updateRunStatus(runId, { metadata });
+    else {
+      run.metadata = metadata;
+      await this._persist();
+    }
+    this.emit('run:updated', this.getRun(runId, userId));
+    return this.getRun(runId, userId);
   }
 
   async autoGenerateRun(goal, trigger = 'automatic', metadata = {}) {

@@ -1,9 +1,90 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { ScopeEnforcer } from '../lib/scope-enforcer.mjs';
 import { ProductionGate } from '../lib/production-gate.mjs';
 import { findSecretLikePaths } from '../lib/secret-paths.mjs';
+
+const READ_COMMANDS = new Set([
+  'ls',
+  'cat',
+  'head',
+  'tail',
+  'wc',
+  'grep',
+  'find',
+  'stat',
+  'file',
+  'du',
+  'tree',
+  'pwd',
+  'echo',
+  'sort',
+  'uniq',
+  'cut',
+  'awk',
+  'sed',
+  'tr',
+  'diff',
+  'basename',
+  'dirname',
+  'realpath',
+  'which',
+  'jq',
+]);
+const GIT_READ_SUBCOMMANDS = new Set([
+  'ls-files',
+  'log',
+  'show',
+  'status',
+  'diff',
+  'branch',
+  'rev-parse',
+  'shortlog',
+  'blame',
+  'describe',
+]);
+const READ_FILTERS = new Set([
+  'head',
+  'tail',
+  'wc',
+  'sort',
+  'uniq',
+  'grep',
+  'cut',
+  'tr',
+  'sed',
+  'awk',
+  'jq',
+  'cat',
+  'fgrep',
+  'egrep',
+]);
+
+// Deny the shell metacharacters that make an allowlist meaningless.
+const SHELL_UNSAFE = /[;&<>`$(){}\[\]!*?\\\n\r]/;
+
+// True only if every stage of the pipeline is a permitted read command. This
+// still allows `git ls-files | head -50` while rejecting `git ls-files | sh`.
+export function isReadOnlyCommand(command) {
+  if (typeof command !== 'string' || !command.trim()) return false;
+  if (SHELL_UNSAFE.test(command)) return false;
+  const stages = command.split('|').map((s) => s.trim());
+  return stages.every((stage, index) => {
+    const parts = stage.split(/\s+/);
+    const program = parts[0];
+    if (program === 'git') {
+      if (index !== 0) return false;
+      // The subcommand is the first argument after `git` that is not a global
+      // flag. parts[0] is 'git' itself, which is why this skips index 0.
+      const sub = parts.slice(1).find((p) => !p.startsWith('-'));
+      return GIT_READ_SUBCOMMANDS.has(sub);
+    }
+    // Only the first stage may be a plain read command; the rest are filters.
+    if (index === 0) return READ_COMMANDS.has(program);
+    return READ_FILTERS.has(program);
+  });
+}
 
 export function makeId() {
   return 'run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
@@ -82,6 +163,40 @@ export async function executeStep(run, step, context = {}) {
           tokensIn: result.tokensIn,
           tokensOut: result.tokensOut,
         };
+        break;
+      }
+
+      case 'inspect': {
+        // Read-only evidence gathering. A `prompt` step has no tools, so an agent
+        // asked to describe the codebase could only answer from generic skill
+        // text and invent file paths. This lets it actually look.
+        //
+        // The boundary is an allowlist, not a denylist: only these commands may
+        // run, only piped into these read-only filters, and never with a
+        // redirect, subshell, or background operator. Runs execute in an isolated
+        // worktree, but a read step should not need that to be safe.
+        const commands = Array.isArray(step.commands) ? step.commands : [step.command].filter(Boolean);
+        if (!commands.length) throw new Error('commands is required for inspect step');
+        const projectRoot = path.resolve(context.projectRoot || process.cwd());
+        const chunks = [];
+        for (const command of commands) {
+          if (typeof command !== 'string' || !isReadOnlyCommand(command)) {
+            throw new Error(`Command not permitted in inspect step: ${String(command).slice(0, 120)}`);
+          }
+          const { stdout, stderr } = spawnSync('bash', ['-c', command], {
+            cwd: projectRoot,
+            encoding: 'utf8',
+            timeout: step.timeout || 20000,
+            maxBuffer: 4 * 1024 * 1024,
+          });
+          if (stdout?.trim()) chunks.push(`$ ${command}\n${stdout.trim().slice(0, 20000)}`);
+          if (stderr?.trim()) chunks.push(`$ ${command} (stderr)\n${stderr.trim().slice(0, 2000)}`);
+          if (stdout === null && stderr === null) {
+            chunks.push(`$ ${command}\n(no output)`);
+          }
+        }
+        stepResult.output = chunks.join('\n\n') || '(no output)';
+        stepResult.meta = { readOnly: true, commands: commands.length };
         break;
       }
 

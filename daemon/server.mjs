@@ -124,7 +124,8 @@ export async function createServer(options = {}) {
   trackRoute('chat');
   registerCompleteRoutes(app, providerManager);
   trackRoute('complete');
-  registerAgentRoutes(app, providerManager, log);
+  // Agent routes are registered after the orchestrator and queue exist, because
+  // /api/v1/agents/:id/execute enqueues pack runs through them.
   trackRoute('agents');
   registerProviderRoutes(app, providerManager);
   trackRoute('providers');
@@ -192,6 +193,7 @@ export async function createServer(options = {}) {
   const jobQueue = new AgentJobQueue({ concurrency: 2, log });
   jobQueue.start();
   registerAgentRunRoutes(app, orchestrator, log, jobQueue);
+  registerAgentRoutes(app, providerManager, log, orchestrator, jobQueue);
   trackRoute('agent-runs');
 
   // Autonomous file watcher — watches, updates sprints, and creates agent runs.

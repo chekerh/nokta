@@ -330,7 +330,26 @@ test('failRun never throws, so error paths cannot become unhandled rejections', 
 });
 
 test('every documented step type is executable', async () => {
-  assert.deepEqual(STEP_TYPES, ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition']);
+  // `inspect` (read-only evidence gathering) was added with agent-pack
+  // execution. This list is the documentation; the check against the executor's
+  // real cases is what stops the two drifting apart in either direction.
+  assert.deepEqual(STEP_TYPES, ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition', 'inspect']);
+
+  const executorSource = await fs.readFile(
+    path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'daemon', 'agent', 'executor.mjs'),
+    'utf8',
+  );
+  const handled = new Set([...executorSource.matchAll(/case '([a-z]+)':/g)].map((m) => m[1]));
+  assert.deepEqual(
+    STEP_TYPES.filter((t) => !handled.has(t)),
+    [],
+    'every advertised step type needs a case in the executor',
+  );
+  assert.deepEqual(
+    [...handled].filter((t) => !STEP_TYPES.includes(t)),
+    [],
+    'the executor handles a step type that is not advertised',
+  );
 
   const run = { ...baseRun(), user_id: USER_ID, steps: [{ type: 'scope', name: 'scope' }] };
   dbStorage.insertRun(run);
