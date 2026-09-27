@@ -14,7 +14,16 @@
     "outputs": { "type": "array", "items": { "type": "string" } },
     "handoff": { "type": "array", "items": { "type": "string" } },
     "defaultPacks": { "type": "array", "items": { "type": "string" } },
-    "cannotDo": { "type": "array", "items": { "type": "string" } }
+    "cannotDo": { "type": "array", "items": { "type": "string" } },
+    "division": { "type": "string" },
+    "divisionLabel": { "type": "string" },
+    "divisionIcon": { "type": "string" },
+    "divisionColor": { "type": "string" },
+    "emoji": { "type": "string" },
+    "vibe": { "type": "string" },
+    "criticalRules": { "type": "array", "items": { "type": "string" } },
+    "instructions": { "type": "string" },
+    "source": { "type": "string" }
   },
   "additionalProperties": false
 }

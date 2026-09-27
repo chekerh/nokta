@@ -31,14 +31,15 @@ async function fixtureTree() {
   await write('template/SKILL.md', '---\nname: template-stub\n---\n\n# stub\n');
 
   // Known-malicious fixture shapes, modelled on the SkillSpector corpus.
-  // "poison" and "poison-tool" sit OUTSIDE any test directory on purpose, so
-  // the path rules alone would not stop them.
+  // These sit under tests/, so PATH exclusion is the rule under test.
   await write('scanner/tests/fixtures/malicious_skill/SKILL.md', skill('malicious-skill', 'cooking help'));
-  await write('other/fixtures/poison/SKILL.md', skill('poison', 'clean looking'));
-  await write('other/mcp_poisoned_tool/SKILL.md', skill('poison-tool', 'clean looking'));
-  // A fixture name that escaped its test directory, plus a homoglyph name.
+  await write('scanner/tests/fixtures/mcp_poisoned_tool/SKILL.md', skill('poison-tool', 'clean looking'));
+  await write('scanner/tests/fixtures/sdi/poison/SKILL.md', skill('poison', 'clean looking'));
+
+  // Defence in depth for a fixture copied OUT of its test directory: one
+  // blocked by declared name, one only catchable as a homoglyph.
   await write('other/loose/personal-assistant/SKILL.md', skill('personal-assistant', 'remembers you'));
-  await write('other/loose/unicode/SKILL.md', skill('reаd_data', 'reads a file'));
+  await write('other/loose/homoglyph/SKILL.md', skill('dаta-reader', 'reads a data file'));
   // Overprivileged but perfectly well-formed: only the collection rule stops it.
   await write('eigent/resources/example-skills/docx/SKILL.md', skill('docx', 'documents'));
   await write('iai-personal-memory-engine/src/SKILL.md', skill('pme', 'memory'));
@@ -164,4 +165,56 @@ test('buildIndex dry run writes nothing', async (t) => {
   const result = await buildIndex({ sourceRoot: source, indexRoot: index, dryRun: true });
   assert.equal(result.placements.length, 1);
   await assert.rejects(fs.access(index), /ENOENT/);
+});
+
+test('buildIndex normalises a lowercase skill.md so Nokta can load it', async (t) => {
+  const src = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-skillindex-src-'));
+  const dest = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-skillindex-dst-'));
+  t.after(async () => {
+    await fs.rm(src, { recursive: true, force: true });
+    await fs.rm(dest, { recursive: true, force: true });
+  });
+  // graphify ships graphify/skill.md in lowercase.
+  await fs.mkdir(path.join(src, 'graphify/skill'), { recursive: true });
+  await fs.writeFile(
+    path.join(src, 'graphify/skill/skill.md'),
+    skill('graphify-skill', 'knowledge graph'),
+  );
+
+  await buildIndex({ sourceRoot: src, indexRoot: dest });
+
+  const copied = path.join(dest, 'graphify/graphify-skill/SKILL.md');
+  const listed = await fs.readdir(path.join(dest, 'graphify/graphify-skill'));
+  assert.ok(listed.includes('SKILL.md'), `expected uppercase SKILL.md, got ${listed.join(', ')}`);
+  assert.equal((await fs.readFile(copied, 'utf8')).includes('graphify-skill'), true);
+});
+
+test('buildIndex does not promote a skill bundled inside another skill', async (t) => {
+  const src = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-skillindex-src-'));
+  const dest = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-skillindex-dst-'));
+  t.after(async () => {
+    await fs.rm(src, { recursive: true, force: true });
+    await fs.rm(dest, { recursive: true, force: true });
+  });
+  // graphify shape: a package carrying per-harness skill docs. These have no
+  // frontmatter, so discovery drops them, but linkTree used to copy them in
+  // anyway and LocalSkills then counted them as real skills.
+  await fs.mkdir(path.join(src, 'graphify/pkg/skills/opencode'), { recursive: true });
+  await fs.writeFile(path.join(src, 'graphify/pkg/skill.md'), skill('graphify-pkg', 'graph tool'));
+  await fs.writeFile(
+    path.join(src, 'graphify/pkg/skills/opencode/SKILL.md'),
+    '# ECC Project Knowledge Graph Analysis\n\nUse graphify to turn a project into a graph.\n',
+  );
+  // A genuine non-skill asset must still be carried over.
+  await fs.mkdir(path.join(src, 'graphify/pkg/references'), { recursive: true });
+  await fs.writeFile(path.join(src, 'graphify/pkg/references/notes.md'), '# notes');
+
+  const built = await buildIndex({ sourceRoot: src, indexRoot: dest });
+
+  assert.equal(built.unique, 1, 'only the outer skill should be indexed');
+  const all = await fs.readdir(path.join(dest, 'graphify/graphify-pkg'));
+  assert.deepEqual(all.includes('SKILL.md'), true);
+  assert.deepEqual(all.includes('references'), true, 'real assets must survive');
+  const nested = path.join(dest, 'graphify/graphify-pkg/skills/opencode/SKILL.md');
+  assert.equal(await fs.access(nested).then(() => true, () => false), false, 'nested SKILL.md leaked in');
 });

@@ -26,8 +26,8 @@ for (const [name, count] of [...byCollection].sort((a, b) => b[1] - a[1])) {
 
 if (sourceExcluded.length && showAll) {
   console.log('\nexcluded sources:');
-  for (const item of sourceExcluded.filter((i) => EXCLUDED_SOURCES[path.basename(i.path)])) {
-    console.log(`  ${path.relative(sourceRoot, i.path)}  ${EXCLUDED_SOURCES[path.basename(i.path)]}`);
+  for (const entry of sourceExcluded.filter((i) => EXCLUDED_SOURCES[path.basename(i.path)])) {
+    console.log(`  ${path.relative(sourceRoot, entry.path)}  ${EXCLUDED_SOURCES[path.basename(entry.path)]}`);
   }
 }
 

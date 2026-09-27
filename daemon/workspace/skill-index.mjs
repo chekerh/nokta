@@ -243,7 +243,7 @@ export async function discoverSkills(sourceRoot, options = {}) {
   return { skills, stats, candidates: found.length, sourceExcluded };
 }
 
-async function linkTree(srcDir, destDir) {
+async function linkTree(srcDir, destDir, depth = 0) {
   await fs.mkdir(destDir, { recursive: true });
   const entries = await fs.readdir(srcDir, { withFileTypes: true });
   for (const entry of entries) {
@@ -252,16 +252,37 @@ async function linkTree(srcDir, destDir) {
     const dest = path.join(destDir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === '__pycache__' || entry.name === 'node_modules') continue;
-      await linkTree(src, dest);
+      await linkTree(src, dest, depth + 1);
       continue;
     }
     if (!entry.isFile()) continue;
+    // A skill that ships its own bundled sub-skills (graphify has a
+    // per-harness skills/ folder) must not have those promoted into the flat
+    // index: they are the same package, not independent entries, and they
+    // drift from the canonical copies. Only the skill root's own file is
+    // linked here.
+    const isSkillFile = entry.name.toLowerCase() === 'skill.md';
+    if (isSkillFile && depth > 0) continue;
     try {
       await fs.link(src, dest);
     } catch (error) {
       // Hardlinks fail across devices; fall back to a copy.
       if (error.code === 'EXDEV' || error.code === 'EPERM') await fs.copyFile(src, dest);
       else throw error;
+    }
+    // Discovery is case-insensitive, but Nokta's loader only accepts an exact
+    // "SKILL.md". Normalise on the way in so a lowercase skill.md upstream
+    // (graphify ships one) still lands as a loadable skill.
+    if (isSkillFile && entry.name !== 'SKILL.md') {
+      const normalised = path.join(destDir, 'SKILL.md');
+      try {
+        await fs.rm(normalised, { force: true });
+        await fs.link(src, normalised);
+      } catch {
+        try {
+          await fs.copyFile(src, normalised);
+        } catch {}
+      }
     }
   }
 }
