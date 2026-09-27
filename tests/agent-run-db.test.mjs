@@ -1,0 +1,248 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+// connection.mjs caches the resolved path and handle on first use, so the data
+// dir must be set before it is imported.
+const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-rundb-test-'));
+process.env.NOKTA_DATA_DIR = dataDir;
+
+const { prepare, closeDb } = await import('../daemon/db/connection.mjs');
+const { migrate } = await import('../daemon/db/schema.mjs');
+const dbStorage = await import('../daemon/agent/db-storage.mjs');
+const { AgentOrchestrator, normalizeSteps, STEP_TYPES } = await import('../daemon/agent/orchestrator.mjs');
+const { canStartRun, getActiveRunCount, reapStaleRuns } = await import('../daemon/lib/run-limit.mjs');
+
+migrate();
+
+const USER_ID = 'usr_test_runs';
+prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)').run(
+  USER_ID,
+  'runs@test.local',
+  'Runs Test',
+  'x',
+);
+
+// Dedicated user for the reaper tests so run counts stay isolated.
+const REAPER_USER_ID = 'usr_test_reaper';
+prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)').run(
+  REAPER_USER_ID,
+  'reaper@test.local',
+  'Reaper Test',
+  'x',
+);
+
+test.after(() => {
+  closeDb();
+});
+
+function shellStep(command) {
+  return { type: 'shell', name: 'noop', command, ignoreFailure: false };
+}
+
+test('getRunByIdAny resolves a DB-backed run without a userId', () => {
+  const run = { ...baseRun(), user_id: USER_ID, steps: [shellStep('true')] };
+  dbStorage.insertRun(run);
+
+  assert.equal(dbStorage.getRunById(USER_ID, run.id).id, run.id);
+  assert.equal(dbStorage.getRunByIdAny(run.id).id, run.id);
+  assert.equal(dbStorage.getRunByIdAny('run_missing'), null);
+});
+
+test('DB-loaded steps expose their real payload fields (regression)', () => {
+  const run = {
+    ...baseRun(),
+    user_id: USER_ID,
+    steps: [{ type: 'shell', name: 'list', command: 'echo hydrated', cwd: 'sub' }],
+  };
+  dbStorage.insertRun(run);
+
+  const [step] = dbStorage.getRunById(USER_ID, run.id).steps;
+  // These live in the config column and must be merged back onto the row.
+  assert.equal(step.command, 'echo hydrated');
+  assert.equal(step.cwd, 'sub');
+  assert.equal(step.type, 'shell');
+});
+
+test('executeRun finds a DB-backed run even without a userId (regression)', async () => {
+  const run = { ...baseRun(), user_id: USER_ID, steps: [shellStep('echo db-backed-ok')] };
+  dbStorage.insertRun(run);
+
+  const orchestrator = new AgentOrchestrator(process.cwd());
+  // No userId: previously threw "Run not found" because authenticated runs live
+  // in SQLite, not in the in-memory array.
+  const result = await orchestrator.executeRun(run.id);
+
+  assert.equal(result.status, 'completed');
+  assert.equal(result.error, null);
+  assert.match(result.output[0].output, /db-backed-ok/);
+  assert.equal(dbStorage.getRunById(USER_ID, run.id).status, 'completed');
+});
+
+test('executeRun scopes to the user when a userId is supplied', async () => {
+  const run = { ...baseRun(), user_id: USER_ID, steps: [shellStep('true')] };
+  dbStorage.insertRun(run);
+
+  const other = new AgentOrchestrator(process.cwd());
+  await assert.rejects(() => other.executeRun(run.id, 'usr_someone_else'), /Run not found/);
+});
+
+test('insertRun is atomic: a bad step leaves no orphaned run row (regression)', () => {
+  const run = { ...baseRun(), user_id: USER_ID, steps: [{ name: 'missing-type' }] };
+
+  assert.throws(() => dbStorage.insertRun(run));
+
+  // The run row must not survive a failed step insert.
+  assert.equal(dbStorage.getRunById(USER_ID, run.id), null);
+});
+
+test('normalizeSteps drops steps with a missing or unknown type', () => {
+  const fallback = [shellStep('fallback')];
+
+  assert.equal(normalizeSteps(undefined, fallback), fallback);
+  assert.equal(normalizeSteps('not an array', fallback), fallback);
+  assert.equal(normalizeSteps([{ name: 'no type' }], fallback), fallback);
+  assert.equal(normalizeSteps([{ type: 'rm-rf' }], fallback), fallback);
+  assert.equal(normalizeSteps([null, 'nope'], fallback), fallback);
+
+  const mixed = normalizeSteps([{ type: 'nope' }, shellStep('echo keep'), { type: 'rm-rf' }], fallback);
+  assert.equal(mixed.length, 1);
+  assert.equal(mixed[0].type, 'shell');
+});
+
+test('stored step results are surfaced on the run output (regression)', () => {
+  const run = { ...baseRun(), user_id: USER_ID, steps: [shellStep('echo surfaced')] };
+  dbStorage.insertRun(run);
+
+  dbStorage.insertStepResult(run.id, 0, {
+    status: 'completed',
+    output: 'surfaced',
+    error: null,
+    durationMs: 12,
+  });
+
+  const stored = dbStorage.getRunById(USER_ID, run.id);
+  assert.equal(stored.output.length, 1);
+  assert.equal(stored.output[0].output, 'surfaced');
+  assert.equal(stored.output[0].status, 'completed');
+  assert.equal(stored.output[0].durationMs, 12);
+});
+
+test('abandoned runs are reaped so the API cannot wedge at the concurrency cap (regression)', () => {
+  const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const ids = [];
+  for (let i = 0; i < 7; i++) {
+    const run = { ...baseRun(), user_id: REAPER_USER_ID, status: 'created', steps: [shellStep('true')] };
+    run.createdAt = stale;
+    run.updatedAt = stale;
+    dbStorage.insertRun(run);
+    ids.push(run.id);
+  }
+
+  // All seven hold a slot, which is over the cap of 5. Without reaping the API
+  // would reject every new run with 429 forever.
+  assert.equal(getActiveRunCount(REAPER_USER_ID), 7);
+
+  // canStartRun reaps first, so it self-heals instead of wedging.
+  assert.equal(canStartRun(REAPER_USER_ID), true);
+  assert.equal(getActiveRunCount(REAPER_USER_ID), 0);
+  for (const id of ids) {
+    assert.equal(dbStorage.getRunById(REAPER_USER_ID, id).status, 'failed');
+  }
+});
+
+test('the reaper leaves in-flight and recently updated runs alone', () => {
+  const fresh = { ...baseRun(), user_id: REAPER_USER_ID, status: 'running', steps: [shellStep('true')] };
+  dbStorage.insertRun(fresh);
+
+  assert.equal(reapStaleRuns(REAPER_USER_ID), 0);
+  assert.equal(dbStorage.getRunById(REAPER_USER_ID, fresh.id).status, 'running');
+
+  // Terminal states are never reaped.
+  const done = { ...baseRun(), user_id: REAPER_USER_ID, status: 'completed', steps: [shellStep('true')] };
+  const old = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  done.createdAt = old;
+  done.updatedAt = old;
+  dbStorage.insertRun(done);
+  reapStaleRuns(REAPER_USER_ID);
+  assert.equal(dbStorage.getRunById(REAPER_USER_ID, done.id).status, 'completed');
+});
+
+test('failRun records a terminal failure for a run that never executed', async () => {
+  const run = { ...baseRun(), user_id: USER_ID, status: 'created', steps: [shellStep('true')] };
+  dbStorage.insertRun(run);
+
+  const orchestrator = new AgentOrchestrator(process.cwd());
+  await orchestrator.failRun(run.id, USER_ID, new Error('worker exploded'));
+
+  const stored = dbStorage.getRunById(USER_ID, run.id);
+  assert.equal(stored.status, 'failed');
+  assert.equal(stored.error, 'worker exploded');
+});
+
+test('listRuns hydrates step payloads and outputs for every run (regression)', () => {
+  const a = { ...baseRun(), user_id: USER_ID, steps: [{ type: 'shell', name: 'a', command: 'echo one' }] };
+  const b = { ...baseRun(), user_id: USER_ID, steps: [{ type: 'shell', name: 'b', command: 'echo two' }] };
+  dbStorage.insertRun(a);
+  dbStorage.insertRun(b);
+  dbStorage.insertStepResult(b.id, 0, { status: 'completed', output: 'two', error: null, durationMs: 3 });
+
+  const runs = dbStorage.getAllRuns(USER_ID, { limit: 50 });
+  const byId = new Map(runs.map((r) => [r.id, r]));
+
+  assert.equal(byId.get(a.id).steps[0].command, 'echo one');
+  assert.equal(byId.get(a.id).output.length, 0, 'pending run has no output yet');
+  assert.equal(byId.get(b.id).steps[0].command, 'echo two');
+  assert.equal(byId.get(b.id).output[0].output, 'two');
+});
+
+test('failRun does not clobber a specific step error (regression)', async () => {
+  const run = { ...baseRun(), user_id: USER_ID, status: 'created', steps: [shellStep('exit 3')] };
+  dbStorage.insertRun(run);
+
+  const orchestrator = new AgentOrchestrator(process.cwd());
+  await orchestrator.executeRun(run.id, USER_ID);
+  const stepError = dbStorage.getRunById(USER_ID, run.id).error;
+  assert.equal(dbStorage.getRunById(USER_ID, run.id).status, 'failed');
+  assert.match(stepError, /.+/, 'a step error was recorded');
+
+  // The worker also reports a generic failure; the specific error must survive.
+  await orchestrator.failRun(run.id, USER_ID, new Error('Worker exited with code 1'));
+  assert.equal(dbStorage.getRunById(USER_ID, run.id).error, stepError);
+});
+
+test('failRun never throws, so error paths cannot become unhandled rejections', async () => {
+  const orchestrator = new AgentOrchestrator(process.cwd());
+  await assert.doesNotReject(() => orchestrator.failRun('run_missing', USER_ID, new Error('boom')));
+  await assert.doesNotReject(() => orchestrator.failRun('run_missing', null, 'boom'));
+});
+
+test('every documented step type is executable', async () => {
+  assert.deepEqual(STEP_TYPES, ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition']);
+
+  const run = { ...baseRun(), user_id: USER_ID, steps: [{ type: 'scope', name: 'scope' }] };
+  dbStorage.insertRun(run);
+
+  const orchestrator = new AgentOrchestrator(process.cwd());
+  const result = await orchestrator.executeRun(run.id);
+  assert.equal(result.status, 'completed');
+});
+
+function baseRun() {
+  const now = new Date().toISOString();
+  return {
+    id: `run-test-${Math.random().toString(36).slice(2, 10)}`,
+    user_id: null,
+    project_root: process.cwd(),
+    goal: 'test goal',
+    status: 'created',
+    trigger: 'manual',
+    currentStep: 0,
+    error: null,
+    metadata: {},
+    createdAt: now,
+    updatedAt: now,
+  };
+}

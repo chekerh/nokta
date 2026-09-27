@@ -3,6 +3,19 @@ import { createRunConfig, executeStep } from './executor.mjs';
 import * as fileStorage from './storage.mjs';
 import * as dbStorage from './db-storage.mjs';
 
+export const STEP_TYPES = ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition'];
+
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+
+// Model output is untrusted: it may omit "type", invent unknown types, or return
+// a non-array. Normalize to only executable steps so a malformed plan degrades
+// gracefully instead of corrupting the run row.
+export function normalizeSteps(steps, fallback) {
+  if (!Array.isArray(steps)) return fallback;
+  const valid = steps.filter((s) => s && typeof s === 'object' && STEP_TYPES.includes(s.type));
+  return valid.length ? valid : fallback;
+}
+
 export class AgentOrchestrator extends EventEmitter {
   constructor(projectRoot, options = {}) {
     super();
@@ -23,12 +36,7 @@ export class AgentOrchestrator extends EventEmitter {
   }
 
   async _persist() {
-    if (this._useDb) return;
     await fileStorage.saveRuns(this.projectRoot, this.runs);
-  }
-
-  _use(userId) {
-    return userId ? 'db' : 'file';
   }
 
   async createRun(opts = {}) {
@@ -53,7 +61,7 @@ export class AgentOrchestrator extends EventEmitter {
     if (userId) {
       return dbStorage.getRunById(userId, runId);
     }
-    return this.runs.find((r) => r.id === runId) || null;
+    return this.runs.find((r) => r.id === runId) || dbStorage.getRunByIdAny(runId);
   }
 
   listRuns(opts = {}) {
@@ -65,6 +73,33 @@ export class AgentOrchestrator extends EventEmitter {
     if (opts.trigger) items = items.filter((r) => r.trigger === opts.trigger);
     if (opts.limit) items = items.slice(0, opts.limit);
     return items;
+  }
+
+  // Records a terminal failure for a run that could not execute (queue/worker
+  // crash, timeout). Without this the run stays 'created'/'running' and keeps
+  // consuming a concurrency slot until the stale-run reaper fires.
+  //
+  // Never throws: it runs from .catch() handlers, and a failure here must not
+  // become an unhandled rejection. Runs that already reached a terminal state
+  // keep their more specific error (e.g. the failing step's message).
+  async failRun(runId, userId, error) {
+    const message = typeof error === 'string' ? error : error?.message || 'Run failed';
+    try {
+      if (userId) {
+        const existing = dbStorage.getRunById(userId, runId);
+        if (existing && TERMINAL_STATUSES.has(existing.status)) return;
+        dbStorage.updateRunStatus(runId, { status: 'failed', error: message });
+      } else {
+        const run = this.getRun(runId);
+        if (!run || TERMINAL_STATUSES.has(run.status)) return;
+        run.status = 'failed';
+        run.error = message;
+        run.updatedAt = new Date().toISOString();
+        await this._persist();
+      }
+    } catch (err) {
+      this.log.error(`failRun(${runId}) could not record failure: ${err.message}`);
+    }
   }
 
   async cancelRun(runId, userId = null) {
@@ -90,9 +125,9 @@ export class AgentOrchestrator extends EventEmitter {
     return run;
   }
 
-  async executeRun(runId) {
+  async executeRun(runId, userId = null) {
     await this.load();
-    const run = this.getRun(runId);
+    const run = this.getRun(runId, userId);
     if (!run) throw new Error(`Run not found: ${runId}`);
 
     if (run.status !== 'created' && run.status !== 'failed' && run.status !== 'cancelled') {
@@ -208,8 +243,9 @@ Available step types:
 - review: Review current changes. Fields: branch (optional, default HEAD), diff (optional).
 - pr: Create a GitHub PR. Fields: owner, repo, title, body, head, base.
 - condition: Check a condition. Fields: condition (string like "git:hasChanges"), failOnFalse (optional).
+- scope: Read project scope/context. Fields: none required.
 
-Respond with ONLY a JSON array of steps. No explanation. Each step must have a "type" field and the relevant fields for that type.
+Respond with ONLY a JSON array of steps. No explanation. Each step MUST have a "type" field set to one of: ${STEP_TYPES.join(', ')}, plus the relevant fields for that type.
 
 Goal: ${goal}
 
@@ -223,7 +259,7 @@ Project context: ${JSON.stringify(context)}`;
       const content = result.content.trim();
       const cleaned = content.replace(/```(?:json)?\n?/g, '').trim();
       const steps = JSON.parse(cleaned);
-      return Array.isArray(steps) ? steps : this._generateDefaultSteps(goal);
+      return normalizeSteps(steps, this._generateDefaultSteps(goal));
     } catch {
       return this._generateDefaultSteps(goal);
     }

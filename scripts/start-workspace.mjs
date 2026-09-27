@@ -4,8 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WorkspaceService } from '../daemon/workspace/service.mjs';
 import { createWorkspaceApp, listenAvailable } from '../daemon/workspace/server.mjs';
+import { loadDotenv } from '../daemon/lib/dotenv.mjs';
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Load .env before constructing the service so NOKTA_SKILLS_DIR selects the
+// curated skill index instead of falling back to the raw source tree.
+loadDotenv(projectDir);
 const dataDir = path.resolve(process.env.NOKTA_DATA_DIR || path.join(projectDir, '.nokta'));
 const args = process.argv.slice(2);
 const portIndex = args.findIndex(arg => arg === '--ports' || arg === '--port');

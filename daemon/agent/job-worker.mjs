@@ -10,6 +10,7 @@ async function main() {
   const runId = process.env.NOKTA_JOB_RUN_ID;
   const projectRoot = process.env.NOKTA_JOB_PROJECT_ROOT || process.cwd();
   const timeout = parseInt(process.env.NOKTA_JOB_TIMEOUT || '300000', 10);
+  const userId = process.env.NOKTA_JOB_USER_ID || null;
 
   if (!runId) {
     console.error('NOKTA_JOB_RUN_ID not set');
@@ -26,7 +27,7 @@ async function main() {
 
   try {
     const result = await Promise.race([
-      orchestrator.executeRun(runId),
+      orchestrator.executeRun(runId, userId),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Job timeout')), timeout)),
     ]);
 
