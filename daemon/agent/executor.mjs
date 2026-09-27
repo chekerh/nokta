@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { ScopeEnforcer } from '../lib/scope-enforcer.mjs';
 import { ProductionGate } from '../lib/production-gate.mjs';
+import { findSecretLikePaths } from '../lib/secret-paths.mjs';
 
 export function makeId() {
   return 'run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
@@ -214,11 +215,40 @@ export async function executeStep(run, step, context = {}) {
                 execFileSync('git', ['checkout', prHead], { cwd, stdio: 'ignore' });
               } catch {}
             }
+            // `git add .` stages every untracked file, so anything missing from
+            // .gitignore would be committed and pushed. Refuse rather than
+            // leak, and name the offending paths.
+            let staged;
+            try {
+              staged = execFileSync('git', ['status', '--porcelain'], {
+                cwd,
+                encoding: 'utf8',
+                maxBuffer: 8 * 1024 * 1024,
+              });
+            } catch (statusErr) {
+              throw new Error(`Failed to inspect working tree: ${statusErr.message}`);
+            }
+            const unsafe = findSecretLikePaths(staged);
+            if (unsafe.length > 0) {
+              throw new Error(
+                `Refusing to commit: untracked secret-like files present (${unsafe.slice(0, 5).join(', ')}). ` +
+                  'Add them to .gitignore, or remove them, before creating a PR.',
+              );
+            }
             try {
               execFileSync('git', ['add', '.'], { cwd, stdio: 'ignore' });
               execFileSync('git', ['commit', '-m', prTitle, '--no-verify'], { cwd, stdio: 'ignore' });
-              execFileSync('git', ['push', '-u', 'origin', prHead, '--force'], { cwd, stdio: 'ignore' });
-            } catch {}
+              // --force-with-lease, not --force: a blind force push can destroy
+              // commits on the remote that this run never saw.
+              execFileSync('git', ['push', '-u', 'origin', prHead, '--force-with-lease'], {
+                cwd,
+                stdio: 'ignore',
+              });
+            } catch (gitErr) {
+              // Previously swallowed entirely, which made a failed commit or a
+              // rejected push indistinguishable from success.
+              throw new Error(`Git commit/push failed: ${gitErr.message}`);
+            }
 
             const ghArgs = ['pr', 'create', '--title', prTitle, '--body', prBody, '--head', prHead, '--base', prBase];
             const stdout = execFileSync('gh', ghArgs, { cwd, encoding: 'utf8', timeout: 30000 });
