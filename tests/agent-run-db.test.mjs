@@ -13,6 +13,7 @@ const { prepare, closeDb } = await import('../daemon/db/connection.mjs');
 const { migrate } = await import('../daemon/db/schema.mjs');
 const dbStorage = await import('../daemon/agent/db-storage.mjs');
 const { AgentOrchestrator, normalizeSteps, STEP_TYPES } = await import('../daemon/agent/orchestrator.mjs');
+const { executeStep } = await import('../daemon/agent/executor.mjs');
 const { canStartRun, getActiveRunCount, reapStaleRuns } = await import('../daemon/lib/run-limit.mjs');
 
 migrate();
@@ -96,6 +97,71 @@ test('insertRun is atomic: a bad step leaves no orphaned run row (regression)', 
 
   // The run row must not survive a failed step insert.
   assert.equal(dbStorage.getRunById(USER_ID, run.id), null);
+});
+
+test('a shell step with a missing cwd explains itself (regression)', async () => {
+  // Regression: a nonexistent cwd surfaced as "spawnSync bash ENOENT", which
+  // looks like bash is missing rather than the plan naming a bad directory.
+  const run = { ...baseRun(), user_id: USER_ID };
+  const result = await executeStep(run, { type: 'shell', command: 'pwd', cwd: 'no-such-dir' }, {});
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /Working directory does not exist: no-such-dir/);
+  assert.ok(!/spawnSync/.test(result.error));
+});
+
+test('a shell step rejects a non-string content edit (regression)', async () => {
+  const result = await executeStep({ ...baseRun() }, { type: 'edit', file: 'x.txt' }, { projectRoot: os.tmpdir() });
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /content is required/);
+});
+
+test('planner prompt is grounded in the real repo and skill index (regression)', async () => {
+  // Regression: the planner used to receive only JSON.stringify(metadata), so it
+  // invented stacks and paths (it wrote src/health.ts into a plain-JS project).
+  const prompts = [];
+  const orchestrator = new AgentOrchestrator(process.cwd(), {
+    skills: {
+      async select() {
+        return [{ name: 'api-design', description: 'REST API design patterns' }];
+      },
+    },
+    chatHandler: {
+      async handleChat(msgs) {
+        prompts.push(...msgs.map((m) => m.content));
+        return { content: '[]', provider: 'test', model: 'test' };
+      },
+    },
+  });
+
+  await orchestrator.generateSteps('Add a health endpoint');
+  const prompt = prompts.join('\n');
+
+  assert.match(prompt, /Add a health endpoint/);
+  assert.match(prompt, /Repository context \(ground truth/, 'planner must receive repo grounding');
+  assert.match(prompt, /\.mjs/, 'planner must see the real file types');
+  assert.match(prompt, /api-design/, 'planner must see the selected skill');
+  assert.match(prompt, /Never invent a stack/);
+});
+
+test('planner survives a missing chat handler and a bad skill index', async () => {
+  const noChat = new AgentOrchestrator(process.cwd());
+  assert.ok(Array.isArray(await noChat.generateSteps('goal')));
+  assert.ok((await noChat.generateSteps('goal')).length > 0);
+
+  const brokenSkills = new AgentOrchestrator(process.cwd(), {
+    skills: {
+      async select() {
+        throw new Error('skill index unavailable');
+      },
+    },
+    chatHandler: {
+      async handleChat() {
+        return { content: 'not json', provider: 'test', model: 'test' };
+      },
+    },
+  });
+  const steps = await brokenSkills.generateSteps('goal');
+  assert.ok(steps.length > 0, 'should fall back to default steps');
 });
 
 test('normalizeSteps drops steps with a missing or unknown type', () => {
@@ -228,6 +294,51 @@ test('every documented step type is executable', async () => {
   const orchestrator = new AgentOrchestrator(process.cwd());
   const result = await orchestrator.executeRun(run.id);
   assert.equal(result.status, 'completed');
+});
+
+test('a prompt step with no messages still gets a user turn (regression)', async () => {
+  // Regression: an empty `messages: []` is truthy, so it used to win the
+  // `step.messages || messages` fallback and the model received a system prompt
+  // with no user turn at all. It then invented unrelated content.
+  const seen = [];
+  const run = { ...baseRun(), user_id: USER_ID, steps: [{ type: 'prompt', name: 'Report progress' }] };
+  run.goal = 'Ship the auth feature';
+  const chatHandler = {
+    async handleChat(msgs) {
+      seen.push(...msgs);
+      return { content: 'ok', provider: 'test', model: 'test', tokensIn: 1, tokensOut: 1 };
+    },
+  };
+  const result = await executeStep(run, run.steps[0], { chatHandler });
+
+  assert.equal(result.status, 'completed');
+  const user = seen.find((m) => m.role === 'user');
+  assert.ok(user, 'expected a user turn to be synthesized');
+  assert.match(user.content, /Ship the auth feature/);
+  assert.match(user.content, /Report progress/);
+});
+
+test('a prompt step receives output from earlier steps (regression)', async () => {
+  const seen = [];
+  const run = {
+    ...baseRun(),
+    user_id: USER_ID,
+    output: [
+      { step: 'Analyze goal', type: 'prompt', status: 'completed', output: 'Found auth.js and login.js' },
+      { step: 'failing', type: 'shell', status: 'failed', output: 'should not be included' },
+    ],
+  };
+  const chatHandler = {
+    async handleChat(msgs) {
+      seen.push(...msgs);
+      return { content: 'ok', provider: 'test', model: 'test', tokensIn: 1, tokensOut: 1 };
+    },
+  };
+  await executeStep(run, { type: 'prompt', name: 'Write the plan' }, { chatHandler });
+
+  const user = seen.find((m) => m.role === 'user');
+  assert.match(user.content, /Found auth\.js and login\.js/);
+  assert.ok(!user.content.includes('should not be included'), 'failed steps must not be fed forward');
 });
 
 function baseRun() {

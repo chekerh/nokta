@@ -2,6 +2,8 @@ import EventEmitter from 'node:events';
 import { createRunConfig, executeStep } from './executor.mjs';
 import * as fileStorage from './storage.mjs';
 import * as dbStorage from './db-storage.mjs';
+import { buildProjectContext, renderProjectContext } from './project-context.mjs';
+import { LocalSkills } from '../workspace/skills.mjs';
 
 export const STEP_TYPES = ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition'];
 
@@ -25,6 +27,7 @@ export class AgentOrchestrator extends EventEmitter {
     this.providerManager = options.providerManager || null;
     this.chatHandler = options.chatHandler || null;
     this.sprintEngine = options.sprintEngine || null;
+    this.skills = options.skills || new LocalSkills();
     this._loaded = false;
     this._activeExecutions = new Map();
   }
@@ -234,6 +237,22 @@ export class AgentOrchestrator extends EventEmitter {
     if (!this.chatHandler) {
       return this._generateDefaultSteps(goal);
     }
+
+    // Ground the model in the real repository and the curated skill index.
+    // Without this it invents stacks and paths (e.g. TypeScript files in a
+    // plain-JS project) and plans that cannot be executed.
+    const [projectContext, skills] = await Promise.all([
+      buildProjectContext(this.projectRoot),
+      this.skills.select(goal).catch(() => []),
+    ]);
+
+    const skillBlock = skills.length
+      ? [
+          'Relevant skills available in this project (follow their guidance when applicable):',
+          ...skills.map((s) => `- ${s.name}: ${(s.description || '').slice(0, 200)}`),
+        ].join('\n')
+      : 'No matching skills found in the skill index.';
+
     const prompt = `You are a software engineering agent planner. Given a goal and project context, generate a sequence of steps to accomplish the goal.
 
 Available step types:
@@ -249,7 +268,14 @@ Respond with ONLY a JSON array of steps. No explanation. Each step MUST have a "
 
 Goal: ${goal}
 
-Project context: ${JSON.stringify(context)}`;
+Repository context (ground truth - use only these paths and extensions):
+${renderProjectContext(projectContext)}
+
+${skillBlock}
+
+Additional request context: ${JSON.stringify(context)}
+
+Produce the fewest steps that genuinely accomplish the goal. Prefer editing existing files. Do not invent directories or file types that are not present above.`;
 
     try {
       const result = await this.chatHandler.handleChat([{ role: 'user', content: prompt }], {

@@ -28,6 +28,24 @@ export function createRunConfig(opts = {}) {
   };
 }
 
+// Builds a user turn for a prompt step that declares no messages of its own.
+// Without this, a step like {systemPrompt} only (an empty messages array is
+// truthy, so it used to win the `step.messages || messages` fallback) sent the
+// model a system prompt and nothing else, and the model free-associated.
+function synthesizeUserTurn(run, step) {
+  const parts = [];
+  if (run?.goal) parts.push(`Goal: ${run.goal}`);
+  // Feed back earlier step output so later steps build on earlier ones instead
+  // of restarting from nothing.
+  const prior = (run?.output || [])
+    .filter((r) => r && r.status !== 'failed' && r.output)
+    .slice(-4)
+    .map((r) => `--- ${r.step} (${r.type}) ---\n${String(r.output).slice(0, 2000)}`);
+  if (prior.length) parts.push(`Work completed so far:\n${prior.join('\n\n')}`);
+  if (step?.name) parts.push(`Report: "${step.name}"`);
+  return parts.join('\n\n') || 'Proceed.';
+}
+
 export async function executeStep(run, step, context = {}) {
   const startTime = Date.now();
   const stepResult = {
@@ -43,7 +61,13 @@ export async function executeStep(run, step, context = {}) {
     switch (step.type) {
       case 'prompt': {
         const { chatHandler, messages, systemPrompt } = context;
-        const msgs = step.messages || messages || [];
+        const stepMessages = step.messages;
+        const msgs =
+          Array.isArray(stepMessages) && stepMessages.length
+            ? stepMessages
+            : Array.isArray(messages) && messages.length
+              ? messages
+              : [{ role: 'user', content: synthesizeUserTurn(run, step) }];
         const sys = step.systemPrompt || systemPrompt || 'You are a senior software engineer. Be concise and correct.';
         const fullMessages = [{ role: 'system', content: sys }, ...msgs];
         const result = await chatHandler.handleChat(fullMessages, {
@@ -66,13 +90,37 @@ export async function executeStep(run, step, context = {}) {
         if (!cmd || typeof cmd !== 'string') {
           throw new Error('Command is required for shell step');
         }
-        if (/rm\s+(-rf|--recursive)\s+(\/|~\/|\*)/i.test(cmd) || />\s*\/dev\/(sd[a-z]|nvme)/i.test(cmd) || /mkfs/i.test(cmd)) {
+        if (
+          /rm\s+(-rf|--recursive)\s+(\/|~\/|\*)/i.test(cmd) ||
+          />\s*\/dev\/(sd[a-z]|nvme)/i.test(cmd) ||
+          /mkfs/i.test(cmd)
+        ) {
           throw new Error('Destructive shell command blocked by security guard');
         }
         const projectRoot = path.resolve(context.projectRoot || process.cwd());
         let cwd = step.cwd ? path.resolve(projectRoot, step.cwd) : projectRoot;
         if (!cwd.startsWith(projectRoot)) {
           cwd = projectRoot;
+        }
+        // A missing cwd makes spawnSync fail with a misleading
+        // "spawnSync bash ENOENT" that looks like bash is unavailable. Check it
+        // explicitly so a bad plan reports what is actually wrong.
+        if (step.cwd) {
+          const stat = await fs.stat(cwd).catch(() => null);
+          if (!stat?.isDirectory()) {
+            const entries = await fs
+              .readdir(projectRoot, { withFileTypes: true })
+              .then((list) =>
+                list
+                  .filter((e) => !e.name.startsWith('.'))
+                  .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
+                  .slice(0, 25),
+              )
+              .catch(() => []);
+            throw new Error(
+              `Working directory does not exist: ${step.cwd}. Available in project root: ${entries.join(' ') || '(empty)'}`,
+            );
+          }
         }
         try {
           const stdout = execFileSync('bash', ['-c', cmd], {
@@ -125,6 +173,12 @@ export async function executeStep(run, step, context = {}) {
 
         const existing = await fs.readFile(resolved, 'utf8').catch(() => '');
         const newContent = step.content;
+        if (typeof newContent !== 'string') {
+          throw new Error('content is required for edit step');
+        }
+        // Creating a new file implies creating its parent directory; without this
+        // a legitimate "add src/foo.js" plan fails with ENOENT.
+        await fs.mkdir(path.dirname(resolved), { recursive: true });
         if (step.oldString) {
           if (!existing.includes(step.oldString)) {
             throw new Error(`oldString not found in ${step.file}`);
