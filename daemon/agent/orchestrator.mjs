@@ -3,6 +3,7 @@ import { createRunConfig, executeStep } from './executor.mjs';
 import * as fileStorage from './storage.mjs';
 import * as dbStorage from './db-storage.mjs';
 import { buildProjectContext, renderProjectContext } from './project-context.mjs';
+import { createRunWorktree } from './worktree.mjs';
 import { LocalSkills } from '../workspace/skills.mjs';
 
 export const STEP_TYPES = ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition'];
@@ -28,6 +29,8 @@ export class AgentOrchestrator extends EventEmitter {
     this.chatHandler = options.chatHandler || null;
     this.sprintEngine = options.sprintEngine || null;
     this.skills = options.skills || new LocalSkills();
+    this.requireIsolation = options.requireIsolation || process.env.NOKTA_REQUIRE_ISOLATION === 'true';
+    this._isolation = options.isolation;
     this._loaded = false;
     this._activeExecutions = new Map();
   }
@@ -128,6 +131,24 @@ export class AgentOrchestrator extends EventEmitter {
     return run;
   }
 
+  // Runs are isolated by default. Set NOKTA_RUN_ISOLATION=false to opt out
+  // process-wide, or pass { isolation: false } for a single orchestrator
+  // (tests use this so they do not litter the real repository with worktrees).
+  isolationEnabled() {
+    if (this._isolation !== undefined) return this._isolation;
+    return process.env.NOKTA_RUN_ISOLATION !== 'false';
+  }
+
+  _recordWorktree(run, wt) {
+    const info = { path: wt.path, branch: wt.branch, baseRef: 'HEAD' };
+    run.metadata = { ...(run.metadata || {}), worktree: info };
+    if (run.user_id) {
+      dbStorage.updateRunStatus(run.id, { metadata: run.metadata });
+    }
+    this.emit('run:isolated', { runId: run.id, ...info });
+    return info;
+  }
+
   async executeRun(runId, userId = null) {
     await this.load();
     const run = this.getRun(runId, userId);
@@ -153,10 +174,30 @@ export class AgentOrchestrator extends EventEmitter {
     const executionCtx = { aborted: false, runId };
     this._activeExecutions.set(runId, executionCtx);
 
+    // Isolate the run in its own git worktree so it can never overwrite the
+    // tree that is executing it. Executable steps resolve paths against
+    // `projectRoot`, so pointing that at the worktree contains every write.
+    let workingRoot = this.projectRoot;
+    if (this.isolationEnabled(run)) {
+      const wt = createRunWorktree({ projectRoot: this.projectRoot, runId, baseRef: run.baseRef || 'HEAD' });
+      if (wt.ok) {
+        workingRoot = wt.path;
+        this._recordWorktree(run, wt);
+        this.log.info(`Run ${runId} isolated in worktree ${wt.branch} at ${wt.path}`);
+      } else {
+        this.log.warn(`Run ${runId} not isolated: ${wt.reason}`);
+        if (this.requireIsolation) {
+          this._activeExecutions.delete(runId);
+          dbStorage.updateRunStatus(runId, { status: 'failed', error: `Isolation required: ${wt.reason}` });
+          throw new Error(`Isolation required but unavailable: ${wt.reason}`);
+        }
+      }
+    }
+
     const context = {
       chatHandler: this.chatHandler,
       sprintEngine: this.sprintEngine,
-      projectRoot: this.projectRoot,
+      projectRoot: workingRoot,
       providerManager: this.providerManager,
     };
 

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -71,7 +72,7 @@ test('executeRun finds a DB-backed run even without a userId (regression)', asyn
   const run = { ...baseRun(), user_id: USER_ID, steps: [shellStep('echo db-backed-ok')] };
   dbStorage.insertRun(run);
 
-  const orchestrator = new AgentOrchestrator(process.cwd());
+  const orchestrator = new AgentOrchestrator(process.cwd(), { isolation: false });
   // No userId: previously threw "Run not found" because authenticated runs live
   // in SQLite, not in the in-memory array.
   const result = await orchestrator.executeRun(run.id);
@@ -86,7 +87,7 @@ test('executeRun scopes to the user when a userId is supplied', async () => {
   const run = { ...baseRun(), user_id: USER_ID, steps: [shellStep('true')] };
   dbStorage.insertRun(run);
 
-  const other = new AgentOrchestrator(process.cwd());
+  const other = new AgentOrchestrator(process.cwd(), { isolation: false });
   await assert.rejects(() => other.executeRun(run.id, 'usr_someone_else'), /Run not found/);
 });
 
@@ -113,6 +114,49 @@ test('a shell step rejects a non-string content edit (regression)', async () => 
   const result = await executeStep({ ...baseRun() }, { type: 'edit', file: 'x.txt' }, { projectRoot: os.tmpdir() });
   assert.equal(result.status, 'failed');
   assert.match(result.error, /content is required/);
+});
+
+test('executeRun isolates a real run in a worktree (regression)', async () => {
+  // Regression: runs edited the live tree in place. A plan once overwrote
+  // daemon/server.mjs, destroying the running application. This asserts the
+  // wiring, not just the helper.
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-isolated-'));
+  const sh = (cmd) => execFileSync('bash', ['-c', cmd], { cwd: repo, encoding: 'utf8' });
+  sh('git init -q -b main .');
+  sh('git config user.email test@nokta.local && git config user.name Test');
+  await fs.writeFile(path.join(repo, 'app.mjs'), 'ORIGINAL\n', 'utf8');
+  sh('git add . && git commit -q -m initial');
+
+  const run = {
+    ...baseRun(),
+    id: `run-iso-${Math.random().toString(36).slice(2, 8)}`,
+    user_id: USER_ID,
+    steps: [{ type: 'edit', name: 'clobber', file: 'app.mjs', content: 'CLOBBERED\n' }],
+  };
+  dbStorage.insertRun(run);
+
+  const orchestrator = new AgentOrchestrator(repo, { isolation: true });
+  const result = await orchestrator.executeRun(run.id, USER_ID);
+
+  assert.equal(result.status, 'completed');
+  assert.equal(
+    await fs.readFile(path.join(repo, 'app.mjs'), 'utf8'),
+    'ORIGINAL\n',
+    'the live tree must be untouched by an isolated run',
+  );
+
+  const wt = (result.metadata || {}).worktree;
+  assert.ok(wt, 'the run should record its worktree');
+  assert.match(wt.branch, /^nokta\/run-iso-/);
+  assert.equal(
+    await fs.readFile(path.join(wt.path, 'app.mjs'), 'utf8'),
+    'CLOBBERED\n',
+    "the run's edit should be contained in the worktree",
+  );
+
+  // The persisted row carries the worktree too, so the worker and the UI agree.
+  const stored = dbStorage.getRunById(USER_ID, run.id);
+  assert.equal((stored.metadata || {}).worktree.branch, wt.branch);
 });
 
 test('planner prompt is grounded in the real repo and skill index (regression)', async () => {
@@ -144,7 +188,7 @@ test('planner prompt is grounded in the real repo and skill index (regression)',
 });
 
 test('planner survives a missing chat handler and a bad skill index', async () => {
-  const noChat = new AgentOrchestrator(process.cwd());
+  const noChat = new AgentOrchestrator(process.cwd(), { isolation: false });
   assert.ok(Array.isArray(await noChat.generateSteps('goal')));
   assert.ok((await noChat.generateSteps('goal')).length > 0);
 
@@ -240,7 +284,7 @@ test('failRun records a terminal failure for a run that never executed', async (
   const run = { ...baseRun(), user_id: USER_ID, status: 'created', steps: [shellStep('true')] };
   dbStorage.insertRun(run);
 
-  const orchestrator = new AgentOrchestrator(process.cwd());
+  const orchestrator = new AgentOrchestrator(process.cwd(), { isolation: false });
   await orchestrator.failRun(run.id, USER_ID, new Error('worker exploded'));
 
   const stored = dbStorage.getRunById(USER_ID, run.id);
@@ -268,7 +312,7 @@ test('failRun does not clobber a specific step error (regression)', async () => 
   const run = { ...baseRun(), user_id: USER_ID, status: 'created', steps: [shellStep('exit 3')] };
   dbStorage.insertRun(run);
 
-  const orchestrator = new AgentOrchestrator(process.cwd());
+  const orchestrator = new AgentOrchestrator(process.cwd(), { isolation: false });
   await orchestrator.executeRun(run.id, USER_ID);
   const stepError = dbStorage.getRunById(USER_ID, run.id).error;
   assert.equal(dbStorage.getRunById(USER_ID, run.id).status, 'failed');
@@ -280,7 +324,7 @@ test('failRun does not clobber a specific step error (regression)', async () => 
 });
 
 test('failRun never throws, so error paths cannot become unhandled rejections', async () => {
-  const orchestrator = new AgentOrchestrator(process.cwd());
+  const orchestrator = new AgentOrchestrator(process.cwd(), { isolation: false });
   await assert.doesNotReject(() => orchestrator.failRun('run_missing', USER_ID, new Error('boom')));
   await assert.doesNotReject(() => orchestrator.failRun('run_missing', null, 'boom'));
 });
@@ -291,7 +335,7 @@ test('every documented step type is executable', async () => {
   const run = { ...baseRun(), user_id: USER_ID, steps: [{ type: 'scope', name: 'scope' }] };
   dbStorage.insertRun(run);
 
-  const orchestrator = new AgentOrchestrator(process.cwd());
+  const orchestrator = new AgentOrchestrator(process.cwd(), { isolation: false });
   const result = await orchestrator.executeRun(run.id);
   assert.equal(result.status, 'completed');
 });
