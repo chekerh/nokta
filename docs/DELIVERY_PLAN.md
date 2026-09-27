@@ -13,7 +13,7 @@ work below.
 1. **A run can destroy the system executing it.** This happened. A run asked to
    add a `/health` endpoint rewrote `daemon/server.mjs` from 256 lines to 7 and
    `daemon/index.mjs` from 84 to 3. The port conflict that looked like the cause
-   was the *symptom* of a dead daemon.
+   was the _symptom_ of a dead daemon.
 
    The enabler was `daemon/lib/scope-enforcer.mjs`, which treats three separate
    cases as "allow": no scope declared, empty `allowedDirs`, and empty
@@ -30,17 +30,17 @@ work below.
 
 ## Done and verified
 
-| Area | State | Evidence |
-| --- | --- | --- |
-| Authenticated run execution | working | 245 tests; `tests/agent-run-db.test.mjs` |
-| Run loop repairs | working | `1a3d2c8` — 217/223 tests green at commit |
-| Planner grounding | working | `18f2390` — real repo structure + curated skills in the prompt |
-| Run isolation | working | `abad165` — replayed the destructive goal; live tree byte-identical |
-| Agent pack execution | working | `POST /api/v1/agents/:id/execute`, 267 packs, deliverable persisted |
-| Read-only evidence step | working | `inspect` with a command allowlist, 22 accept/refuse cases pinned |
-| Citation auditing | working | invented paths detected and flagged on the run |
-| Curated skill index | working | 351 skills; `graphify` and ECC skills resolve and rank |
-| Agent catalog | working | 267 packs, all resolvable by id, title slug, and filename |
+| Area                        | State   | Evidence                                                            |
+| --------------------------- | ------- | ------------------------------------------------------------------- |
+| Authenticated run execution | working | 245 tests; `tests/agent-run-db.test.mjs`                            |
+| Run loop repairs            | working | `1a3d2c8` — 217/223 tests green at commit                           |
+| Planner grounding           | working | `18f2390` — real repo structure + curated skills in the prompt      |
+| Run isolation               | working | `abad165` — replayed the destructive goal; live tree byte-identical |
+| Agent pack execution        | working | `POST /api/v1/agents/:id/execute`, 267 packs, deliverable persisted |
+| Read-only evidence step     | working | `inspect` with a command allowlist, 22 accept/refuse cases pinned   |
+| Citation auditing           | working | invented paths detected and flagged on the run                      |
+| Curated skill index         | working | 351 skills; `graphify` and ECC skills resolve and rank              |
+| Agent catalog               | working | 267 packs, all resolvable by id, title slug, and filename           |
 
 ### Isolation model
 
