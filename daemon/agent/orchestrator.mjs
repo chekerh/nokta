@@ -311,7 +311,9 @@ Available step types:
 - review: Review current changes. Fields: branch (optional, default HEAD), diff (optional).
 - pr: Create a GitHub PR. Fields: owner, repo, title, body, head, base.
 - condition: Check a condition. Fields: condition (string like "git:hasChanges"), failOnFalse (optional).
-- scope: Read project scope/context. Fields: none required.
+- scope: Declare which files this run is permitted to modify. REQUIRED before any edit step.
+  Fields: allowedFiles (array of glob patterns), allowedDirs (array of directories), blockedFiles (optional), maxFilesChanged (optional), maxLinesChanged (optional).
+  A scope that names no files or directories permits nothing, and an edit in a run with no scope is rejected.
 
 Respond with ONLY a JSON array of steps. No explanation. Each step MUST have a "type" field set to one of: ${STEP_TYPES.join(', ')}, plus the relevant fields for that type.
 
@@ -324,7 +326,9 @@ ${skillBlock}
 
 Additional request context: ${JSON.stringify(context)}
 
-Produce the fewest steps that genuinely accomplish the goal. Prefer editing existing files. Do not invent directories or file types that are not present above.`;
+Produce the fewest steps that genuinely accomplish the goal. Prefer editing existing files. Do not invent directories or file types that are not present above.
+
+If the plan contains any edit step, it MUST also contain a scope step placed before it, and that scope must name the specific files or directories the goal requires. An unscoped edit will be rejected at execution time, and an over-broad scope is a security defect rather than a shortcut. If the goal requires no file changes, emit no scope and no edit steps.`;
 
     try {
       const result = await this.chatHandler.handleChat([{ role: 'user', content: prompt }], {

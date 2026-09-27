@@ -259,7 +259,9 @@ export async function executeStep(run, step, context = {}) {
       }
 
       case 'scope': {
-        const scopeEnforcer = context.scopeEnforcer || new ScopeEnforcer();
+        // Reuse the run's enforcer so declared scope and mutation history stay
+        // on one instance even if a step edited before this point.
+        const scopeEnforcer = (context.scopeEnforcer ||= new ScopeEnforcer());
         scopeEnforcer.declareScope(run.id, {
           allowedFiles: step.allowedFiles || [],
           blockedFiles: step.blockedFiles || [],
@@ -268,7 +270,6 @@ export async function executeStep(run, step, context = {}) {
           maxFilesChanged: step.maxFilesChanged || 10,
           maxLinesChanged: step.maxLinesChanged || 500,
         });
-        context.scopeEnforcer = scopeEnforcer;
         stepResult.output = 'Scope declared';
         stepResult.meta = { scope: step };
         break;
@@ -281,16 +282,23 @@ export async function executeStep(run, step, context = {}) {
           throw new Error(`Path traversal detected: ${step.file} resolves outside project root`);
         }
 
-        if (context.scopeEnforcer) {
-          const check = context.scopeEnforcer.validateMutation(run.id, { file: step.file, operation: 'edit' });
-          if (!check.allowed) throw new Error(`Scope violation: ${check.reason}`);
-        }
-
-        const existing = await fs.readFile(resolved, 'utf8').catch(() => '');
+        // Validate the step's own shape before consulting policy, so a
+        // malformed step is reported as malformed rather than as a scope
+        // violation it never got far enough to commit.
         const newContent = step.content;
         if (typeof newContent !== 'string') {
           throw new Error('content is required for edit step');
         }
+
+        // Always enforce, and always record. This used to be conditional on
+        // `context.scopeEnforcer` existing, which it only did if the plan
+        // happened to contain a scope step — so a plan without one had no
+        // enforcement at all. A scope that names targets further narrows this.
+        const scopeEnforcer = (context.scopeEnforcer ||= new ScopeEnforcer());
+        const check = scopeEnforcer.validateMutation(run.id, { file: step.file, operation: 'edit' });
+        if (!check.allowed) throw new Error(`Scope violation: ${check.reason}`);
+
+        const existing = await fs.readFile(resolved, 'utf8').catch(() => '');
         // Creating a new file implies creating its parent directory; without this
         // a legitimate "add src/foo.js" plan fails with ENOENT.
         await fs.mkdir(path.dirname(resolved), { recursive: true });
@@ -310,9 +318,7 @@ export async function executeStep(run, step, context = {}) {
         }
         stepResult.meta = { file: step.file };
 
-        if (context.scopeEnforcer) {
-          context.scopeEnforcer.recordMutation(run.id, { file: step.file, operation: 'edit', withinScope: true });
-        }
+        scopeEnforcer.recordMutation(run.id, { file: step.file, operation: 'edit', withinScope: true });
         break;
       }
 

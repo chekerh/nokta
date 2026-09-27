@@ -73,16 +73,75 @@ reintroduces failure mode 1.
 
 ## Next, in priority order
 
-### 1. Make `ScopeEnforcer` fail closed — P0
+### 1. ~~Make `ScopeEnforcer` fail closed~~ — done
 
-Still open, and still the sharpest edge. Three cases currently mean "allow":
-absent scope, empty `allowedDirs`, empty `allowedFiles`. A missing allow-list
-should be a denial, not a permission.
+The enforcer was close to dead code, and not because of the `validateMutation`
+logic that looked permissive. Three separate holes stacked:
 
-This is a breaking change for anyone relying on the permissive default, so it
-should ship with a loud warning first and a documented migration.
+1. **Enforcement was conditional on a `scope` step existing.** The `edit` case
+   read `if (context.scopeEnforcer)`, and the enforcer was only ever constructed
+   inside the `scope` case. No planner output reliably emits a scope step, so
+   most runs had **no enforcer at all** and every edit was unrestricted. This was
+   the actual cause of the destructive run.
+2. **A scope that named nothing permitted everything.** The planner prompt
+   described `scope` as "Read project scope/context. Fields: none required", so
+   a model emitting one produced empty allow-lists — and the enforcer read an
+   empty allow-list as "no restriction".
+3. **A missing scope was explicitly allowed:** `if (!scope) return { allowed:
+true, reason: 'no scope declared' }`.
 
-### 2. Replace prompt-only evidence with a tool-calling run — P1
+All three now fail closed. An allow-list that lists nothing allows nothing, an
+edit in a run with no scope is refused, `.git` / `node_modules` / `.env` are
+blocked additively (so `blockedDirs: []` can no longer unlock them), and the
+`edit` case always enforces and always records.
+
+Two further bugs surfaced while writing the tests:
+
+- `allowedDirs: ['daemon/']` matched **nothing**, because the comparison built
+  `dir + '/'` unconditionally and compared against `'daemon//'`. A scope that
+  looked correct silently denied every edit under it. Directory comparison is
+  now slash-agnostic, and `.` means the repository root.
+- `matchesPattern` interpolated the pattern straight into a `RegExp`, so `.`
+  matched any character and a pattern containing `(` or `[` threw a
+  `SyntaxError`. The pattern is escaped now, with `*` and `?` as the only
+  wildcards.
+
+The planner prompt now requires a scope step before any edit, and states that an
+over-broad scope is a security defect rather than a shortcut.
+
+#### Breaking change
+
+Any plan that edits without declaring a scope now fails at execution instead of
+silently proceeding. To migrate, insert a scope step before the first edit:
+
+```json
+{ "type": "scope", "allowedFiles": ["daemon/server.mjs"] }
+{ "type": "scope", "allowedDirs": ["daemon/"] }
+```
+
+Use `allowedDirs: ['.']` for an intentionally repository-wide scope; the
+critical directories stay blocked regardless. Plans with no `edit` step — which
+is most of them, including every agent pack — are unaffected, as is the
+no-chat fallback plan.
+
+### 2. Fix the `review` step crash — P1
+
+Found while verifying the above. A planner output of `['scope', 'edit',
+'review']` completes the first two and then fails the run with
+`Cannot read properties of null (reading 'reviewPR')`: the `review` case reads
+`context.sprintEngine`, which is null on this path. Every plan that includes a
+review step fails, so the crash is on a common shape rather than an edge case.
+A one-line guard, but it belongs in its own change.
+
+### 3. `POST /api/v1/agent-runs` creates a run and does not start it — P1
+
+The endpoint generates steps, creates the run, and returns 201 — and the run then
+sits in `created` indefinitely, because enqueueing only happens on the separate
+`/execute` route. Reading the primary create endpoint, the natural expectation is
+that a run begins. Either enqueue here or make the response say plainly that
+execution is a separate call.
+
+### 4. Replace prompt-only evidence with a tool-calling run — P1
 
 `inspect` returns a fixed bundle: the file listing, recent history, and the
 manifest. That is enough to stop a model inventing file paths, and not enough to
@@ -97,14 +156,14 @@ Until it exists, treat pack deliverables as **analysis from a bounded snapshot**
 not as verified architectural review. The citation audit is the safety net, and
 it should be read before trusting a deliverable.
 
-### 3. Surface isolation, deliverables and audits in the dashboard — P1
+### 5. Surface isolation, deliverables and audits in the dashboard — P1
 
 The UI does not yet show the worktree path or branch, the deliverable, or the
 citation audit. The data is all on the run; nothing renders it. Until this ships,
 isolation is invisible to an operator, which means a run that produced a large
 diff is easy to miss.
 
-### 4. Worktree lifecycle management — P2
+### 6. Worktree lifecycle management — P2
 
 Worktrees accumulate. `removeRunWorktree` works and refuses paths outside the
 base directory, but there is no route or UI for it, and no retention policy.
@@ -113,13 +172,13 @@ Six accumulated during this session's testing and had to be pruned by hand.
 Also needs: a review/merge path, and a decision on whether a run's branch is
 auto-merged, left for review, or discarded.
 
-### 5. Credential rotation in unreachable Git objects — P2
+### 7. Credential rotation in unreachable Git objects — P2
 
 `origin/main` predates the `.env` ignore rule, so a credential is in local Git
 history. It is not on the current branch tip. Rotation of the exposed credential
 is still undone and needs a deliberate decision.
 
-### 6. The 26 pre-existing Prettier violations — P3
+### 8. The 26 pre-existing Prettier violations — P3
 
 Left alone deliberately; they are unrelated files and would bury the diff.
 

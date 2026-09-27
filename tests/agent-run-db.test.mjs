@@ -2,6 +2,7 @@ import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -116,6 +117,93 @@ test('a shell step rejects a non-string content edit (regression)', async () => 
   assert.match(result.error, /content is required/);
 });
 
+test('an unscoped edit is refused and the file survives (regression)', async (t) => {
+  // Regression: a run with no scope step had no enforcer at all, because
+  // enforcement was conditional on a `scope` step existing. That is how a run
+  // overwrote daemon/server.mjs from 256 lines to 7 and killed the daemon
+  // executing it. Isolation now contains the blast radius, but the edit itself
+  // should not have been permitted either.
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-unscoped-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+  const victim = path.join(repo, 'server.mjs');
+  await fs.writeFile(victim, 'ORIGINAL\n', 'utf8');
+
+  const run = {
+    ...baseRun(),
+    id: `run-unscoped-${Math.random().toString(36).slice(2, 8)}`,
+    user_id: USER_ID,
+    steps: [{ type: 'edit', name: 'clobber', file: 'server.mjs', content: 'CLOBBERED\n' }],
+  };
+
+  const result = await executeStep(run, run.steps[0], { projectRoot: repo, isolation: false });
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /scope violation/i);
+  assert.equal(await fs.readFile(victim, 'utf8'), 'ORIGINAL\n', 'the file must be untouched');
+});
+
+test('a scoped edit is allowed and a second file outside the scope is not (regression)', async (t) => {
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-scoped-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+  await fs.writeFile(path.join(repo, 'allowed.mjs'), 'A\n', 'utf8');
+  await fs.writeFile(path.join(repo, 'secret.mjs'), 'B\n', 'utf8');
+
+  const run = { ...baseRun(), id: `run-scoped-${Math.random().toString(36).slice(2, 8)}` };
+  const context = { projectRoot: repo, isolation: false };
+
+  const scopeStep = { type: 'scope', name: 'scope', allowedFiles: ['allowed.mjs'] };
+  assert.equal((await executeStep(run, scopeStep, context)).status, 'completed');
+
+  const good = { type: 'edit', name: 'ok', file: 'allowed.mjs', content: 'A2\n' };
+  assert.equal((await executeStep(run, good, context)).status, 'completed');
+  assert.equal(await fs.readFile(path.join(repo, 'allowed.mjs'), 'utf8'), 'A2\n');
+
+  const bad = { type: 'edit', name: 'nope', file: 'secret.mjs', content: 'B2\n' };
+  const result = await executeStep(run, bad, context);
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /not in allowed list/i);
+  assert.equal(await fs.readFile(path.join(repo, 'secret.mjs'), 'utf8'), 'B\n');
+});
+
+test('a broad scope still cannot reach .git or .env (regression)', async (t) => {
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-broad-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+  await fs.mkdir(path.join(repo, '.git'), { recursive: true });
+  await fs.writeFile(path.join(repo, '.git', 'config'), 'ORIGINAL\n', 'utf8');
+  await fs.writeFile(path.join(repo, '.env'), 'SECRET=1\n', 'utf8');
+
+  const run = { ...baseRun(), id: `run-broad-${Math.random().toString(36).slice(2, 8)}` };
+  const context = { projectRoot: repo, isolation: false };
+  await executeStep(run, { type: 'scope', name: 'scope', allowedDirs: ['.'] }, context);
+
+  for (const file of ['.git/config', '.env']) {
+    const result = await executeStep(run, { type: 'edit', name: 'x', file, content: 'PWNED\n' }, context);
+    assert.equal(result.status, 'failed', `${file} must be refused even under a root scope`);
+    assert.match(result.error, /blocked/i);
+  }
+  assert.equal(await fs.readFile(path.join(repo, '.git', 'config'), 'utf8'), 'ORIGINAL\n');
+  assert.equal(await fs.readFile(path.join(repo, '.env'), 'utf8'), 'SECRET=1\n');
+});
+
+test('a trailing slash in allowedDirs does not silently deny everything (regression)', async (t) => {
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-slash-'));
+  t.after(() => fsSync.rmSync(repo, { recursive: true, force: true }));
+  await fs.mkdir(path.join(repo, 'daemon'), { recursive: true });
+  await fs.writeFile(path.join(repo, 'daemon', 'server.mjs'), 'ORIGINAL\n', 'utf8');
+
+  const run = { ...baseRun(), id: `run-slash-${Math.random().toString(36).slice(2, 8)}` };
+  const context = { projectRoot: repo, isolation: false };
+  // 'daemon/' used to be compared as 'daemon//', matching nothing.
+  await executeStep(run, { type: 'scope', name: 'scope', allowedDirs: ['daemon/'] }, context);
+
+  const result = await executeStep(
+    run,
+    { type: 'edit', name: 'ok', file: 'daemon/server.mjs', content: 'EDITED\n' },
+    context,
+  );
+  assert.equal(result.status, 'completed');
+  assert.equal(await fs.readFile(path.join(repo, 'daemon', 'server.mjs'), 'utf8'), 'EDITED\n');
+});
+
 test('executeRun isolates a real run in a worktree (regression)', async () => {
   // Regression: runs edited the live tree in place. A plan once overwrote
   // daemon/server.mjs, destroying the running application. This asserts the
@@ -131,7 +219,12 @@ test('executeRun isolates a real run in a worktree (regression)', async () => {
     ...baseRun(),
     id: `run-iso-${Math.random().toString(36).slice(2, 8)}`,
     user_id: USER_ID,
-    steps: [{ type: 'edit', name: 'clobber', file: 'app.mjs', content: 'CLOBBERED\n' }],
+    // The scope is declared because it is now required for any edit; the point
+    // of this test is containment, not scope policy.
+    steps: [
+      { type: 'scope', name: 'scope', allowedFiles: ['app.mjs'] },
+      { type: 'edit', name: 'clobber', file: 'app.mjs', content: 'CLOBBERED\n' },
+    ],
   };
   dbStorage.insertRun(run);
 
