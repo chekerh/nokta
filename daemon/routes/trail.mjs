@@ -1,15 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { asyncHandler, AppError } from '../lib/route-utils.mjs';
-
-function resolveSafeTarget(target) {
-  const projectRoot = path.resolve(process.cwd());
-  const resolved = path.resolve(projectRoot, target || '.');
-  if (!resolved.startsWith(projectRoot)) {
-    throw new AppError('Path traversal detected in target', 403);
-  }
-  return resolved;
-}
+import { asyncHandler, AppError, resolveSafeTarget } from '../lib/route-utils.mjs';
 
 function getTrailDir(target) {
   return path.join(resolveSafeTarget(target), '.ai', 'trail');

@@ -1,21 +1,12 @@
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError, resolveSafeTarget } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
 
 const serverProcesses = new Map();
 const pendingRequests = new Map();
 let requestId = 0;
-
-function resolveSafeTarget(target) {
-  const projectRoot = path.resolve(process.cwd());
-  const resolved = path.resolve(projectRoot, target || '.');
-  if (!resolved.startsWith(projectRoot)) {
-    throw new AppError('Path traversal detected in target', 403);
-  }
-  return resolved;
-}
 
 async function loadMcpConfig(target) {
   const safeTarget = resolveSafeTarget(target);

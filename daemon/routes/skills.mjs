@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authMiddleware } from '../lib/auth.mjs';
-import { runDiscovery, getCachedReport } from '../lib/discovery.mjs';
+import { runDiscovery, getCachedReport, parseRepoUrl } from '../lib/discovery.mjs';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -91,17 +91,6 @@ async function countDirs(dir) {
     }
   }
   return count;
-}
-
-function parseRepoUrl(url) {
-  url = url.replace(/\.git$/, '').trim();
-  const match = url.match(/github\.com[:/]([^/]+)\/([^/]+)/);
-  if (match) return { owner: match[1], repo: match[2].replace(/\.git$/, ''), url };
-  const parts = url.split('/').filter(Boolean);
-  const last = parts[parts.length - 1];
-  const secondLast = parts[parts.length - 2];
-  if (secondLast && last) return { owner: secondLast, repo: last.replace(/\.git$/, ''), url };
-  return { owner: 'unknown', repo: last || 'unknown', url };
 }
 
 async function cloneRepo(url) {

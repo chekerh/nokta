@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { NOOP_LOG } from './route-utils.mjs';
 
 const IGNORE_DIRS = new Set([
   'node_modules',
@@ -70,7 +71,7 @@ const WATCH_EXTS = new Set([
 export class AutoWatcher {
   constructor(projectRoot, options = {}) {
     this.projectRoot = projectRoot;
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this.debounceMs = options.debounceMs || 2000;
     this.orchestrator = options.orchestrator || null;
     this.sprintEngine = options.sprintEngine || null;

@@ -1,16 +1,6 @@
 (function () {
   'use strict';
 
-  function $(id) {
-    return document.getElementById(id);
-  }
-
-  function escHtml(s) {
-    var d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }
-
   function createSVG(width, height) {
     return document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   }

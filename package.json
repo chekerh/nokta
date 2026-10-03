@@ -10,7 +10,8 @@
   "scripts": {
     "daemon": "node daemon/index.mjs daemon",
     "compile": "node compiler/nokta-compile.mjs",
-    "gates": "node compiler/nokta-gates.mjs",
+    "gates": "node compiler/nokta-gates.mjs && node compiler/nokta-ui-gates.mjs",
+    "gates:ui": "node compiler/nokta-ui-gates.mjs",
     "init": "node compiler/nokta-init.mjs",
     "test": "for f in tests/*.test.mjs; do node --test \"$f\" || exit 1; done",
     "test:ci": "for f in tests/*.test.mjs; do node --test \"$f\" || exit 1; done",

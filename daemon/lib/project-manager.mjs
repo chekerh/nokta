@@ -1,7 +1,8 @@
 import { prepare } from '../db/connection.mjs';
+import { NOOP_LOG } from './route-utils.mjs';
 export class ProjectManager {
   constructor(options = {}) {
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this.projects = new Map(); // projectRoot -> { project, sprintEngine, orchestrator, watcher }
     this.activeProjectRoot = null;
     this.userId = options.userId || null;

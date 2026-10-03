@@ -1,121 +1,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { semanticSearch } from '../lib/semantic.mjs';
+import { TEXT_EXTENSIONS, IGNORE_EXTENSIONS } from '../lib/file-extensions.mjs';
+import { IGNORE_DIRS } from '../lib/search-ignore.mjs';
 
-const IGNORE_EXTS = new Set([
-  '.jpg',
-  '.png',
-  '.gif',
-  '.svg',
-  '.ico',
-  '.woff',
-  '.woff2',
-  '.eot',
-  '.ttf',
-  '.mp4',
-  '.mp3',
-  '.webm',
-  '.zip',
-  '.tar',
-  '.gz',
-  '.br',
-  '.o',
-  '.so',
-  '.dylib',
-  '.exe',
-  '.dll',
-  '.map',
-  '.min.js',
-  '.min.css',
-]);
-
-const IGNORE_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  '.next',
-  '.turbo',
-  'coverage',
-  '.venv',
-  'venv',
-  '__pycache__',
-  'target',
-  '.cache',
-  '.ai/trail/events',
-  'vendor',
-  '.bundle',
-]);
-
-const TEXT_EXTS = new Set([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.py',
-  '.java',
-  '.kt',
-  '.kts',
-  '.swift',
-  '.rs',
-  '.go',
-  '.rb',
-  '.css',
-  '.scss',
-  '.less',
-  '.html',
-  '.json',
-  '.yaml',
-  '.yml',
-  '.md',
-  '.txt',
-  '.toml',
-  '.env',
-  '.gitignore',
-  '.dockerfile',
-  '.xml',
-  '.sql',
-  '.prisma',
-  '.graphql',
-  '.php',
-  '.ex',
-  '.exs',
-  '.hs',
-  '.lhs',
-  '.scala',
-  '.sc',
-  '.c',
-  '.h',
-  '.cpp',
-  '.hpp',
-  '.cc',
-  '.cxx',
-  '.pl',
-  '.pm',
-  '.lua',
-  '.r',
-  '.jl',
-  '.zig',
-  '.cr',
-  '.vue',
-  '.svelte',
-  '.astro',
-  '.cs',
-  '.fs',
-  '.erl',
-  '.hrl',
-  '.clj',
-  '.cljs',
-  '.sh',
-  '.bash',
-  '.zsh',
-  '.fish',
-  '.tf',
-  '.hcl',
-  '.dockerfile',
-]);
+const IGNORE_EXTS = IGNORE_EXTENSIONS;
+const TEXT_EXTS = TEXT_EXTENSIONS;
 
 const SYMBOL_PATTERNS = [
   { name: 'function', regex: /(?:export\s+)?(?:async\s+)?function\s+(\w+)/g },
@@ -387,6 +278,22 @@ export function registerSearchRoutes(app) {
 
       const results = await walkDir(projectRoot, queryTokens, projectRoot, maxResults, scope, symbolTarget);
       SEARCH_HISTORY[0].totalResults = results.length;
+
+      res.json({ results, total: results.length, history: SEARCH_HISTORY.slice(0, 5) });
+    }),
+  );
+
+  app.post(
+    '/api/v1/search/semantic',
+    asyncHandler(async (req, res) => {
+      const { query, target, maxResults = 20 } = req.body;
+      if (!query) throw new AppError('Query is required', 400);
+
+      const projectRoot = target || process.cwd();
+      const results = await semanticSearch(query, projectRoot, { maxResults });
+
+      SEARCH_HISTORY.unshift({ query, time: new Date().toISOString(), totalResults: results.length });
+      if (SEARCH_HISTORY.length > 50) SEARCH_HISTORY.length = 50;
 
       res.json({ results, total: results.length, history: SEARCH_HISTORY.slice(0, 5) });
     }),

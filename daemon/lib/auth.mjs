@@ -101,13 +101,19 @@ export function verifyToken(token) {
   }
 }
 
+// One place to pull the bearer token off a request. The scheme match is
+// case-insensitive per RFC 7235 — `Bearer ` alone rejected `bearer <token>`.
+// Anchored so a non-Bearer scheme (`Basic …`) is rejected rather than passed
+// through as if its credentials were the token.
+export function bearerToken(req) {
+  const header = (req.headers?.['authorization'] || '').trim();
+  const match = /^Bearer\s+(\S.*)$/i.exec(header);
+  return match ? match[1].trim() : null;
+}
+
 export function authMiddleware(required = true) {
   return (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    let token = null;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.slice(7);
-    }
+    const token = bearerToken(req);
 
     if (!token) {
       if (required) return res.status(401).json({ error: 'Authentication required', status: 401 });
@@ -135,7 +141,7 @@ export function authMiddleware(required = true) {
 }
 
 export function blacklistCurrentToken(req) {
-  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+  const token = bearerToken(req);
   if (token) {
     const payload = verifyToken(token);
     if (payload?.jti) {

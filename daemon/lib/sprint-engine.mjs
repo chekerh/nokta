@@ -6,6 +6,7 @@ import { exec } from 'node:child_process';
 import { acquireLock, releaseLock } from './lock.mjs';
 import { atomicWrite } from './atomic-write.mjs';
 import { prepare } from '../db/connection.mjs';
+import { NOOP_LOG } from './route-utils.mjs';
 
 function syncItemToDb(item, projectRoot = '') {
   try {
@@ -133,7 +134,7 @@ function padId(num, digits = 4) {
 export class SprintEngine {
   constructor(projectRoot, options = {}) {
     this.projectRoot = projectRoot;
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this.chatHandler = options.chatHandler || null;
     this.decisionEngine = options.decisionEngine || null;
   }

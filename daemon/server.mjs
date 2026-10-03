@@ -30,7 +30,7 @@ import { SprintEngine } from './lib/sprint-engine.mjs';
 import { AgentOrchestrator } from './agent/orchestrator.mjs';
 import { AutoWatcher } from './lib/auto-watcher.mjs';
 import { AgentJobQueue } from './agent/job-queue.mjs';
-import { authMiddleware, verifyToken } from './lib/auth.mjs';
+import { authMiddleware, bearerToken, verifyToken } from './lib/auth.mjs';
 import { runDiscovery } from './lib/discovery.mjs';
 import { requestIdMiddleware } from './lib/request-id.mjs';
 import { registerCleanup } from './lib/shutdown.mjs';
@@ -38,7 +38,6 @@ import { startAutoBackup } from './lib/backup.mjs';
 import { loadBlacklist, startBlacklistCleanup } from './lib/token-blacklist.mjs';
 import { registerTrustRoutes } from './routes/trust.mjs';
 import { DecisionEngine } from './lib/decision-engine.mjs';
-import { registerDecisionRoutes } from './routes/decisions.mjs';
 import { ProjectManager } from './lib/project-manager.mjs';
 import { UserBrain } from './lib/user-brain.mjs';
 import { registerProjectRoutes } from './routes/projects.mjs';
@@ -89,7 +88,7 @@ export async function createServer(options = {}) {
       ) {
         return next();
       }
-      const provided = req.headers['authorization']?.replace(/^Bearer\s+/i, '');
+      const provided = bearerToken(req);
       if (provided === authToken) {
         return next();
       }
@@ -181,13 +180,13 @@ export async function createServer(options = {}) {
   registerSkillEvolutionRoutes(app, projectRoot, log);
   trackRoute('skill-evolution');
 
-  const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler });
+  const decisionEngine = new DecisionEngine(projectRoot, { log });
+
+  // decisionEngine must be constructed before SprintEngine — SprintEngine keeps the
+  // reference at construction time, and every decision-link method hard-fails without it.
+  const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler, decisionEngine });
   registerPlannerRoutes(app, sprintEngine);
   trackRoute('planner');
-
-  const decisionEngine = new DecisionEngine(projectRoot, { log });
-  registerDecisionRoutes(app, decisionEngine);
-  trackRoute('decisions');
 
   const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler, sprintEngine });
   const jobQueue = new AgentJobQueue({ concurrency: 2, log });

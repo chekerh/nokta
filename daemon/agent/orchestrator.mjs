@@ -6,6 +6,7 @@ import { buildProjectContext, renderProjectContext } from './project-context.mjs
 import { buildPackSteps, auditCitations } from './agent-pack.mjs';
 import { createRunWorktree } from './worktree.mjs';
 import { LocalSkills } from '../workspace/skills.mjs';
+import { NOOP_LOG } from '../lib/route-utils.mjs';
 
 export const STEP_TYPES = ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition', 'inspect'];
 
@@ -25,7 +26,7 @@ export class AgentOrchestrator extends EventEmitter {
     super();
     this.projectRoot = projectRoot;
     this.runs = [];
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this.providerManager = options.providerManager || null;
     this.chatHandler = options.chatHandler || null;
     this.sprintEngine = options.sprintEngine || null;

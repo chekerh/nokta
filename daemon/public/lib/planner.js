@@ -1,23 +1,6 @@
 (function(){'use strict';
 
-const API = window.location.origin;
-
-async function api(method, path, body) {
-  var opts = {method:method,headers:{}};
-  var token = localStorage.getItem('nokta-token') || localStorage.getItem('nokta_token');
-  if (token) {
-    opts.headers['Authorization'] = 'Bearer ' + token;
-  }
-  if (body) {opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
-  var res = await fetch(API+path,opts);
-  if (!res.ok) {
-    var msg;
-    try {var e=await res.json();msg=e.error||res.statusText;}
-    catch(e2){msg=res.statusText;}
-    throw new Error(msg);
-  }
-  return res.headers.get('content-type')&&res.headers.get('content-type').includes('json')?res.json():res.text();
-}
+var MAX_CARDS_PER_COL = 40;
 
 var plannerState = {
   items: [],
@@ -26,9 +9,6 @@ var plannerState = {
   activeSprint: null,
   selectedItem: null,
 };
-
-function $(id) { return document.getElementById(id); }
-function escHtml(s) { var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
 // --- Sprint selector ---
 async function refreshSprintSelector() {
@@ -41,7 +21,11 @@ async function refreshSprintSelector() {
     plannerState.sprints.forEach(function(s){
       var opt = document.createElement('option');
       opt.value = s.id;
-      opt.textContent = s.id + ': ' + (s.goal||'Untitled') + (s.status==='active'?' ★':'');
+      // Trim the goal: an untrimmed goal makes the <select> (and the whole panel)
+      // as wide as its longest option.
+      var goal = String(s.goal || 'Untitled');
+      opt.textContent = s.id + ': ' + (goal.length > 40 ? goal.slice(0, 40) + '…' : goal) + (s.status === 'active' ? ' ★' : '');
+      opt.title = s.id + ': ' + goal;
       sel.appendChild(opt);
     });
     var active = plannerState.sprints.find(function(s){return s.status==='active';});
@@ -79,15 +63,20 @@ async function refreshBoard() {
     else columns[0].items.push(item);
   });
 
-  board.innerHTML = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;min-height:300px">' +
-    columns.map(function(col){
-      return '<div class="planner-col" data-status="'+col.id+'" ondragover="plannerDragOver(event)" ondrop="plannerDrop(event,\''+col.id+'\')">' +
+  board.innerHTML = columns.map(function(col){
+      // ponytail: cap rendered cards per column. A 2000-item backlog otherwise builds
+      // 2000 DOM nodes on every refresh. Raise MAX_CARDS_PER_COL when the backend
+      // paginates instead.
+      var shown = col.items.slice(0, MAX_CARDS_PER_COL);
+      var hidden = col.items.length - shown.length;
+      return '<div class="planner-col" data-status="'+col.id+'" ondragover="plannerDragOver(event)" ondragleave="plannerDragLeave(event)" ondrop="plannerDrop(event,\''+col.id+'\')">' +
         '<div class="planner-col-header">'+escHtml(col.label)+' <span class="badge badge-accent">'+col.items.length+'</span></div>' +
         '<div class="planner-col-items">' +
-        col.items.map(function(item){ return renderItemCard(item); }).join('') +
+        shown.map(function(item){ return renderItemCard(item); }).join('') +
+        (hidden>0?'<div class="planner-empty">Showing '+shown.length+' of '+col.items.length+' — use the sprint filter to narrow</div>':'') +
         (col.items.length===0?'<div class="planner-empty">Drop items here</div>':'') +
         '</div></div>';
-    }).join('') + '</div>';
+    }).join('');
 }
 
 function renderItemCard(item) {
@@ -114,15 +103,23 @@ var draggedItemId = null;
 window.plannerDragStart = function(ev, itemId) {
   draggedItemId = itemId;
   ev.dataTransfer.effectAllowed = 'move';
+  ev.currentTarget.classList.add('dragging');
 };
 
 window.plannerDragOver = function(ev) {
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
+  ev.currentTarget.classList.add('drag-over');
+};
+
+window.plannerDragLeave = function(ev) {
+  ev.currentTarget.classList.remove('drag-over');
 };
 
 window.plannerDrop = async function(ev, newStatus) {
   ev.preventDefault();
+  ev.currentTarget.classList.remove('drag-over');
+  document.querySelectorAll('.planner-card.dragging').forEach(function(n){n.classList.remove('dragging');});
   if (!draggedItemId) return;
   try {
     await api('PATCH','/api/v1/planner/items/'+draggedItemId, {status: newStatus});
@@ -297,6 +294,9 @@ window.plannerCreateSprint = async function() {
 };
 
 // --- Init ---
+// index.html wires onchange="refreshBoard()" and ondrag* inline handlers, so both
+// must be reachable as globals — an IIFE-scoped function throws ReferenceError there.
+window.refreshBoard = refreshBoard;
 window.refreshPlanner = async function() {
   await Promise.all([refreshSprintSelector(), refreshBoard()]);
 };

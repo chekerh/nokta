@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSafeEnv } from '../lib/safe-env.mjs';
+import { NOOP_LOG } from '../lib/route-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -10,7 +11,7 @@ export class AgentJobQueue extends EventEmitter {
   constructor(options = {}) {
     super();
     this.concurrency = options.concurrency || 2;
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this._queue = [];
     this._active = new Map();
     this._running = false;

@@ -46,18 +46,8 @@ All authenticated endpoints require `Authorization: Bearer <token>` header.
 
 ## Decisions
 
-| Method | Path                                   | Description                                              |
-| ------ | -------------------------------------- | -------------------------------------------------------- |
-| GET    | `/api/v1/decisions`                    | List decisions (`?type=architectural&status=accepted`)   |
-| POST   | `/api/v1/decisions`                    | Create: `{type, title, description?, rationale?, tags?}` |
-| GET    | `/api/v1/decisions/:id`                | Get decision                                             |
-| PATCH  | `/api/v1/decisions/:id`                | Update fields                                            |
-| DELETE | `/api/v1/decisions/:id`                | Delete decision                                          |
-| GET    | `/api/v1/decisions/:id/impact`         | Impact analysis                                          |
-| GET    | `/api/v1/decisions/:id/related`        | Related decisions                                        |
-| GET    | `/api/v1/decisions/analytics/summary`  | Aggregate stats                                          |
-| POST   | `/api/v1/decisions/bulk-update-status` | Bulk update: `{decisionIds, status}`                     |
-| GET    | `/api/v1/decisions/templates/:type`    | Decision template by type                                |
+No HTTP endpoint. Manage decisions through the CLI (`nokta decisions list|show|create`),
+which talks to the same `DecisionEngine` the planner uses for decision-anchored sprint items.
 
 ## Providers
 

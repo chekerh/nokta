@@ -191,6 +191,8 @@ async function cmdGates(args) {
   console.log(`Evaluating trail gates for: ${target}`);
   const { evaluateTrailGates } = await import('./compiler/lib/gates.mjs');
   const results = evaluateTrailGates(target);
+  const { evaluateUiGates } = await import('./compiler/lib/ui-gates.mjs');
+  results.push(...evaluateUiGates(target));
   for (const r of results) {
     const status = r.status.toUpperCase();
     const remediation = r.remediation ? ` → ${r.remediation}` : '';
@@ -657,7 +659,7 @@ Usage:
 
 Commands:
   compile <target> [--out <file>]  Compile context for a project
-  gates <target>                   Evaluate trail gates
+  gates <target>                   Evaluate trail + rendered-UI gates
   detect <target>                  Detect project stack
   review-pr [branch]               Review PR on a branch
   review-branch [branch]           Review a branch

@@ -161,8 +161,18 @@ run_tests() {
   fi
 }
 
+run_gates() {
+  step "Running gates..."
+  if npm run gates 2>&1; then
+    info "All gates passed"
+  else
+    error "Gates failed"
+    return 1
+  fi
+}
+
 run_lint_and_tests() {
-  run_lint && run_tests
+  run_lint && run_tests && run_gates
 }
 
 # ─── Stop ────────────────────────────────────────────────────────────────────

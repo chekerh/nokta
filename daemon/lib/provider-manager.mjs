@@ -9,6 +9,7 @@ import { OllamaProvider } from '../providers/ollama.mjs';
 import { ClaudeProvider } from '../providers/claude.mjs';
 import { OpenAIProvider } from '../providers/openai.mjs';
 import { OpenRouterProvider } from '../providers/openrouter.mjs';
+import { NOOP_LOG } from './route-utils.mjs';
 
 const PROVIDER_CLASSES = {
   ollama: OllamaProvider,
@@ -24,7 +25,7 @@ export class ProviderManager {
     this.providers = new Map();
     this._defaultProvider = null;
     this._autoRoute = true;
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this._dbUserId = null;
   }
 

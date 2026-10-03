@@ -31,7 +31,7 @@ function isCacheFresh(cached) {
   return age < CACHE_TTL_MS;
 }
 
-function parseRepoUrl(url) {
+export function parseRepoUrl(url) {
   url = url.replace(/\.git$/, '').trim();
   const match = url.match(/github\.com[:/]([^/]+)\/([^/]+)/);
   if (match) return { owner: match[1], repo: match[2].replace(/\.git$/, ''), url };

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../types.mjs';
+import { NOOP_LOG } from './route-utils.mjs';
 
 const CRITIC_PROMPT = `You are a senior code reviewer and architect. Your role is to critically evaluate code changes and provide structured feedback.
 
@@ -49,7 +50,7 @@ Be concise. Code-first output.`;
 
 export class CriticAgent {
   constructor(options = {}) {
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this.chatHandler = options.chatHandler || null;
     this.maxFileSize = options.maxFileSize || 100000;
   }
