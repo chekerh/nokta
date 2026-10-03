@@ -469,7 +469,9 @@ export async function executeStep(run, step, context = {}) {
             }
             try {
               execFileSync('git', ['add', '.'], { cwd, stdio: 'ignore' });
-              execFileSync('git', ['commit', '-m', prTitle, '--no-verify'], { cwd, stdio: 'ignore' });
+              // Hooks stay on: an automated commit must not bypass the same
+              // lint/tests/gates a local one is required to pass.
+              execFileSync('git', ['commit', '-m', prTitle], { cwd, stdio: 'ignore' });
               // --force-with-lease, not --force: a blind force push can destroy
               // commits on the remote that this run never saw.
               execFileSync('git', ['push', '-u', 'origin', prHead, '--force-with-lease'], {
