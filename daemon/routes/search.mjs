@@ -159,7 +159,8 @@ async function walkDir(dir, queryTokens, projectRoot, maxResults, scope, symbolT
       if (scopeExts && !scopeExts.has(ext)) continue;
 
       const relPath = path.relative(projectRoot, fullPath);
-      if (scopeDir && !relPath.startsWith(path.relative(projectRoot, scopeDir))) continue;
+      const scopeRel = scopeDir ? path.relative(projectRoot, scopeDir) : '';
+      if (scopeDir && relPath !== scopeRel && !relPath.startsWith(scopeRel + path.sep)) continue;
 
       try {
         const stat = await fs.promises.stat(fullPath);

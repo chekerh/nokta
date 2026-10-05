@@ -24,3 +24,10 @@ export function resolveSafeTarget(target) {
   }
   return resolved;
 }
+
+// Segment-wise containment test: is `child` inside or equal to `parent`?
+// Unlike startsWith(), it does not leak into siblings like /base-evil.
+export function isWithin(parent, child) {
+  const rel = path.relative(path.resolve(parent), path.resolve(child));
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}

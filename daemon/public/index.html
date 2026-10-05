@@ -2585,8 +2585,9 @@
           try {
             var res = await api('POST', '/api/v1/uiux/design-system', { query: query, format: 'markdown' });
             var system = res.designSystem || '';
-            // Format headers and color hex codes to copy
-            var formatted = system
+            // Format headers and color hex codes to copy; escape first so any
+            // HTML in the model output is inert, then let our own <code>/<h1>/... tags through.
+            var formatted = escHtml(system)
               .replace(/`([^`]+)`/g, '<code>$1</code>')
               .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
               .replace(/^# (.*)$/gm, '<h1 style="font-size:1.4rem;color:#fff;margin:12px 0 6px">$1</h1>')
@@ -2892,12 +2893,15 @@
                 if (!line || !line.startsWith('data: ')) continue;
                 try {
                   var data = JSON.parse(line.slice(6));
+                  if (data.meta && !modelName && data.meta.model) {
+                    modelName = String(data.meta.model);
+                  }
                   if (data.content) {
                     fullReply += data.content;
                     assistantDiv.innerHTML =
                       '<div class="role">Nokta' +
                       (modelName
-                        ? ' <span style="font-size:0.7rem;color:var(--text-3)">' + modelName + '</span>'
+                        ? ' <span style="font-size:0.7rem;color:var(--text-3)">' + escHtml(modelName) + '</span>'
                         : '') +
                       '</div><div class="content">' +
                       renderMarkdown(fullReply) +
@@ -2920,7 +2924,9 @@
             assistantDiv.innerHTML =
               '<div class="role">Nokta' +
               (modelLabel
-                ? ' <span style="font-weight:400;font-size:0.7rem;color:var(--text-3)">' + modelLabel + '</span>'
+                ? ' <span style="font-weight:400;font-size:0.7rem;color:var(--text-3)">' +
+                  escHtml(modelLabel) +
+                  '</span>'
                 : '') +
               '</div><div class="content">' +
               renderMarkdown(fullReply) +

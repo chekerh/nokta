@@ -94,8 +94,23 @@ async function countDirs(dir) {
 }
 
 async function cloneRepo(url) {
+  // Never pass caller input straight to git: a leading "--" is parsed as a git
+  // flag (option injection -> RCE), and any scheme can reach internal hosts (SSRF).
+  if (typeof url !== 'string' || /^\s*-/.test(url)) {
+    throw new AppError('Invalid git URL', 400);
+  }
+  if (!/^https:\/\//i.test(url)) {
+    throw new AppError('Only https:// git URLs are supported', 400);
+  }
   const { repo } = parseRepoUrl(url);
-  const target = path.join(REPO_CACHE, repo);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(repo)) {
+    throw new AppError('Invalid repository name', 400);
+  }
+  const target = path.resolve(REPO_CACHE, repo);
+  const rel = path.relative(REPO_CACHE, target);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new AppError('Invalid repository path', 400);
+  }
 
   try {
     await fs.access(target);

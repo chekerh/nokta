@@ -90,15 +90,17 @@ export class AgentJobQueue extends EventEmitter {
 
     let stdout = '';
     let stderr = '';
+    let stdoutBuffer = '';
 
     worker.stdout.on('data', (data) => {
       stdout += data.toString();
-      // Parse progress lines
-      const lines = data
-        .toString()
-        .split('\n')
-        .filter((l) => l.trim());
+      // Keep a per-worker buffer: a JSON progress event split across two
+      // stdout chunks used to fail its second half and silently vanish.
+      stdoutBuffer += data.toString();
+      const lines = stdoutBuffer.split('\n');
+      stdoutBuffer = lines.pop() || '';
       for (const line of lines) {
+        if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line);
           if (msg.type) this.emit(msg.type, { runId, ...msg.data });

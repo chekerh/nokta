@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { asyncHandler, AppError, resolveSafeTarget } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError, resolveSafeTarget, isWithin } from '../lib/route-utils.mjs';
 
 function getTrailDir(target) {
   return path.join(resolveSafeTarget(target), '.ai', 'trail');
@@ -170,7 +170,7 @@ Not ready for handoff.
       if (!sessionFile || !content) throw new AppError('sessionFile and content are required', 400);
 
       const filepath = path.resolve(getTrailDir(target), sessionFile.replace('.ai/trail/', ''));
-      if (!filepath.startsWith(getTrailDir(target))) {
+      if (!isWithin(getTrailDir(target), filepath)) {
         throw new AppError('Invalid session file path', 403);
       }
 
@@ -226,7 +226,7 @@ Not ready for handoff.
       const { target } = req.query;
       const { sessionId } = req.params;
       const safePath = path.resolve(getSessionsDir(target), path.basename(sessionId));
-      if (!safePath.startsWith(getSessionsDir(target))) {
+      if (!isWithin(getSessionsDir(target), safePath)) {
         throw new AppError('Invalid session path', 403);
       }
       try {
@@ -245,7 +245,7 @@ Not ready for handoff.
       if (!sessionId) throw new AppError('sessionId is required', 400);
 
       const safePath = path.resolve(getSessionsDir(target), path.basename(sessionId));
-      if (!safePath.startsWith(getSessionsDir(target))) {
+      if (!isWithin(getSessionsDir(target), safePath)) {
         throw new AppError('Invalid session path', 403);
       }
 

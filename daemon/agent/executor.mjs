@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { ScopeEnforcer } from '../lib/scope-enforcer.mjs';
 import { ProductionGate } from '../lib/production-gate.mjs';
 import { findSecretLikePaths } from '../lib/secret-paths.mjs';
+import { createSafeEnv } from '../lib/safe-env.mjs';
 
 const READ_COMMANDS = new Set([
   'ls',
@@ -220,6 +221,7 @@ export async function executeStep(run, step, context = {}) {
             encoding: 'utf8',
             timeout: step.timeout || 20000,
             maxBuffer: 4 * 1024 * 1024,
+            env: createSafeEnv(),
           });
           if (stdout?.trim()) chunks.push(`$ ${command}\n${stdout.trim().slice(0, 20000)}`);
           if (stderr?.trim()) chunks.push(`$ ${command} (stderr)\n${stderr.trim().slice(0, 2000)}`);
@@ -275,6 +277,7 @@ export async function executeStep(run, step, context = {}) {
             encoding: 'utf8',
             timeout: step.timeout || 30000,
             maxBuffer: 1024 * 1024,
+            env: createSafeEnv(),
           });
           stepResult.output = stdout.trim();
           stepResult.exitCode = 0;
