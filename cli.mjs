@@ -207,6 +207,77 @@ async function cmdGates(args) {
   }
 }
 
+async function cmdFleet(args) {
+  const sub = args[0];
+  const projectRoot = process.cwd();
+  const { FleetTransport, scanRunningAgents } = await import('./daemon/lib/fleet.mjs');
+  const fleet = new FleetTransport(projectRoot, { log: undefined });
+
+  if (sub === 'list' || sub === undefined) {
+    const sessions = await fleet.list();
+    if (sessions.length === 0) console.log('No fleet sessions registered.');
+    for (const s of sessions) console.log(`  • ${s.provider.padEnd(9)} ${s.project}\t(from ${s.cwd})${s.lastError ? ` [ERR ${s.lastError}]` : ''}`);
+    const running = scanRunningAgents().filter((r) => /opencode|freebuff/.test(r.command));
+    if (running.length > 0) {
+      console.log('\nLive harness processes (not yet in fleet):');
+      for (const r of running) console.log(`  pid ${String(r.pid).padEnd(7)} cmd: ${r.command.slice(0, 80)}`);
+    }
+    return;
+  }
+
+  if (sub === 'add') {
+    const [, project, provider = 'opencode'] = args;
+    if (!project) {
+      console.error('Usage: nokta fleet add <projectDir> [opencode|freebuff]');
+      process.exit(1);
+    }
+    const entry = await fleet.register({ project, provider });
+    console.log(`Registered ${entry.provider} on ${entry.project}`);
+    return;
+  }
+
+  if (sub === 'remove') {
+    const [, project, provider] = args;
+    if (!project) {
+      console.error('Usage: nokta fleet remove <projectDir> [provider]');
+      process.exit(1);
+    }
+    const removed = await fleet.forget(project, provider);
+    console.log(`Removed ${removed} session(s)`);
+    return;
+  }
+
+  if (sub === 'run') {
+    const [, project] = args;
+    const rest = args.slice(2);
+    let provider = 'opencode';
+    const promptParts = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '--provider' && rest[i + 1]) provider = rest[++i];
+      else promptParts.push(rest[i]);
+    }
+    const prompt = promptParts.join(' ');
+    if (!project || !prompt) {
+      console.error('Usage: nokta fleet run <projectDir> "<prompt>" [--provider opencode|freebuff]');
+      process.exit(1);
+    }
+    try {
+      const res = await fleet.run(project, prompt, { provider });
+      console.log(`[${res.provider}] exit ${res.exitCode} in ${res.cwd}`);
+      if (res.stdout) console.log(res.stdout.slice(0, 4000));
+      if (res.stderr) console.error(res.stderr.slice(0, 2000));
+      if (res.exitCode !== 0) process.exit(res.exitCode ?? 1);
+    } catch (err) {
+      console.error(err.message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  console.error('Usage: nokta fleet <list|add|remove|run> ...');
+  process.exit(1);
+}
+
 async function cmdDetect(args) {
   const target = args[0] || process.cwd();
   console.log(`Detecting project stack at: ${target}`);
@@ -671,6 +742,7 @@ Commands:
   agent [list|run]                 List items or run an agent task
   index                            Show project index/dashboard
   search <query>                   Semantic code search
+  fleet <list|add|remove|run>      Track + drive opencode sessions across projects
   review-adversarial <file>        Adversarial code review (critic → implementer → critique)
   sandbox "<code>"                 Safe code execution in sandbox
 
@@ -716,6 +788,7 @@ const commands = {
   agent: cmdAgent,
   index: cmdIndex,
   search: cmdSearch,
+  fleet: cmdFleet,
   'review-adversarial': cmdReviewAdversarial,
   sandbox: cmdSandbox,
   skills: cmdSkills,

@@ -24,6 +24,8 @@ import { getOpenApiSpec } from './lib/openapi.mjs';
 import { rateLimit, getAllProviderBucketStats } from './lib/rate-limit.mjs';
 import { registerSkillRoutes } from './routes/skills.mjs';
 import { registerPlannerRoutes } from './routes/planner.mjs';
+import { registerFleetRoutes } from './routes/fleet.mjs';
+import { FleetTransport } from './lib/fleet.mjs';
 import { registerAgentRunRoutes } from './routes/agent-runs.mjs';
 import { registerUiUxRoutes } from './routes/uiux.mjs';
 import { SprintEngine } from './lib/sprint-engine.mjs';
@@ -187,6 +189,10 @@ export async function createServer(options = {}) {
   const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler, decisionEngine });
   registerPlannerRoutes(app, sprintEngine);
   trackRoute('planner');
+
+  const fleet = new FleetTransport(projectRoot, { log });
+  registerFleetRoutes(app, fleet);
+  trackRoute('fleet');
 
   const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler, sprintEngine });
   const jobQueue = new AgentJobQueue({ concurrency: 2, log });
