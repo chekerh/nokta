@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -146,4 +147,80 @@ export function scanRunningAgents() {
   } catch {
     return [];
   }
+}
+
+function cwdForPid(pid) {
+  try {
+    const out = execFileSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    const match = out.match(/^n(.+)$/m);
+    return match ? match[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+// Climb from the agent's cwd to the first directory that looks like a project.
+function findProjectRoot(startDir) {
+  let cur = path.resolve(startDir);
+  for (let i = 0; i < 12; i++) {
+    if (
+      existsSync(path.join(cur, '.git')) ||
+      existsSync(path.join(cur, 'package.json')) ||
+      existsSync(path.join(cur, 'pyproject.toml')) ||
+      existsSync(path.join(cur, 'Cargo.toml')) ||
+      existsSync(path.join(cur, 'go.mod'))
+    ) {
+      return cur;
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  return path.resolve(startDir);
+}
+
+// One-line goal inferred from whatever documents why this project exists.
+function inferGoal(root) {
+  for (const name of ['AGENTS_START_HERE.md', 'AGENTS.md', 'README.md', 'README.MD', 'README']) {
+    try {
+      const txt = readFileSync(path.join(root, name), 'utf8');
+      const line = txt
+        .split('\n')
+        .map((l) => l.trim())
+        .find((l) => l && !l.startsWith('#') && l.length > 4);
+      if (line) return line.slice(0, 120);
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+/**
+ * For each live opencode/freebuff process, infer the project it is sitting in and
+ * a one-line goal. Pure process discovery — no state mutation.
+ */
+export function discoverAgents() {
+  const out = [];
+  for (const hit of scanRunningAgents()) {
+    const cwd = cwdForPid(hit.pid);
+    if (!cwd) continue;
+    const projectRoot = findProjectRoot(cwd);
+    let branch;
+    try {
+      branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+        cwd: projectRoot,
+        encoding: 'utf8',
+        timeout: 5000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+    } catch {
+      branch = undefined;
+    }
+    out.push({ pid: hit.pid, command: hit.command, cwd, projectRoot, branch, goal: inferGoal(projectRoot) });
+  }
+  return out;
 }

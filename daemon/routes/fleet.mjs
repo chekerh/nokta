@@ -1,6 +1,6 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
-import { scanRunningAgents } from '../lib/fleet.mjs';
+import { discoverAgents } from '../lib/fleet.mjs';
 
 export function registerFleetRoutes(app, fleet) {
   app.get(
@@ -8,7 +8,7 @@ export function registerFleetRoutes(app, fleet) {
     authMiddleware(),
     asyncHandler(async (_req, res) => {
       const sessions = await fleet.list();
-      res.json({ sessions, runningAgents: scanRunningAgents() });
+      res.json({ sessions, runningAgents: discoverAgents() });
     }),
   );
 

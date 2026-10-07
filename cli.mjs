@@ -213,6 +213,17 @@ async function cmdFleet(args) {
   const { FleetTransport, scanRunningAgents } = await import('./daemon/lib/fleet.mjs');
   const fleet = new FleetTransport(projectRoot, { log: undefined });
 
+  if (sub === 'discover') {
+    const { discoverAgents } = await import('./daemon/lib/fleet.mjs');
+    const agents = discoverAgents();
+    if (agents.length === 0) { console.log('No live agent sessions detected.'); return; }
+    for (const a of agents) {
+      console.log(`• ${a.command.includes('freebuff') ? 'freebuff' : 'opencode'} pid=${a.pid} root=${a.projectRoot}${a.branch ? ` branch=${a.branch}` : ''}`);
+      if (a.goal) console.log(`    goal: ${a.goal}`);
+    }
+    return;
+  }
+
   if (sub === 'list' || sub === undefined) {
     const sessions = await fleet.list();
     if (sessions.length === 0) console.log('No fleet sessions registered.');
@@ -748,7 +759,7 @@ Commands:
   agent [list|run]                 List items or run an agent task
   index                            Show project index/dashboard
   search <query>                   Semantic code search
-  fleet <list|add|remove|run>      Track + drive opencode sessions across projects
+  fleet <list|add|remove|run|discover>  Track + drive opencode sessions across projects
   review-adversarial <file>        Adversarial code review (critic → implementer → critique)
   sandbox "<code>"                 Safe code execution in sandbox
 
