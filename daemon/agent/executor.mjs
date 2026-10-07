@@ -1,8 +1,10 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { ScopeEnforcer } from '../lib/scope-enforcer.mjs';
 import { ProductionGate } from '../lib/production-gate.mjs';
+import { evaluateUiGates } from '../../compiler/lib/ui-gates.mjs';
 import { findSecretLikePaths } from '../lib/secret-paths.mjs';
 import { createSafeEnv } from '../lib/safe-env.mjs';
 
@@ -405,10 +407,38 @@ export async function executeStep(run, step, context = {}) {
             passed: gateResult.passed,
             summary: gateResult.summary,
           };
+          // Production readiness stays advisory — only the gates below the empty-line
+          // separate are hard blockers. Failing closed here would block every edit whose
+          // diff lacks the heuristies unchanged.
           if (!gateResult.passed) {
             stepResult.status = 'completed';
             stepResult.meta.warning = 'Production readiness gate failed';
           }
+        }
+        // UI finish gate: a task does not count as done until the rendered-UI
+        // checks in compiler/lib/ui-gates.mjs pass on the current project state.
+        const uiTarget = context.projectRoot || process.cwd();
+        const hasUi = existsSync(path.join(uiTarget, 'daemon', 'public'));
+        const uiResults = hasUi
+          ? evaluateUiGates(uiTarget)
+          : [{ gate: 'ui.ui-present', status: 'skipped', message: 'No daemon/public present; UI gate skipped' }];
+        if (hasUi) {
+          uiResults.forEach((r) => {
+            if (r.status === 'fail') r.message = `[fail] ${r.message}`;
+          });
+        }
+        const uiErrors = uiResults.filter(
+          (r) => r.status === 'fail' && (r.gate === 'ui.class-has-style' || r.gate === 'ui.inline-handler-defined' || r.gate === 'ui.api-route-exists'),
+        );
+        stepResult.meta = stepResult.meta || {};
+        stepResult.meta.uiGates = {
+          passed: uiErrors.length === 0,
+          skipped: !hasUi,
+          details: uiResults.map((r) => ({ gate: r.gate, status: r.status, message: r.message })),
+        };
+        if (uiErrors.length > 0) {
+          stepResult.status = 'failed';
+          stepResult.output = `UI gate blocked: ${uiErrors.map((r) => `${r.gate}: ${r.message}`).join(' | ')}`;
         }
         break;
       }
