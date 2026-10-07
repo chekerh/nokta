@@ -80,7 +80,26 @@ export class FleetTransport {
     }
     const workingDir = cwd || path.resolve(this.projectRoot, project || '.');
     await fs.mkdir(workingDir, { recursive: true });
-    const argv = ['run', '--print', prompt];
+    const data = await loadFleet(this.projectRoot);
+    const session = data.sessions.find((s) => s.project === project && s.provider === provider);
+
+    // Prefer attaching to a live opencode server for this project (the only way
+    // to talk to a session that is already running). `session.port` is the
+    // port of `opencode serve --port N` started in that project's directory.
+    let argv;
+    if (provider === 'opencode' && session?.port) {
+      argv = [
+        'run',
+        '--print',
+        prompt,
+        '--attach',
+        `http://127.0.0.1:${session.port}`,
+        '--dir',
+        workingDir,
+      ];
+    } else {
+      argv = ['run', '--print', prompt];
+    }
     if (process.env.NOKTA_FLEET_OPENCODE_MODEL) argv.push('--model', process.env.NOKTA_FLEET_OPENCODE_MODEL);
     const child = spawn('opencode', argv, {
       cwd: workingDir,
@@ -99,8 +118,6 @@ export class FleetTransport {
       child.on('error', () => resolve(-1));
     });
     clearTimeout(kill);
-    const data = await loadFleet(this.projectRoot);
-    const session = data.sessions.find((s) => s.project === project && s.provider === provider);
     if (session) {
       session.lastOutputAt = new Date().toISOString();
       if (exitCode !== 0) session.lastError = `exit ${exitCode}: ${stderr.slice(-300)}`;

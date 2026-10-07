@@ -216,7 +216,7 @@ async function cmdFleet(args) {
   if (sub === 'list' || sub === undefined) {
     const sessions = await fleet.list();
     if (sessions.length === 0) console.log('No fleet sessions registered.');
-    for (const s of sessions) console.log(`  • ${s.provider.padEnd(9)} ${s.project}\t(from ${s.cwd})${s.lastError ? ` [ERR ${s.lastError}]` : ''}`);
+    for (const s of sessions) console.log(`  • ${s.provider.padEnd(9)} ${s.project}\t(from ${s.cwd})${s.port ? ` [port ${s.port}]` : ''}${s.lastError ? ` [ERR ${s.lastError}]` : ''}`);
     const running = scanRunningAgents().filter((r) => /opencode|freebuff/.test(r.command));
     if (running.length > 0) {
       console.log('\nLive harness processes (not yet in fleet):');
@@ -226,13 +226,19 @@ async function cmdFleet(args) {
   }
 
   if (sub === 'add') {
-    const [, project, provider = 'opencode'] = args;
+    const [, project, provider = 'opencode', ...rest] = args;
     if (!project) {
-      console.error('Usage: nokta fleet add <projectDir> [opencode|freebuff]');
+      console.error('Usage: nokta fleet add <projectDir> [opencode|freebuff] [--port N] [--pid N]');
       process.exit(1);
     }
-    const entry = await fleet.register({ project, provider });
-    console.log(`Registered ${entry.provider} on ${entry.project}`);
+    let port;
+    let pid;
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '--port' && rest[i + 1]) port = Number(rest[++i]);
+      if (rest[i] === '--pid' && rest[i + 1]) pid = Number(rest[++i]);
+    }
+    const entry = await fleet.register({ project, provider, port, pid });
+    console.log(`Registered ${entry.provider} on ${entry.project}${entry.port ? ` (port ${entry.port})` : ''}`);
     return;
   }
 
