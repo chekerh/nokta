@@ -265,6 +265,42 @@ export function evaluateUiGates(target, options = {}) {
     });
   }
 
+  // --- Gate: any modal must carry proper dialog semantics or screen readers
+  // and focus managers can't treat it as a dialog.
+  const modalIssues = [];
+  for (const file of uiFiles.filter((f) => /\.html?$/.test(f))) {
+    const src = read(file);
+    // The opening tag may span several lines (id + style + onclick).
+    for (const m of src.matchAll(/<[^>]*id="[^"]+Modal"[^>]*>/g)) {
+      const open = m[0];
+      const missing = [];
+      if (!/role=["']dialog["']/.test(open)) missing.push('role="dialog"');
+      if (!/aria-modal/.test(open)) missing.push('aria-modal="true"');
+      if (missing.length) {
+        const idMatch = open.match(/id="([^"]+)"/);
+        modalIssues.push({ id: idMatch ? idMatch[1] : '(unknown)', file: path.relative(uiRoot, file), missing });
+      }
+    }
+  }
+
+  if (modalIssues.length === 0) {
+    results.push({
+      gate: 'ui.modal-semantics',
+      status: 'pass',
+      message: 'Every Modal is a proper dialog (role + aria-modal).',
+    });
+  } else {
+    results.push({
+      gate: 'ui.modal-semantics',
+      status: 'fail',
+      message: `${modalIssues.length} modal(s) missing dialog semantics: ${modalIssues
+        .map((m) => `${m.id} (needs ${m.missing.join(', ')})`)
+        .join('; ')}`,
+      remediation: 'Add role="dialog" and aria-modal="true" (and an aria-label) to the modal opening tag.',
+      details: { modals: modalIssues },
+    });
+  }
+
   // --- Gate 4: an API path the UI calls must be a registered route.
   const registered = new Set();
   for (const file of walk(serverRoot, SERVER_EXT)) {

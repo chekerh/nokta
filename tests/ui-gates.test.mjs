@@ -145,6 +145,30 @@ test('a class passed positionally to a DOM helper counts as emitted', () => {
   assert.equal(byGate['ui.no-dead-css'].status, 'pass', byGate['ui.no-dead-css'].message);
 });
 
+test('a modal missing role="dialog" fails ui.modal-semantics', () => {
+  const root = fixture({
+    ...HEALTHY,
+    'daemon/public/index.html': HEALTHY['daemon/public/index.html'].replace(
+      '<style>',
+      '<style>', // keep styles
+    )+'\n<div id="BrainstormModal" style="display:none"></div>',
+  });
+  const { byGate, failed } = run(root);
+  assert.equal(failed, true);
+  assert.equal(byGate['ui.modal-semantics'].status, 'fail');
+  assert.match(byGate['ui.modal-semantics'].message, /BrainstormModal/);
+});
+
+test('a modal with proper dialog semantics passes ui.modal-semantics', () => {
+  const root = fixture({
+    ...HEALTHY,
+    'daemon/public/index.html': HEALTHY['daemon/public/index.html'] +
+      '\n<div id="BrainstormModal" role="dialog" aria-modal="true" aria-label="Brainstorm"></div>',
+  });
+  const { byGate } = run(root);
+  assert.equal(byGate['ui.modal-semantics'].status, 'pass');
+});
+
 test('a missing UI directory fails loudly instead of passing silently', () => {
   const { byGate } = run(fixture({ 'daemon/routes/x.mjs': '' }));
   assert.equal(byGate['ui.ui-present'].status, 'fail');
