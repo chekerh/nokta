@@ -217,10 +217,20 @@ async function cmdFleet(args) {
     const { discoverAgents } = await import('./daemon/lib/fleet.mjs');
     const agents = discoverAgents();
     if (agents.length === 0) { console.log('No live agent sessions detected.'); return; }
+    const register = args.includes('--register');
+    const seen = new Set();
     for (const a of agents) {
       console.log(`• ${a.command.includes('freebuff') ? 'freebuff' : 'opencode'} pid=${a.pid} root=${a.projectRoot}${a.branch ? ` branch=${a.branch}` : ''}`);
       if (a.goal) console.log(`    goal: ${a.goal}`);
+      if (register) {
+        const provider = a.command.includes('freebuff') ? 'freebuff' : 'opencode';
+        const key = `${provider}:${a.projectRoot}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        await fleet.register({ project: a.projectRoot, provider, pid: a.pid, cwd: a.projectRoot });
+      }
     }
+    if (register && seen.size > 0) console.log(`Registered ${seen.size} session(s) into the fleet.`);
     return;
   }
 
@@ -809,7 +819,7 @@ Commands:
   agent [list|run]                 List items or run an agent task
   index                            Show project index/dashboard
   search <query>                   Semantic code search
-  fleet <list|add|remove|run|plan|queue|discover>  Track + drive opencode sessions across projects
+  fleet <list|add|remove|run|plan|queue|discover>  Track + drive opencode sessions across projects (fleet discover --register persists live ones)
   review-adversarial <file>        Adversarial code review (critic → implementer → critique)
   sandbox "<code>"                 Safe code execution in sandbox
 
