@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
+import { homedir } from 'node:os';
 import { evaluateUiGates } from '../../compiler/lib/ui-gates.mjs';
 
 // Nokta's "fleet": the set of projects being driven by an external agent
@@ -315,7 +316,18 @@ export function discoverAgents() {
     } catch {
       branch = undefined;
     }
-    out.push({ pid: hit.pid, command: hit.command, cwd, projectRoot, branch, goal: inferGoal(projectRoot) });
+    const freebuffActive = /freebuff/.test(hit.command)
+      ? existsSync(path.join(homedir(), '.config/manicode/projects', path.basename(cwd)))
+      : undefined;
+    out.push({
+      pid: hit.pid,
+      command: hit.command,
+      cwd,
+      projectRoot,
+      branch,
+      goal: inferGoal(projectRoot),
+      freebuffActive: freebuffActive === undefined ? undefined : freebuffActive,
+    });
   }
   return out;
 }
