@@ -54,4 +54,38 @@ export function registerFleetRoutes(app, fleet) {
       }
     }),
   );
+
+  app.post(
+    '/api/v1/fleet/:project/plan',
+    authMiddleware(),
+    asyncHandler(async (req, res) => {
+      const { prompt, provider = 'opencode' } = req.body || {};
+      if (!prompt || typeof prompt !== 'string') throw new AppError('prompt is required', 400);
+      const plan = await fleet.plan(req.params.project, prompt, { provider });
+      await fleet.enqueue(plan);
+      res.status(201).json(plan);
+    }),
+  );
+
+  app.get(
+    '/api/v1/fleet/queue',
+    authMiddleware(),
+    asyncHandler(async (_req, res) => {
+      res.json({ items: await fleet.queueList() });
+    }),
+  );
+
+  app.post(
+    '/api/v1/fleet/queue/:id/send',
+    authMiddleware(),
+    asyncHandler(async (req, res) => {
+      try {
+        const result = await fleet.sendQueued(req.params.id);
+        res.json(result);
+      } catch (err) {
+        if (/not found/i.test(err.message)) throw new AppError(err.message, 404);
+        throw err;
+      }
+    }),
+  );
 }

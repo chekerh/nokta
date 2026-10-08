@@ -291,7 +291,57 @@ async function cmdFleet(args) {
     return;
   }
 
-  console.error('Usage: nokta fleet <list|add|remove|run> ...');
+  if (sub === 'plan') {
+    const [, project] = args;
+    const rest = args.slice(2);
+    let provider = 'opencode';
+    const parts = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '--provider' && rest[i + 1]) provider = rest[++i];
+      else parts.push(rest[i]);
+    }
+    const task = parts.join(' ');
+    if (!project || !task) {
+      console.error('Usage: nokta fleet plan <projectDir> "<task>" [--provider opencode|freebuff]');
+      process.exit(1);
+    }
+    const plan = await fleet.plan(project, task, { provider });
+    const enqueued = await fleet.enqueue(plan);
+    console.log(`Planned ${enqueued.id} for ${enqueued.provider} @ ${enqueued.cwd}`);
+    console.log(enqueued.prompt);
+    console.log(`\nRun it with: nokta fleet queue send ${enqueued.id}`);
+    return;
+  }
+
+  if (sub === 'queue') {
+    const sub2 = args[1];
+    if (!sub2 || sub2 === 'list') {
+      const items = await fleet.queueList();
+      if (items.length === 0) { console.log('Queue empty.'); return; }
+      for (const it of items) {
+        console.log(`• ${it.id}  [${it.status}]  ${it.provider}  ${it.cwd || it.project}`);
+      }
+      return;
+    }
+    if (sub2 === 'send') {
+      const id = args[2];
+      if (!id) { console.error('Usage: nokta fleet queue send <id>'); process.exit(1); }
+      try {
+        const res = await fleet.sendQueued(id);
+        console.log(`[${res.provider}] exit ${res.exitCode} in ${res.cwd}`);
+        if (res.stdout) console.log(res.stdout.slice(0, 4000));
+        if (res.stderr) console.error(res.stderr.slice(0, 2000));
+      } catch (err) {
+        console.error(err.message);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error('Usage: nokta fleet queue <list|send <id>>');
+    process.exit(1);
+  }
+
+  console.error('Usage: nokta fleet <list|add|remove|run|plan|queue|discover> ...');
   process.exit(1);
 }
 
@@ -759,7 +809,7 @@ Commands:
   agent [list|run]                 List items or run an agent task
   index                            Show project index/dashboard
   search <query>                   Semantic code search
-  fleet <list|add|remove|run|discover>  Track + drive opencode sessions across projects
+  fleet <list|add|remove|run|plan|queue|discover>  Track + drive opencode sessions across projects
   review-adversarial <file>        Adversarial code review (critic → implementer → critique)
   sandbox "<code>"                 Safe code execution in sandbox
 

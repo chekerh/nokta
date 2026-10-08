@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
+import { evaluateUiGates } from '../../compiler/lib/ui-gates.mjs';
 
 // Nokta's "fleet": the set of projects being driven by an external agent
 // harness (opencode TUI or freebuff). This is intentionally JSON on disk —
@@ -16,6 +17,25 @@ const HEADLESS_PROVIDERS = new Set(['opencode']);
 
 function fleetPath(projectRoot) {
   return path.join(projectRoot, '.nokta', 'fleet.json');
+}
+
+function queuePath(projectRoot) {
+  return path.join(projectRoot, '.nokta', 'fleet-queue.json');
+}
+
+async function loadQueue(projectRoot) {
+  try {
+    const raw = await fs.readFile(queuePath(projectRoot), 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.items) ? parsed.items : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveQueue(projectRoot, items) {
+  await fs.mkdir(path.dirname(queuePath(projectRoot)), { recursive: true });
+  await fs.writeFile(queuePath(projectRoot), JSON.stringify({ items }, null, 2));
 }
 
 async function loadFleet(projectRoot) {
@@ -126,6 +146,81 @@ export class FleetTransport {
       await saveFleet(this.projectRoot, data);
     }
     return { exitCode, stdout, stderr, project, provider, cwd: workingDir };
+  }
+
+  // Build the prompt bundle that actually gets sent to the agent for this
+  // project. Conserves goal/branch discovered from the live process list, and
+  // appends the current UI-gate health so the agent knows its constraints.
+  async plan(project, prompt, { provider = 'opencode' } = {}) {
+    const sessions = await loadFleet(this.projectRoot);
+    const entry = sessions.sessions.find((s) => s.project === project && s.provider === provider);
+    const cwd = entry?.cwd ? path.resolve(entry.cwd) : path.resolve(this.projectRoot, project || '.');
+    const discovered = discoverAgents().find(
+      (d) => path.resolve(d.projectRoot) === cwd || cwd.startsWith(path.resolve(d.projectRoot) + path.sep),
+    );
+    const uiResults = cwd && existsSync(path.join(cwd, 'daemon', 'public'))
+      ? evaluateUiGates(cwd)
+      : [];
+    const gateLines = uiResults
+      .filter((r) => r.status !== 'pass')
+      .map((r) => `- [${r.status.toUpperCase()}] ${r.gate}: ${r.message || ''}`)
+      .join('\n');
+    const bundle = [
+      `Project: ${cwd}`,
+      `Provider: ${provider}`,
+      `Discovered branch: ${discovered?.branch || 'unknown'}`,
+      `Discovered goal: ${discovered?.goal || '(not declared)'}`,
+      gateLines ? `Current UI gate failures to address first:\n${gateLines}` : 'Current UI gates: pass',
+      '',
+      `Task: ${prompt}`,
+    ].join('\n');
+    return {
+      project,
+      provider,
+      cwd,
+      goal: discovered?.goal || null,
+      branch: discovered?.branch || null,
+      uiGates: uiResults,
+      prompt: bundle,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  async enqueue(plan) {
+    const items = await loadQueue(this.projectRoot);
+    plan.id = plan.id || `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    plan.status = 'pending';
+    items.push(plan);
+    await saveQueue(this.projectRoot, items);
+    return plan;
+  }
+
+  async queueList() {
+    return loadQueue(this.projectRoot);
+  }
+
+  async sendQueued(id) {
+    const items = await loadQueue(this.projectRoot);
+    const entry = items.find((i) => i.id === id);
+    if (!entry) throw new Error(`Queued prompt ${id} not found`);
+    entry.status = 'running';
+    await saveQueue(this.projectRoot, items);
+    try {
+      const res = await this.run(entry.project, entry.prompt, { provider: entry.provider, cwd: entry.cwd });
+      entry.status = res.exitCode === 0 ? 'done' : 'failed';
+      entry.lastRunAt = new Date().toISOString();
+      entry.lastExitCode = res.exitCode;
+      entry.lastStdout = res.stdout.slice(-2000);
+      entry.lastStderr = res.stderr.slice(-2000);
+      await saveQueue(this.projectRoot, items);
+      return res;
+    } catch (err) {
+      entry.status = 'failed';
+      entry.lastRunAt = new Date().toISOString();
+      entry.lastError = err.message;
+      await saveQueue(this.projectRoot, items);
+      throw err;
+    }
   }
 }
 

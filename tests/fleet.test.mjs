@@ -43,6 +43,20 @@ test('fleet.run rejects freebuff as non-headless', async () => {
   );
 });
 
+test('fleet.plan produces a prompt bundle and enqueue/queue round-trips', async () => {
+  const dir = await tmpProject();
+  const fleet = new FleetTransport(dir);
+  const plan = await fleet.plan('projA', 'fix the kanban', { provider: 'opencode' });
+  assert.ok(plan.prompt.includes('fix the kanban'));
+  assert.equal(plan.provider, 'opencode');
+  const enqueued = await fleet.enqueue(plan);
+  assert.ok(enqueued.id);
+  const items = await fleet.queueList();
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, enqueued.id);
+  assert.equal(items[0].status, 'pending');
+});
+
 test('fleet persists sessions to .nokta/fleet.json', async () => {
   const dir = await tmpProject();
   const fleet = new FleetTransport(dir);
