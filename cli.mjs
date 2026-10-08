@@ -729,7 +729,7 @@ async function cmdSandbox(args) {
     process.exit(1);
   }
   const { SandboxManager } = await import('./daemon/lib/sandbox.mjs');
-  const sandbox = new SandboxManager({ log: logger });
+  const sandbox = new SandboxManager({ log: logger, useDocker: false });
   const result = await sandbox.exec(code, { fileName: 'exec.mjs' });
   const json = result.toJSON();
   if (json.passed) {

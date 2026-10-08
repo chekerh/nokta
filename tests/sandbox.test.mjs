@@ -50,8 +50,8 @@ test('SandboxResult has correct passed property', async () => {
   const { SandboxManager } = await import(path.join(DIR, 'daemon', 'lib', 'sandbox.mjs'));
   const sandbox = new SandboxManager({ useDocker: false });
 
-  const pass = await sandbox.exec('process.exit(0)', { fileName: 'pass.mjs' });
-  const fail = await sandbox.exec('process.exit(1)', { fileName: 'fail.mjs' });
+  const pass = await sandbox.exec('process.exit(0)', { fileName: 'pass.mjs', useDocker: false });
+  const fail = await sandbox.exec('process.exit(1)', { fileName: 'fail.mjs', useDocker: false });
 
   assert.equal(pass.passed, true);
   assert.equal(fail.passed, false);
