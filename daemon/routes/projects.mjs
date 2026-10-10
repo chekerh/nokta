@@ -38,7 +38,7 @@ export function registerProjectRoutes(app, projectManager) {
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       try {
-        await projectManager.removeProject(id);
+        await projectManager.removeProject(id, req.user?.id);
       } catch (err) {
         if (err.message.includes('not found')) {
           throw new AppError(err.message, 404);

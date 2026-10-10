@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { NOOP_LOG } from './route-utils.mjs';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MEMORY_LIMIT = '256m';
@@ -38,7 +39,7 @@ class SandboxResult {
 
 export class SandboxManager {
   constructor(options = {}) {
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this.timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
     this.memoryLimit = options.memoryLimit || DEFAULT_MEMORY_LIMIT;
     this.image = options.image || DEFAULT_IMAGE;

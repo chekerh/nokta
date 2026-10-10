@@ -24,13 +24,15 @@ import { getOpenApiSpec } from './lib/openapi.mjs';
 import { rateLimit, getAllProviderBucketStats } from './lib/rate-limit.mjs';
 import { registerSkillRoutes } from './routes/skills.mjs';
 import { registerPlannerRoutes } from './routes/planner.mjs';
+import { registerFleetRoutes } from './routes/fleet.mjs';
+import { FleetTransport } from './lib/fleet.mjs';
 import { registerAgentRunRoutes } from './routes/agent-runs.mjs';
 import { registerUiUxRoutes } from './routes/uiux.mjs';
 import { SprintEngine } from './lib/sprint-engine.mjs';
 import { AgentOrchestrator } from './agent/orchestrator.mjs';
 import { AutoWatcher } from './lib/auto-watcher.mjs';
 import { AgentJobQueue } from './agent/job-queue.mjs';
-import { authMiddleware } from './lib/auth.mjs';
+import { authMiddleware, bearerToken, verifyToken } from './lib/auth.mjs';
 import { runDiscovery } from './lib/discovery.mjs';
 import { requestIdMiddleware } from './lib/request-id.mjs';
 import { registerCleanup } from './lib/shutdown.mjs';
@@ -38,7 +40,6 @@ import { startAutoBackup } from './lib/backup.mjs';
 import { loadBlacklist, startBlacklistCleanup } from './lib/token-blacklist.mjs';
 import { registerTrustRoutes } from './routes/trust.mjs';
 import { DecisionEngine } from './lib/decision-engine.mjs';
-import { registerDecisionRoutes } from './routes/decisions.mjs';
 import { ProjectManager } from './lib/project-manager.mjs';
 import { UserBrain } from './lib/user-brain.mjs';
 import { registerProjectRoutes } from './routes/projects.mjs';
@@ -74,12 +75,29 @@ export async function createServer(options = {}) {
   const authToken = process.env.NOKTA_API_KEY;
   if (authToken) {
     app.use((req, res, next) => {
-      if (req.path === '/health') return next();
-      const provided = req.headers['authorization']?.replace(/^Bearer\s+/i, '');
-      if (provided !== authToken) {
-        return res.status(401).json({ error: 'Unauthorized', status: 401 });
+      if (
+        req.path === '/health' ||
+        req.path === '/api/v1/auth/login' ||
+        req.path === '/api/v1/auth/register' ||
+        req.path === '/api/v1/openapi.json' ||
+        req.path === '/api/v1/docs' ||
+        req.path === '/api/v1/billing/config' ||
+        req.path.startsWith('/lib/') ||
+        req.path.startsWith('/assets/') ||
+        req.path === '/' ||
+        req.path === '/index.html' ||
+        req.path === '/settings.html'
+      ) {
+        return next();
       }
-      next();
+      const provided = bearerToken(req);
+      if (provided === authToken) {
+        return next();
+      }
+      if (provided && verifyToken(provided)) {
+        return next();
+      }
+      return res.status(401).json({ error: 'Unauthorized', status: 401 });
     });
   }
 
@@ -107,7 +125,8 @@ export async function createServer(options = {}) {
   trackRoute('chat');
   registerCompleteRoutes(app, providerManager);
   trackRoute('complete');
-  registerAgentRoutes(app, providerManager, log);
+  // Agent routes are registered after the orchestrator and queue exist, because
+  // /api/v1/agents/:id/execute enqueues pack runs through them.
   trackRoute('agents');
   registerProviderRoutes(app, providerManager);
   trackRoute('providers');
@@ -142,6 +161,10 @@ export async function createServer(options = {}) {
   await registerBillingRoutes(app);
   trackRoute('billing');
 
+  const { registerAdminRoutes } = await import('./routes/admin.mjs');
+  registerAdminRoutes(app);
+  trackRoute('admin');
+
   const projectManager = new ProjectManager({ log });
   registerProjectRoutes(app, projectManager);
   trackRoute('projects');
@@ -159,30 +182,43 @@ export async function createServer(options = {}) {
   registerSkillEvolutionRoutes(app, projectRoot, log);
   trackRoute('skill-evolution');
 
-  const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler });
+  const decisionEngine = new DecisionEngine(projectRoot, { log });
+
+  // decisionEngine must be constructed before SprintEngine — SprintEngine keeps the
+  // reference at construction time, and every decision-link method hard-fails without it.
+  const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler, decisionEngine });
   registerPlannerRoutes(app, sprintEngine);
   trackRoute('planner');
 
-  const decisionEngine = new DecisionEngine(projectRoot, { log });
-  registerDecisionRoutes(app, decisionEngine);
-  trackRoute('decisions');
+  const fleet = new FleetTransport(projectRoot, { log });
+  registerFleetRoutes(app, fleet);
+  trackRoute('fleet');
 
   const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler, sprintEngine });
   const jobQueue = new AgentJobQueue({ concurrency: 2, log });
   jobQueue.start();
   registerAgentRunRoutes(app, orchestrator, log, jobQueue);
+  registerAgentRoutes(app, providerManager, log, orchestrator, jobQueue);
   trackRoute('agent-runs');
 
-  // Autonomous file watcher — watches, updates sprints, and creates agent runs
-  const watcher = new AutoWatcher(projectRoot, {
-    log,
-    debounceMs: 2000,
-    orchestrator,
-    sprintEngine,
-  });
-  watcher.start();
-
-  registerCleanup(() => watcher.stop());
+  // Autonomous file watcher — watches, updates sprints, and creates agent runs.
+  // It reacts to ANY file change, including edits a human is making by hand,
+  // and the run it triggers can commit the working tree. Set
+  // NOKTA_AUTO_WATCHER=false to keep the daemon read-mostly while doing
+  // manual work. Defaults to enabled so autonomous operation is unchanged.
+  const autoWatcherEnabled = process.env.NOKTA_AUTO_WATCHER !== 'false';
+  if (autoWatcherEnabled) {
+    const watcher = new AutoWatcher(projectRoot, {
+      log,
+      debounceMs: 2000,
+      orchestrator,
+      sprintEngine,
+    });
+    watcher.start();
+    registerCleanup(() => watcher.stop());
+  } else {
+    log.info('AutoWatcher disabled via NOKTA_AUTO_WATCHER=false', { module: 'daemon' });
+  }
   registerCleanup(() => jobQueue.stop());
 
   startAutoBackup();

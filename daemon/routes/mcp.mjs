@@ -1,14 +1,16 @@
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError, resolveSafeTarget } from '../lib/route-utils.mjs';
+import { authMiddleware } from '../lib/auth.mjs';
 
 const serverProcesses = new Map();
 const pendingRequests = new Map();
 let requestId = 0;
 
 async function loadMcpConfig(target) {
-  const configPath = path.join(target || process.cwd(), 'mcp-server-config.json');
+  const safeTarget = resolveSafeTarget(target);
+  const configPath = path.join(safeTarget, 'mcp-server-config.json');
   try {
     const data = await fs.readFile(configPath, 'utf8');
     return JSON.parse(data);
@@ -18,7 +20,12 @@ async function loadMcpConfig(target) {
 }
 
 function getServerProcess(config, log) {
-  const key = `${config.name}:${config.command || 'npx'}`;
+  const allowedCommands = ['npx', 'node', 'uvx'];
+  const command = config.command || 'npx';
+  if (!allowedCommands.includes(command)) {
+    throw new AppError(`Forbidden MCP server command: ${command}. Only npx, node, uvx are permitted.`, 403);
+  }
+  const key = `${config.name}:${command}`;
   if (serverProcesses.has(key)) {
     const existing = serverProcesses.get(key);
     if (existing.process.exitCode === null) return existing;
@@ -26,7 +33,8 @@ function getServerProcess(config, log) {
     serverProcesses.delete(key);
   }
 
-  const proc = spawn(config.command || 'npx', ['-y', `@modelcontextprotocol/server-${config.type || 'filesystem'}`], {
+  const serverType = (config.type || 'filesystem').replace(/[^a-zA-Z0-9_-]/g, '');
+  const proc = spawn(command, ['-y', `@modelcontextprotocol/server-${serverType}`], {
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: 30000,
   });
@@ -99,6 +107,7 @@ async function executeMcpTool(config, toolName, args, log) {
 export function registerMcpRoutes(app, log) {
   app.post(
     '/api/v1/mcp/execute',
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       const { serverId, toolName, args, target } = req.body;
       if (!serverId || !toolName) throw new AppError('serverId and toolName are required', 400);
@@ -114,6 +123,7 @@ export function registerMcpRoutes(app, log) {
 
   app.get(
     '/api/v1/mcp/servers',
+    authMiddleware(false),
     asyncHandler(async (req, res) => {
       const { target } = req.query;
       const servers = await loadMcpConfig(target);
@@ -123,10 +133,12 @@ export function registerMcpRoutes(app, log) {
 
   app.post(
     '/api/v1/mcp/servers',
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       const { target, servers } = req.body;
       if (!Array.isArray(servers)) throw new AppError('servers array is required', 400);
-      const configPath = path.join(target || process.cwd(), 'mcp-server-config.json');
+      const safeTarget = resolveSafeTarget(target);
+      const configPath = path.join(safeTarget, 'mcp-server-config.json');
       await fs.writeFile(configPath, JSON.stringify(servers, null, 2), 'utf8');
 
       for (const [key, entry] of serverProcesses) {

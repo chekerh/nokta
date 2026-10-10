@@ -14,6 +14,13 @@ export function sendSSEError(res, message, status = 500) {
 
 export function streamOllama(response, res, onToken, meta = {}) {
   const reader = response.body.getReader();
+  // Stop reading the upstream body when the client disconnects, otherwise the
+  // socket is already dead but we keep consuming tokens and buffering res.write.
+  res.on('close', () => {
+    try {
+      reader.cancel().catch(() => {});
+    } catch {}
+  });
   const decoder = new TextDecoder();
   let buffer = '';
 
@@ -55,11 +62,18 @@ export function streamOllama(response, res, onToken, meta = {}) {
     }
   }
 
-  read();
+  return read();
 }
 
 export function streamOpenAI(response, res, onToken, meta = {}) {
   const reader = response.body.getReader();
+  // Stop reading the upstream body when the client disconnects, otherwise the
+  // socket is already dead but we keep consuming tokens and buffering res.write.
+  res.on('close', () => {
+    try {
+      reader.cancel().catch(() => {});
+    } catch {}
+  });
   const decoder = new TextDecoder();
   let buffer = '';
 
@@ -94,11 +108,18 @@ export function streamOpenAI(response, res, onToken, meta = {}) {
     }
   }
 
-  read();
+  return read();
 }
 
 export function streamClaude(response, res, onToken, meta = {}) {
   const reader = response.body.getReader();
+  // Stop reading the upstream body when the client disconnects, otherwise the
+  // socket is already dead but we keep consuming tokens and buffering res.write.
+  res.on('close', () => {
+    try {
+      reader.cancel().catch(() => {});
+    } catch {}
+  });
   const decoder = new TextDecoder();
   let buffer = '';
 
@@ -131,5 +152,5 @@ export function streamClaude(response, res, onToken, meta = {}) {
     }
   }
 
-  read();
+  return read();
 }

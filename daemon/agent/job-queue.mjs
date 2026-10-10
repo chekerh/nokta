@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSafeEnv } from '../lib/safe-env.mjs';
+import { NOOP_LOG } from '../lib/route-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -10,7 +11,7 @@ export class AgentJobQueue extends EventEmitter {
   constructor(options = {}) {
     super();
     this.concurrency = options.concurrency || 2;
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this._queue = [];
     this._active = new Map();
     this._running = false;
@@ -89,15 +90,17 @@ export class AgentJobQueue extends EventEmitter {
 
     let stdout = '';
     let stderr = '';
+    let stdoutBuffer = '';
 
     worker.stdout.on('data', (data) => {
       stdout += data.toString();
-      // Parse progress lines
-      const lines = data
-        .toString()
-        .split('\n')
-        .filter((l) => l.trim());
+      // Keep a per-worker buffer: a JSON progress event split across two
+      // stdout chunks used to fail its second half and silently vanish.
+      stdoutBuffer += data.toString();
+      const lines = stdoutBuffer.split('\n');
+      stdoutBuffer = lines.pop() || '';
       for (const line of lines) {
+        if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line);
           if (msg.type) this.emit(msg.type, { runId, ...msg.data });

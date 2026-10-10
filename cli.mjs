@@ -37,19 +37,30 @@ function getGitBranch() {
   });
 }
 
+// execSync defaults to a 1 MiB buffer, which any real PR-sized diff exceeds.
+// Exceeding it raises ENOBUFS, which the old bare `catch` turned into a
+// misleading "No diff found" rather than an error.
+const MAX_DIFF_BUFFER = 128 * 1024 * 1024;
+
+// Returns { diff } on success, or { diff: '', error } when git itself failed.
+// An empty diff and a failed diff are different outcomes and must not be
+// conflated.
 function getDiff(branch) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     import('node:child_process')
       .then(({ execSync }) => {
         try {
           const base = branch === 'main' ? 'HEAD~1' : 'main';
-          const diff = execSync(`git diff ${base}...HEAD`, { encoding: 'utf8' });
-          resolve(diff);
-        } catch {
-          resolve('');
+          const diff = execSync(`git diff ${base}...HEAD`, {
+            encoding: 'utf8',
+            maxBuffer: MAX_DIFF_BUFFER,
+          });
+          resolve({ diff });
+        } catch (error) {
+          resolve({ diff: '', error });
         }
       })
-      .catch(reject);
+      .catch((error) => resolve({ diff: '', error }));
   });
 }
 
@@ -59,7 +70,16 @@ async function cmdReviewPr(args) {
   const log = logger.child ? logger.child({ module: 'cli' }) : logger;
 
   log.info(`Reviewing branch: ${branch}`);
-  const diff = await getDiff(branch);
+  const { diff, error } = await getDiff(branch);
+
+  if (error) {
+    log.error('Could not compute the diff', {
+      branch,
+      cause: error.code || error.message,
+    });
+    process.exitCode = 1;
+    return;
+  }
 
   if (!diff) {
     console.log('No diff found. Make sure you have commits to review.');
@@ -106,7 +126,16 @@ async function cmdReviewBranch(args) {
   const log = logger.child ? logger.child({ module: 'cli' }) : logger;
 
   log.info(`Reviewing branch: ${branch}`);
-  const diff = await getDiff(branch);
+  const { diff, error } = await getDiff(branch);
+
+  if (error) {
+    log.error('Could not compute the diff', {
+      branch,
+      cause: error.code || error.message,
+    });
+    process.exitCode = 1;
+    return;
+  }
 
   if (!diff) {
     console.log('No diff found. Make sure you have commits to review.');
@@ -162,6 +191,8 @@ async function cmdGates(args) {
   console.log(`Evaluating trail gates for: ${target}`);
   const { evaluateTrailGates } = await import('./compiler/lib/gates.mjs');
   const results = evaluateTrailGates(target);
+  const { evaluateUiGates } = await import('./compiler/lib/ui-gates.mjs');
+  results.push(...evaluateUiGates(target));
   for (const r of results) {
     const status = r.status.toUpperCase();
     const remediation = r.remediation ? ` → ${r.remediation}` : '';
@@ -174,6 +205,154 @@ async function cmdGates(args) {
   } else {
     console.log('\nAll gates passed.');
   }
+}
+
+async function cmdFleet(args) {
+  const sub = args[0];
+  const projectRoot = process.cwd();
+  const { FleetTransport, scanRunningAgents } = await import('./daemon/lib/fleet.mjs');
+  const fleet = new FleetTransport(projectRoot, { log: undefined });
+
+  if (sub === 'discover') {
+    const { discoverAgents } = await import('./daemon/lib/fleet.mjs');
+    const agents = discoverAgents();
+    if (agents.length === 0) { console.log('No live agent sessions detected.'); return; }
+    const register = args.includes('--register');
+    const seen = new Set();
+    for (const a of agents) {
+      console.log(`• ${a.command.includes('freebuff') ? 'freebuff' : 'opencode'} pid=${a.pid} root=${a.projectRoot}${a.branch ? ` branch=${a.branch}` : ''}`);
+      if (a.goal) console.log(`    goal: ${a.goal}`);
+      if (register) {
+        const provider = a.command.includes('freebuff') ? 'freebuff' : 'opencode';
+        const key = `${provider}:${a.projectRoot}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        await fleet.register({ project: a.projectRoot, provider, pid: a.pid, cwd: a.projectRoot });
+      }
+    }
+    if (register && seen.size > 0) console.log(`Registered ${seen.size} session(s) into the fleet.`);
+    return;
+  }
+
+  if (sub === 'list' || sub === undefined) {
+    const sessions = await fleet.list();
+    if (sessions.length === 0) console.log('No fleet sessions registered.');
+    for (const s of sessions) console.log(`  • ${s.provider.padEnd(9)} ${s.project}\t(from ${s.cwd})${s.port ? ` [port ${s.port}]` : ''}${s.lastError ? ` [ERR ${s.lastError}]` : ''}`);
+    const running = scanRunningAgents().filter((r) => /opencode|freebuff/.test(r.command));
+    if (running.length > 0) {
+      console.log('\nLive harness processes (not yet in fleet):');
+      for (const r of running) console.log(`  pid ${String(r.pid).padEnd(7)} cmd: ${r.command.slice(0, 80)}`);
+    }
+    return;
+  }
+
+  if (sub === 'add') {
+    const [, project, provider = 'opencode', ...rest] = args;
+    if (!project) {
+      console.error('Usage: nokta fleet add <projectDir> [opencode|freebuff] [--port N] [--pid N]');
+      process.exit(1);
+    }
+    let port;
+    let pid;
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '--port' && rest[i + 1]) port = Number(rest[++i]);
+      if (rest[i] === '--pid' && rest[i + 1]) pid = Number(rest[++i]);
+    }
+    const entry = await fleet.register({ project, provider, port, pid });
+    console.log(`Registered ${entry.provider} on ${entry.project}${entry.port ? ` (port ${entry.port})` : ''}`);
+    return;
+  }
+
+  if (sub === 'remove') {
+    const [, project, provider] = args;
+    if (!project) {
+      console.error('Usage: nokta fleet remove <projectDir> [provider]');
+      process.exit(1);
+    }
+    const removed = await fleet.forget(project, provider);
+    console.log(`Removed ${removed} session(s)`);
+    return;
+  }
+
+  if (sub === 'run') {
+    const [, project] = args;
+    const rest = args.slice(2);
+    let provider = 'opencode';
+    const promptParts = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '--provider' && rest[i + 1]) provider = rest[++i];
+      else promptParts.push(rest[i]);
+    }
+    const prompt = promptParts.join(' ');
+    if (!project || !prompt) {
+      console.error('Usage: nokta fleet run <projectDir> "<prompt>" [--provider opencode|freebuff]');
+      process.exit(1);
+    }
+    try {
+      const res = await fleet.run(project, prompt, { provider });
+      console.log(`[${res.provider}] exit ${res.exitCode} in ${res.cwd}`);
+      if (res.stdout) console.log(res.stdout.slice(0, 4000));
+      if (res.stderr) console.error(res.stderr.slice(0, 2000));
+      if (res.exitCode !== 0) process.exit(res.exitCode ?? 1);
+    } catch (err) {
+      console.error(err.message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (sub === 'plan') {
+    const [, project] = args;
+    const rest = args.slice(2);
+    let provider = 'opencode';
+    const parts = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '--provider' && rest[i + 1]) provider = rest[++i];
+      else parts.push(rest[i]);
+    }
+    const task = parts.join(' ');
+    if (!project || !task) {
+      console.error('Usage: nokta fleet plan <projectDir> "<task>" [--provider opencode|freebuff]');
+      process.exit(1);
+    }
+    const plan = await fleet.plan(project, task, { provider });
+    const enqueued = await fleet.enqueue(plan);
+    console.log(`Planned ${enqueued.id} for ${enqueued.provider} @ ${enqueued.cwd}`);
+    console.log(enqueued.prompt);
+    console.log(`\nRun it with: nokta fleet queue send ${enqueued.id}`);
+    return;
+  }
+
+  if (sub === 'queue') {
+    const sub2 = args[1];
+    if (!sub2 || sub2 === 'list') {
+      const items = await fleet.queueList();
+      if (items.length === 0) { console.log('Queue empty.'); return; }
+      for (const it of items) {
+        console.log(`• ${it.id}  [${it.status}]  ${it.provider}  ${it.cwd || it.project}`);
+      }
+      return;
+    }
+    if (sub2 === 'send') {
+      const id = args[2];
+      if (!id) { console.error('Usage: nokta fleet queue send <id>'); process.exit(1); }
+      try {
+        const res = await fleet.sendQueued(id);
+        console.log(`[${res.provider}] exit ${res.exitCode} in ${res.cwd}`);
+        if (res.stdout) console.log(res.stdout.slice(0, 4000));
+        if (res.stderr) console.error(res.stderr.slice(0, 2000));
+      } catch (err) {
+        console.error(err.message);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error('Usage: nokta fleet queue <list|send <id>>');
+    process.exit(1);
+  }
+
+  console.error('Usage: nokta fleet <list|add|remove|run|plan|queue|discover> ...');
+  process.exit(1);
 }
 
 async function cmdDetect(args) {
@@ -458,18 +637,15 @@ async function cmdAgent(args) {
     console.log(`Running agent task: ${task}`);
     const providerManager = new ProviderManager({ log });
     await providerManager.initDefaults();
-    const { JobQueue } = await import('./daemon/agent/job-queue.mjs');
-    const { JobWorker } = await import('./daemon/agent/job-worker.mjs');
-    const jobQueue = new JobQueue(log);
-    await jobQueue.init();
-    const worker = new JobWorker({ projectRoot, log, providerManager, jobQueue });
-    await worker.start();
-    const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, jobQueue });
+    const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager });
     const run = await orchestrator.runTask(task);
     console.log(`\nRun complete: ${run.status}`);
+    if (run.steps && Array.isArray(run.steps)) {
+      for (const step of run.steps) {
+        console.log(`  - [${step.status || 'pending'}] ${step.name}`);
+      }
+    }
     if (run.result) console.log(run.result);
-    await worker.stop();
-    await jobQueue.close();
     return;
   }
 
@@ -553,7 +729,7 @@ async function cmdSandbox(args) {
     process.exit(1);
   }
   const { SandboxManager } = await import('./daemon/lib/sandbox.mjs');
-  const sandbox = new SandboxManager({ log: logger });
+  const sandbox = new SandboxManager({ log: logger, useDocker: false });
   const result = await sandbox.exec(code, { fileName: 'exec.mjs' });
   const json = result.toJSON();
   if (json.passed) {
@@ -631,7 +807,7 @@ Usage:
 
 Commands:
   compile <target> [--out <file>]  Compile context for a project
-  gates <target>                   Evaluate trail gates
+  gates <target>                   Evaluate trail + rendered-UI gates
   detect <target>                  Detect project stack
   review-pr [branch]               Review PR on a branch
   review-branch [branch]           Review a branch
@@ -643,6 +819,7 @@ Commands:
   agent [list|run]                 List items or run an agent task
   index                            Show project index/dashboard
   search <query>                   Semantic code search
+  fleet <list|add|remove|run|plan|queue|discover>  Track + drive opencode sessions across projects (fleet discover --register persists live ones)
   review-adversarial <file>        Adversarial code review (critic → implementer → critique)
   sandbox "<code>"                 Safe code execution in sandbox
 
@@ -688,6 +865,7 @@ const commands = {
   agent: cmdAgent,
   index: cmdIndex,
   search: cmdSearch,
+  fleet: cmdFleet,
   'review-adversarial': cmdReviewAdversarial,
   sandbox: cmdSandbox,
   skills: cmdSkills,

@@ -1,8 +1,93 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { ScopeEnforcer } from '../lib/scope-enforcer.mjs';
 import { ProductionGate } from '../lib/production-gate.mjs';
+import { evaluateUiGates } from '../../compiler/lib/ui-gates.mjs';
+import { findSecretLikePaths } from '../lib/secret-paths.mjs';
+import { createSafeEnv } from '../lib/safe-env.mjs';
+
+const READ_COMMANDS = new Set([
+  'ls',
+  'cat',
+  'head',
+  'tail',
+  'wc',
+  'grep',
+  'find',
+  'stat',
+  'file',
+  'du',
+  'tree',
+  'pwd',
+  'echo',
+  'sort',
+  'uniq',
+  'cut',
+  'awk',
+  'sed',
+  'tr',
+  'diff',
+  'basename',
+  'dirname',
+  'realpath',
+  'which',
+  'jq',
+]);
+const GIT_READ_SUBCOMMANDS = new Set([
+  'ls-files',
+  'log',
+  'show',
+  'status',
+  'diff',
+  'branch',
+  'rev-parse',
+  'shortlog',
+  'blame',
+  'describe',
+]);
+const READ_FILTERS = new Set([
+  'head',
+  'tail',
+  'wc',
+  'sort',
+  'uniq',
+  'grep',
+  'cut',
+  'tr',
+  'sed',
+  'awk',
+  'jq',
+  'cat',
+  'fgrep',
+  'egrep',
+]);
+
+// Deny the shell metacharacters that make an allowlist meaningless.
+const SHELL_UNSAFE = /[;&<>`$(){}\[\]!*?\\\n\r]/;
+
+// True only if every stage of the pipeline is a permitted read command. This
+// still allows `git ls-files | head -50` while rejecting `git ls-files | sh`.
+export function isReadOnlyCommand(command) {
+  if (typeof command !== 'string' || !command.trim()) return false;
+  if (SHELL_UNSAFE.test(command)) return false;
+  const stages = command.split('|').map((s) => s.trim());
+  return stages.every((stage, index) => {
+    const parts = stage.split(/\s+/);
+    const program = parts[0];
+    if (program === 'git') {
+      if (index !== 0) return false;
+      // The subcommand is the first argument after `git` that is not a global
+      // flag. parts[0] is 'git' itself, which is why this skips index 0.
+      const sub = parts.slice(1).find((p) => !p.startsWith('-'));
+      return GIT_READ_SUBCOMMANDS.has(sub);
+    }
+    // Only the first stage may be a plain read command; the rest are filters.
+    if (index === 0) return READ_COMMANDS.has(program);
+    return READ_FILTERS.has(program);
+  });
+}
 
 export function makeId() {
   return 'run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
@@ -27,6 +112,56 @@ export function createRunConfig(opts = {}) {
   };
 }
 
+// Builds a user turn for a prompt step that declares no messages of its own.
+// Without this, a step like {systemPrompt} only (an empty messages array is
+// truthy, so it used to win the `step.messages || messages` fallback) sent the
+// model a system prompt and nothing else, and the model free-associated.
+function synthesizeUserTurn(run, step) {
+  const parts = [];
+  if (run?.goal) parts.push(`Goal: ${run.goal}`);
+  // Feed back earlier step output so later steps build on earlier ones instead
+  // of restarting from nothing.
+  const prior = (run?.output || [])
+    .filter((r) => r && r.status !== 'failed' && r.output)
+    .slice(-4)
+    .map((r) => `--- ${r.step} (${r.type}) ---\n${String(r.output).slice(0, 2000)}`);
+  if (prior.length) parts.push(`Work completed so far:\n${prior.join('\n\n')}`);
+  if (step?.name) parts.push(`Report: "${step.name}"`);
+  return parts.join('\n\n') || 'Proceed.';
+}
+
+/**
+ * Write file content, refusing to persist JavaScript that does not parse.
+ *
+ * The check runs against a temp sibling with the same extension so that
+ * `node --check` applies the right module goal. A step that would leave a file
+ * unparseable fails the step and leaves the original file untouched, which is
+ * what turns "the run broke my file" into "the run reported a bad step".
+ */
+async function writeChecked(resolved, content, stepResult, step) {
+  if (/\.(mjs|cjs|js)$/.test(resolved)) {
+    const tmp = path.join(
+      path.dirname(resolved),
+      `.nokta-syntax-check-${process.pid}-${Math.random().toString(36).slice(2)}.${path.extname(resolved).slice(1)}`,
+    );
+    try {
+      await fs.writeFile(tmp, content, 'utf8');
+      execFileSync('node', ['--check', tmp], { stdio: 'pipe', timeout: 10000 });
+    } catch (err) {
+      const detail = (err.stderr || err.stdout || err.message || '')
+        .toString()
+        .split('\n')
+        .slice(0, 4)
+        .join(' ')
+        .trim();
+      throw new Error(`Refusing to write ${step.file}: the content does not parse as JavaScript. ${detail}`);
+    } finally {
+      await fs.rm(tmp, { force: true }).catch(() => {});
+    }
+  }
+  await fs.writeFile(resolved, content, 'utf8');
+}
+
 export async function executeStep(run, step, context = {}) {
   const startTime = Date.now();
   const stepResult = {
@@ -42,7 +177,13 @@ export async function executeStep(run, step, context = {}) {
     switch (step.type) {
       case 'prompt': {
         const { chatHandler, messages, systemPrompt } = context;
-        const msgs = step.messages || messages || [];
+        const stepMessages = step.messages;
+        const msgs =
+          Array.isArray(stepMessages) && stepMessages.length
+            ? stepMessages
+            : Array.isArray(messages) && messages.length
+              ? messages
+              : [{ role: 'user', content: synthesizeUserTurn(run, step) }];
         const sys = step.systemPrompt || systemPrompt || 'You are a senior software engineer. Be concise and correct.';
         const fullMessages = [{ role: 'system', content: sys }, ...msgs];
         const result = await chatHandler.handleChat(fullMessages, {
@@ -60,15 +201,85 @@ export async function executeStep(run, step, context = {}) {
         break;
       }
 
+      case 'inspect': {
+        // Read-only evidence gathering. A `prompt` step has no tools, so an agent
+        // asked to describe the codebase could only answer from generic skill
+        // text and invent file paths. This lets it actually look.
+        //
+        // The boundary is an allowlist, not a denylist: only these commands may
+        // run, only piped into these read-only filters, and never with a
+        // redirect, subshell, or background operator. Runs execute in an isolated
+        // worktree, but a read step should not need that to be safe.
+        const commands = Array.isArray(step.commands) ? step.commands : [step.command].filter(Boolean);
+        if (!commands.length) throw new Error('commands is required for inspect step');
+        const projectRoot = path.resolve(context.projectRoot || process.cwd());
+        const chunks = [];
+        for (const command of commands) {
+          if (typeof command !== 'string' || !isReadOnlyCommand(command)) {
+            throw new Error(`Command not permitted in inspect step: ${String(command).slice(0, 120)}`);
+          }
+          const { stdout, stderr } = spawnSync('bash', ['-c', command], {
+            cwd: projectRoot,
+            encoding: 'utf8',
+            timeout: step.timeout || 20000,
+            maxBuffer: 4 * 1024 * 1024,
+            env: createSafeEnv(),
+          });
+          if (stdout?.trim()) chunks.push(`$ ${command}\n${stdout.trim().slice(0, 20000)}`);
+          if (stderr?.trim()) chunks.push(`$ ${command} (stderr)\n${stderr.trim().slice(0, 2000)}`);
+          if (stdout === null && stderr === null) {
+            chunks.push(`$ ${command}\n(no output)`);
+          }
+        }
+        stepResult.output = chunks.join('\n\n') || '(no output)';
+        stepResult.meta = { readOnly: true, commands: commands.length };
+        break;
+      }
+
       case 'shell': {
         const cmd = step.command;
-        const cwd = step.cwd || context.projectRoot || process.cwd();
+        if (!cmd || typeof cmd !== 'string') {
+          throw new Error('Command is required for shell step');
+        }
+        if (
+          /rm\s+(-rf|--recursive)\s+(\/|~\/|\*)/i.test(cmd) ||
+          />\s*\/dev\/(sd[a-z]|nvme)/i.test(cmd) ||
+          /mkfs/i.test(cmd)
+        ) {
+          throw new Error('Destructive shell command blocked by security guard');
+        }
+        const projectRoot = path.resolve(context.projectRoot || process.cwd());
+        let cwd = step.cwd ? path.resolve(projectRoot, step.cwd) : projectRoot;
+        if (!cwd.startsWith(projectRoot)) {
+          cwd = projectRoot;
+        }
+        // A missing cwd makes spawnSync fail with a misleading
+        // "spawnSync bash ENOENT" that looks like bash is unavailable. Check it
+        // explicitly so a bad plan reports what is actually wrong.
+        if (step.cwd) {
+          const stat = await fs.stat(cwd).catch(() => null);
+          if (!stat?.isDirectory()) {
+            const entries = await fs
+              .readdir(projectRoot, { withFileTypes: true })
+              .then((list) =>
+                list
+                  .filter((e) => !e.name.startsWith('.'))
+                  .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
+                  .slice(0, 25),
+              )
+              .catch(() => []);
+            throw new Error(
+              `Working directory does not exist: ${step.cwd}. Available in project root: ${entries.join(' ') || '(empty)'}`,
+            );
+          }
+        }
         try {
           const stdout = execFileSync('bash', ['-c', cmd], {
             cwd,
             encoding: 'utf8',
             timeout: step.timeout || 30000,
             maxBuffer: 1024 * 1024,
+            env: createSafeEnv(),
           });
           stepResult.output = stdout.trim();
           stepResult.exitCode = 0;
@@ -85,7 +296,9 @@ export async function executeStep(run, step, context = {}) {
       }
 
       case 'scope': {
-        const scopeEnforcer = context.scopeEnforcer || new ScopeEnforcer();
+        // Reuse the run's enforcer so declared scope and mutation history stay
+        // on one instance even if a step edited before this point.
+        const scopeEnforcer = (context.scopeEnforcer ||= new ScopeEnforcer());
         scopeEnforcer.declareScope(run.id, {
           allowedFiles: step.allowedFiles || [],
           blockedFiles: step.blockedFiles || [],
@@ -94,7 +307,6 @@ export async function executeStep(run, step, context = {}) {
           maxFilesChanged: step.maxFilesChanged || 10,
           maxLinesChanged: step.maxLinesChanged || 500,
         });
-        context.scopeEnforcer = scopeEnforcer;
         stepResult.output = 'Scope declared';
         stepResult.meta = { scope: step };
         break;
@@ -107,13 +319,26 @@ export async function executeStep(run, step, context = {}) {
           throw new Error(`Path traversal detected: ${step.file} resolves outside project root`);
         }
 
-        if (context.scopeEnforcer) {
-          const check = context.scopeEnforcer.validateMutation(run.id, { file: step.file, operation: 'edit' });
-          if (!check.allowed) throw new Error(`Scope violation: ${check.reason}`);
+        // Validate the step's own shape before consulting policy, so a
+        // malformed step is reported as malformed rather than as a scope
+        // violation it never got far enough to commit.
+        const newContent = step.content;
+        if (typeof newContent !== 'string') {
+          throw new Error('content is required for edit step');
         }
 
+        // Always enforce, and always record. This used to be conditional on
+        // `context.scopeEnforcer` existing, which it only did if the plan
+        // happened to contain a scope step — so a plan without one had no
+        // enforcement at all. A scope that names targets further narrows this.
+        const scopeEnforcer = (context.scopeEnforcer ||= new ScopeEnforcer());
+        const check = scopeEnforcer.validateMutation(run.id, { file: step.file, operation: 'edit' });
+        if (!check.allowed) throw new Error(`Scope violation: ${check.reason}`);
+
         const existing = await fs.readFile(resolved, 'utf8').catch(() => '');
-        const newContent = step.content;
+        // Creating a new file implies creating its parent directory; without this
+        // a legitimate "add src/foo.js" plan fails with ENOENT.
+        await fs.mkdir(path.dirname(resolved), { recursive: true });
         if (step.oldString) {
           if (!existing.includes(step.oldString)) {
             throw new Error(`oldString not found in ${step.file}`);
@@ -122,17 +347,28 @@ export async function executeStep(run, step, context = {}) {
           if (updated === existing) {
             throw new Error(`No changes made to ${step.file}`);
           }
-          await fs.writeFile(resolved, updated, 'utf8');
+          await writeChecked(resolved, updated, stepResult, step);
           stepResult.output = `Replaced in ${step.file}`;
         } else {
-          await fs.writeFile(resolved, newContent, 'utf8');
+          // Without oldString the write replaces the entire file. A planner that
+          // emits only the snippet it wants to add — instead of the whole new file
+          // body — silently deletes everything else in the file. This happened for
+          // real: a 258-line module was replaced by a 5-line stub, 257 lines gone,
+          // and the damage was only noticed because a later lint step failed. Scope
+          // enforcement bounds which files may be touched, not what happens to their
+          // contents, so replacing an existing file has to be an explicit decision.
+          if (existing.length > 0 && step.overwrite !== true) {
+            const lines = existing.split('\n').length;
+            throw new Error(
+              `Refusing to replace all of ${step.file} (${lines} existing lines): an edit step must supply 'oldString' to replace part of a file, or an explicit "overwrite": true to replace the whole file`,
+            );
+          }
+          await writeChecked(resolved, newContent, stepResult, step);
           stepResult.output = `Wrote ${step.file}`;
         }
         stepResult.meta = { file: step.file };
 
-        if (context.scopeEnforcer) {
-          context.scopeEnforcer.recordMutation(run.id, { file: step.file, operation: 'edit', withinScope: true });
-        }
+        scopeEnforcer.recordMutation(run.id, { file: step.file, operation: 'edit', withinScope: true });
         break;
       }
 
@@ -147,6 +383,18 @@ export async function executeStep(run, step, context = {}) {
             diff = '';
           }
         }
+
+        // The review needs the sprint engine. Every construction site now
+        // provides it, but dereferencing null here crashed the entire run with
+        // "Cannot read properties of null" and told the reader nothing. A
+        // skipped review is recoverable; a failed run is not.
+        if (!sprintEngine) {
+          stepResult.status = 'skipped';
+          stepResult.output = 'Skipped: no review engine available in this run context';
+          stepResult.meta = { skipped: true, reason: 'sprintEngine unavailable' };
+          break;
+        }
+
         const result = await sprintEngine.reviewPR(branch, diff, {});
         stepResult.output = result.summary;
         stepResult.meta = { commentsCount: result.comments?.length || 0, errors: result.summary.errors };
@@ -159,10 +407,38 @@ export async function executeStep(run, step, context = {}) {
             passed: gateResult.passed,
             summary: gateResult.summary,
           };
+          // Production readiness stays advisory — only the gates below the empty-line
+          // separate are hard blockers. Failing closed here would block every edit whose
+          // diff lacks the heuristies unchanged.
           if (!gateResult.passed) {
             stepResult.status = 'completed';
             stepResult.meta.warning = 'Production readiness gate failed';
           }
+        }
+        // UI finish gate: a task does not count as done until the rendered-UI
+        // checks in compiler/lib/ui-gates.mjs pass on the current project state.
+        const uiTarget = context.projectRoot || process.cwd();
+        const hasUi = existsSync(path.join(uiTarget, 'daemon', 'public'));
+        const uiResults = hasUi
+          ? evaluateUiGates(uiTarget)
+          : [{ gate: 'ui.ui-present', status: 'skipped', message: 'No daemon/public present; UI gate skipped' }];
+        if (hasUi) {
+          uiResults.forEach((r) => {
+            if (r.status === 'fail') r.message = `[fail] ${r.message}`;
+          });
+        }
+        const uiErrors = uiResults.filter(
+          (r) => r.status === 'fail' && (r.gate === 'ui.class-has-style' || r.gate === 'ui.inline-handler-defined' || r.gate === 'ui.api-route-exists'),
+        );
+        stepResult.meta = stepResult.meta || {};
+        stepResult.meta.uiGates = {
+          passed: uiErrors.length === 0,
+          skipped: !hasUi,
+          details: uiResults.map((r) => ({ gate: r.gate, status: r.status, message: r.message })),
+        };
+        if (uiErrors.length > 0) {
+          stepResult.status = 'failed';
+          stepResult.output = `UI gate blocked: ${uiErrors.map((r) => `${r.gate}: ${r.message}`).join(' | ')}`;
         }
         break;
       }
@@ -204,11 +480,42 @@ export async function executeStep(run, step, context = {}) {
                 execFileSync('git', ['checkout', prHead], { cwd, stdio: 'ignore' });
               } catch {}
             }
+            // `git add .` stages every untracked file, so anything missing from
+            // .gitignore would be committed and pushed. Refuse rather than
+            // leak, and name the offending paths.
+            let staged;
+            try {
+              staged = execFileSync('git', ['status', '--porcelain'], {
+                cwd,
+                encoding: 'utf8',
+                maxBuffer: 8 * 1024 * 1024,
+              });
+            } catch (statusErr) {
+              throw new Error(`Failed to inspect working tree: ${statusErr.message}`);
+            }
+            const unsafe = findSecretLikePaths(staged);
+            if (unsafe.length > 0) {
+              throw new Error(
+                `Refusing to commit: untracked secret-like files present (${unsafe.slice(0, 5).join(', ')}). ` +
+                  'Add them to .gitignore, or remove them, before creating a PR.',
+              );
+            }
             try {
               execFileSync('git', ['add', '.'], { cwd, stdio: 'ignore' });
-              execFileSync('git', ['commit', '-m', prTitle, '--no-verify'], { cwd, stdio: 'ignore' });
-              execFileSync('git', ['push', '-u', 'origin', prHead, '--force'], { cwd, stdio: 'ignore' });
-            } catch {}
+              // Hooks stay on: an automated commit must not bypass the same
+              // lint/tests/gates a local one is required to pass.
+              execFileSync('git', ['commit', '-m', prTitle], { cwd, stdio: 'ignore' });
+              // --force-with-lease, not --force: a blind force push can destroy
+              // commits on the remote that this run never saw.
+              execFileSync('git', ['push', '-u', 'origin', prHead, '--force-with-lease'], {
+                cwd,
+                stdio: 'ignore',
+              });
+            } catch (gitErr) {
+              // Previously swallowed entirely, which made a failed commit or a
+              // rejected push indistinguishable from success.
+              throw new Error(`Git commit/push failed: ${gitErr.message}`);
+            }
 
             const ghArgs = ['pr', 'create', '--title', prTitle, '--body', prBody, '--head', prHead, '--base', prBase];
             const stdout = execFileSync('gh', ghArgs, { cwd, encoding: 'utf8', timeout: 30000 });
@@ -236,7 +543,12 @@ export async function executeStep(run, step, context = {}) {
         throw new Error(`Unknown step type: ${step.type}`);
     }
 
-    stepResult.status = 'completed';
+    // A case that already decided its own terminal status — `skipped` for a
+    // review with no engine — keeps it. The unconditional assignment here used
+    // to overwrite that decision.
+    if (stepResult.status === 'running') {
+      stepResult.status = 'completed';
+    }
   } catch (err) {
     if (stepResult.status !== 'completed') {
       stepResult.status = 'failed';

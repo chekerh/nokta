@@ -14,7 +14,7 @@ export class OpenRouterProvider extends Provider {
   async _request(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
-      timeout: this.timeout,
+      signal: options.signal ?? AbortSignal.timeout(options.timeout ?? this.timeout),
       ...options,
       headers: {
         'Content-Type': 'application/json',

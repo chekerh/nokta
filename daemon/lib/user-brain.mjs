@@ -1,8 +1,9 @@
 import { prepare } from '../db/connection.mjs';
+import { NOOP_LOG } from './route-utils.mjs';
 
 export class UserBrain {
   constructor(options = {}) {
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
   }
 
   async getBrain(userId) {

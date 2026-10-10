@@ -85,7 +85,6 @@ export function createToken(payload) {
 
 export function verifyToken(token) {
   try {
-    if (isBlacklisted(token)) return null;
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const secret = getSecret();
@@ -95,19 +94,26 @@ export function verifyToken(token) {
     if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (payload.jti && isBlacklisted(payload.jti)) return null;
     return payload;
   } catch {
     return null;
   }
 }
 
+// One place to pull the bearer token off a request. The scheme match is
+// case-insensitive per RFC 7235 — `Bearer ` alone rejected `bearer <token>`.
+// Anchored so a non-Bearer scheme (`Basic …`) is rejected rather than passed
+// through as if its credentials were the token.
+export function bearerToken(req) {
+  const header = (req.headers?.['authorization'] || '').trim();
+  const match = /^Bearer\s+(\S.*)$/i.exec(header);
+  return match ? match[1].trim() : null;
+}
+
 export function authMiddleware(required = true) {
   return (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    let token = null;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.slice(7);
-    }
+    const token = bearerToken(req);
 
     if (!token) {
       if (required) return res.status(401).json({ error: 'Authentication required', status: 401 });
@@ -135,11 +141,23 @@ export function authMiddleware(required = true) {
 }
 
 export function blacklistCurrentToken(req) {
-  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+  const token = bearerToken(req);
   if (token) {
     const payload = verifyToken(token);
     if (payload?.jti) {
       blacklistToken(payload.jti, new Date(payload.exp * 1000).toISOString());
     }
   }
+}
+
+export function requireRole(role) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required', status: 401 });
+    }
+    if (req.user.role !== role) {
+      return res.status(403).json({ error: `Forbidden: requires ${role} role`, status: 403 });
+    }
+    next();
+  };
 }

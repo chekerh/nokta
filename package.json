@@ -10,13 +10,15 @@
   "scripts": {
     "daemon": "node daemon/index.mjs daemon",
     "compile": "node compiler/nokta-compile.mjs",
-    "gates": "node compiler/nokta-gates.mjs",
+    "gates": "node compiler/nokta-gates.mjs && node compiler/nokta-ui-gates.mjs",
+    "gates:ui": "node compiler/nokta-ui-gates.mjs",
     "init": "node compiler/nokta-init.mjs",
     "test": "for f in tests/*.test.mjs; do node --test \"$f\" || exit 1; done",
     "test:ci": "for f in tests/*.test.mjs; do node --test \"$f\" || exit 1; done",
     "lint": "eslint '**/*.mjs' --max-warnings 0",
     "format": "prettier --write '**/*.mjs' '**/*.json' '**/*.md'",
-    "format:check": "prettier --check '**/*.mjs' '**/*.json' '**/*.md'"
+    "format:check": "prettier --check '**/*.mjs' '**/*.json' '**/*.md'",
+    "workspace": "node scripts/start-workspace.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "eslint": "^9.0.0",
+    "playwright": "^1.64.0",
     "prettier": "^3.0.0"
   }
 }

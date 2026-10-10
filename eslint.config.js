@@ -1,6 +1,8 @@
 export default [
+  // Global ignores — a standalone entry so vendored/third-party trees (upstream/ECC
+  // etc.) are never linted, even for files this config doesn't otherwise cover.
+  { ignores: ['upstream/**', 'packs/**', 'agents/**', 'adapters/**', 'trail-template/**', 'sources/**', 'schemas/**', '.nokta/**', 'daemon/public/**', 'node_modules/**', 'landing/**', 'graphify-out/**'] },
   {
-    ignores: ['upstream/**', 'packs/**', 'agents/**', 'adapters/**', 'trail-template/**', 'sources/**', 'schemas/**', '.nokta/**', 'daemon/public/**'],
     files: ['**/*.mjs'],
     languageOptions: {
       ecmaVersion: 2022,

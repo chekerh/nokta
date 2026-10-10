@@ -39,6 +39,17 @@ export function prepare(sql) {
 
 export function transaction(fn) {
   const db = getDb();
-  const tx = db.transaction(fn);
-  return tx;
+  db.exec('BEGIN');
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // Rollback can fail if the transaction was already aborted by SQLite.
+    }
+    throw err;
+  }
 }

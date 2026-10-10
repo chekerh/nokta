@@ -2,9 +2,10 @@
 
 ## Current Loop
 
-- **Phase:** DONE → SELECTING_NEXT
-- **Completed:** Phase 1 block + Phase 2 (estimate, auto-prioritize, CLI)
-- **Next Task:** Implement reports module + reports view in UI
+- **Phase:** DOCUMENTING → PERSISTING → SELECTING_NEXT
+- **Completed (2026-10-08 → 2026-10-10):** Fleet tracking/discovery, review gates (rendered-UI + dialog semantics), sandbox stabilization, codebase audit, npm audit remediation
+- **Validation:** Lint ✅ 0 errors · Tests ✅ 301/301 pass · npm audit ✅ 0 vulnerabilities · Daemon ✅ running on 4217
+- **Next Task:** Discover next gap (branch feature-review-stat-index is 30 commits ahead of main and not yet merged)
 
 ## Loop State Tracker
 
@@ -13,36 +14,36 @@ TRIGGERED → DISCOVERING → TRIAGING → SPECIFYING → RESEARCHING
 → PLANNING → DELEGATING → EXECUTING → VERIFYING → REVIEWING
 → RECONCILING → DOCUMENTING → PERSISTING → SELECTING_NEXT
 
-Current: DONE → SELECTING_NEXT
+Current: DOCUMENTING → PERSISTING → SELECTING_NEXT
 ```
 
 ## Objective
 
-Implement all missing planner API routes, estimate function, auto-prioritize function, and CLI commands to make Nokta production-ready.
+Keep Nokta production-ready and drive the unmerged `feature-review-stat-index` branch (fleet, workspace, gates, agent-pack, worktrees) toward merge into `main`.
 
 ## Scope And Constraints
 
-- **In scope:** Planner routes, estimate, auto-prioritize, CLI, tests
-- **Out of scope:** Reports module UI, design decision tracking, advanced features
-- **Constraints:** Must pass lint and all tests
+- **In scope:** Remaining gap work from discovery, tests, docs, merge readiness
+- **Out of scope:** None defined this cycle
+- **Constraints:** Must pass lint, 301/301 tests, and npm audit (0 vulnerabilities)
 
 ## Validation Status
 
 - **Lint:** ✅ Pass (0 errors, 0 warnings)
-- **Tests:** ✅ 100/100 pass (86 original + 14 new)
+- **Tests:** ✅ 301/301 pass
 - **Daemon:** ✅ Starts and responds to health check
-- **Planner routes:** ✅ All CRUD endpoints implemented and tested
-- **Estimate function:** ✅ Implemented with complexity analysis and learning
-- **Auto-prioritize:** ✅ Implemented with deps, deadlines, code health
-- **CLI:** ✅ `review-pr`, `review-branch`, `compile`, `gates`, `detect` commands
+- **npm audit:** ✅ 0 vulnerabilities (proxy-addr, qs, js-yaml, brace-expansion patched)
+- **Fleet:** ✅ Track/discover/plan/queue live opencode + freebuff sessions
+- **Review gates:** ✅ Rendered-UI gate, dialog semantics gate, sandbox useDocker=false
+- **Audit:** ✅ 12 dead files removed, 9 audit docs in `audit/` + `AUDIT-COMPLETE.md`
+- **Browser checks:** ✅ `scripts/workspace-browser-check.mjs` green (playwright + Chrome)
+- **CLI:** ✅ `review-pr`, `review-branch`, `compile`, `gates`, `detect`, `search`, `sandbox`, `skills` commands
+
+## Open Discussion
+
+- `feature-review-stat-index` (30 commits, 416 files, ~27k insertions) is unmerged vs `main`. Merge analysis needed.
+- `docs/loop/TASK_LOG.md` and `BLOCKERS.md` refreshed with Oct 2026 history.
 
 ## Next Action
 
-**Implement reports module** (`daemon/public/lib/reports.js`) with Canvas-based chart rendering for:
-
-- Sprint burndown charts
-- Velocity tracking
-- Completion rate metrics
-- Add Reports tab to `daemon/public/index.html` sidebar
-
-Then create tests and verify with `npm run lint && npm run test:ci`.
+Run discovery to pick the next highest-value item: merge-readiness of the feature branch, or continue audit Phase 1 remediation (npm scripts, SSE auth, pagination) per `audit/ACTION-PLAN.md`.

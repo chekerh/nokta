@@ -85,20 +85,22 @@ async function buildCorpus(rootDir, maxFiles = MAX_FILES) {
   return { docTokens, docMeta, vocab };
 }
 
-export async function semanticSearch(query, rootDir, { maxResults = 10 } = {}) {
+export async function semanticSearch(query, rootDir, { maxResults = 10, similarityThreshold = 0.1 } = {}) {
   const queryTokens = tokenize(query);
   const corpus = await buildCorpus(rootDir);
   const { docTokens, docMeta, vocab } = corpus;
   const vocabArray = Array.from(vocab);
-
   const queryVec = buildTfVector(queryTokens, vocabArray);
+
   const scores = docTokens.map((tokens, i) => {
     const docVec = buildTfVector(tokens, vocabArray);
     return { score: cosineSim(queryVec, docVec), index: i };
   });
 
   scores.sort((a, b) => b.score - a.score);
-  const top = scores.slice(0, maxResults).filter((s) => s.score > 0);
+  const top = scores.slice(0, maxResults)
+    .filter((s) => s.score >= similarityThreshold)
+    .sort((a, b) => a.score - b.score);
 
   return {
     results: top.map((s) => ({
@@ -111,5 +113,6 @@ export async function semanticSearch(query, rootDir, { maxResults = 10 } = {}) {
     total: top.length,
     vocabSize: vocab.size,
     indexedFiles: docMeta.length,
+    similarityThreshold,
   };
 }

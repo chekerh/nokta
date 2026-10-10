@@ -1,4 +1,4 @@
-import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError, isWithin } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
 import { SandboxManager } from '../lib/sandbox.mjs';
 import path from 'node:path';
@@ -39,7 +39,7 @@ export function registerSandboxRoutes(app, log) {
       const targetDir = target || process.cwd();
       const fullPath = path.resolve(targetDir, file);
       const projectRoot = process.cwd();
-      if (!fullPath.startsWith(path.resolve(projectRoot))) {
+      if (!isWithin(projectRoot, fullPath)) {
         throw new AppError('Path traversal detected', 403);
       }
       const result = await sandbox.execFile(fullPath, {

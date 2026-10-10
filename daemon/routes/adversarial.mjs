@@ -1,4 +1,4 @@
-import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError, isWithin } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,7 +6,7 @@ import { CriticAgent } from '../lib/critic-agent.mjs';
 
 function safePath(base, targetPath) {
   const resolved = path.resolve(base, targetPath);
-  if (!resolved.startsWith(path.resolve(base))) {
+  if (!isWithin(base, resolved)) {
     throw new AppError('Path traversal detected', 403);
   }
   return resolved;

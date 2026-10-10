@@ -195,8 +195,8 @@ case 'pr': {
       try {
         execSync(`git checkout -b "${prHead}" 2>/dev/null || git checkout "${prHead}"`, { cwd });
         execSync('git add .', { cwd });
-        execSync(`git commit -m ${JSON.stringify(prTitle)} --no-verify`, { cwd });
-        execSync(`git push -u origin "${prHead}" --force`, { cwd });
+        execSync(`git commit -m ${JSON.stringify(prTitle)}`, { cwd });
+        execSync(`git push -u origin "${prHead}" --force-with-lease`, { cwd });
       } catch (gitErr) { /* ignore */ }
 
       // Use execFileSync with array args instead of string interpolation

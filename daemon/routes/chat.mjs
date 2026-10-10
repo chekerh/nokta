@@ -1,9 +1,11 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
-import { sendSSEError, streamOllama, streamOpenAI, streamClaude } from '../lib/streaming-utils.mjs';
+import { sendSSE, sendSSEError, streamOllama, streamOpenAI, streamClaude } from '../lib/streaming-utils.mjs';
+import { authMiddleware } from '../lib/auth.mjs';
 
 export function registerChatRoutes(app, chatHandler, providerManager) {
   app.post(
     '/api/v1/chat',
+    authMiddleware(true),
     asyncHandler(async (req, res) => {
       const {
         messages,
@@ -32,6 +34,8 @@ export function registerChatRoutes(app, chatHandler, providerManager) {
           const chatResult = await chatHandler.handleChat(messages, { ...opts, stream: true });
           const httpResponse = chatResult.response;
           const meta = { tokensIn: chatResult.tokensIn, provider: chatResult.provider, model: chatResult.model || '' };
+          // Let the client show which model is answering before the first token arrives.
+          sendSSE(res, { meta: { provider: chatResult.provider, model: chatResult.model || '' } });
 
           if (chatResult.provider === 'ollama') {
             streamOllama(httpResponse, res, undefined, meta);

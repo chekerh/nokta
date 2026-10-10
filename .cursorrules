@@ -132,7 +132,7 @@ If the Critic rejects a PR, the Implementer must address feedback before the Ver
 * Run code quality gates using `daemon/lib/gate-keeper.mjs` or `/api/v1/gates`.
 
 ### E. Automated Pull Requests
-* If GITHUB_TOKEN is not present, Nokta falls back to the local `gh` CLI. It will automatically check out a branch (`nokta-run-<run_id>`), add changes, commit (`git commit -m "[Nokta]..." --no-verify`), push, and create a Pull Request (`gh pr create`).
+* If GITHUB_TOKEN is not present, Nokta falls back to the local `gh` CLI. It will automatically check out a branch (`nokta-run-<run_id>`), add changes, commit (`git commit -m "[Nokta]..."`) with repo hooks enabled, push with `--force-with-lease`, and create a Pull Request (`gh pr create`).
 
 ---
 

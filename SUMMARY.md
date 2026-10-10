@@ -139,21 +139,12 @@ This document summarizes the enhancements made to Nokta to evolve it toward the 
 ### Recording an Architectural Decision
 
 ```
-POST /api/v1/decisions
-{
-  "type": "architectural",
-  "title": "Adopt Microservices Architecture",
-  "description": "Transition from monolith to microservices for better scalability",
-  "rationale": "Monolith is becoming difficult to scale and deploy. Microservices will allow independent scaling and team autonomy.",
-  "alternativesConsidered": [
-    "Continue with monolith and optimize",
-    "Modular monolith approach",
-    "Serverless architecture"
-  ],
-  "tags": ["architecture", "scalability", "team-structure"],
-  "relatedItems": ["EPIC-0001", "STORY-0023"] // Related epics/stories
-}
+nokta decisions create "Adopt Microservices Architecture" architectural
 ```
+
+Creates a decision via the CLI against the same `DecisionEngine` the planner uses.
+The HTTP `/api/v1/decisions` endpoints were removed; use the CLI or link
+existing decisions to planner items directly:
 
 ### Linking a Decision to Implementation Work
 

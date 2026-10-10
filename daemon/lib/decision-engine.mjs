@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { atomicWrite } from './atomic-write.mjs';
+import { NOOP_LOG } from './route-utils.mjs';
 
 const DECISION_TYPES = ['architectural', 'ui-ux', 'technology', 'process', 'security'];
 
@@ -35,7 +36,7 @@ async function saveData(projectRoot, data) {
 export class DecisionEngine {
   constructor(projectRoot, options = {}) {
     this.projectRoot = projectRoot;
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
   }
 
   async _load() {

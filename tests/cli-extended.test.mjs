@@ -130,7 +130,7 @@ test('cli: sandbox handles code that produces output', () => {
   const { stdout, exitCode, stderr } = runCli(['sandbox', 'console.log(42)']);
   assert.ok(exitCode === 0 || stderr.includes('Unknown command'));
   if (exitCode === 0) {
-    assert.ok(stdout.includes('42') || stdout.includes('passed'));
+    assert.ok(stdout.includes('42') || stdout.includes('passed') || stdout.includes('Execution passed'));
   }
 });
 

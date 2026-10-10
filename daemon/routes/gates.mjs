@@ -6,7 +6,7 @@ export function registerGateRoutes(app, gateKeeper) {
   app.post(
     '/api/v1/gates',
     asyncHandler(async (req, res) => {
-      const { target } = req.body;
+      const { target, messages = [] } = req.body;
       const projectRoot = target ? path.resolve(target) : process.cwd();
       const gates = [];
       const trailDir = path.join(projectRoot, '.ai', 'trail');
@@ -47,20 +47,29 @@ export function registerGateRoutes(app, gateKeeper) {
           message: 'Cannot read project root',
         });
       }
+      const tokenResult = await gateKeeper.checkToken(messages || []);
       gates.push({
         id: 'token',
         name: 'Token Budget',
-        status: 'pass',
-        passed: true,
-        message: `Limit ${gateKeeper.tokenLimit}`,
+        status: tokenResult.status,
+        passed: tokenResult.status !== 'fail',
+        message: tokenResult.message,
       });
-      gates.push({ id: 'security', name: 'Security', status: 'pass', passed: true, message: 'No security issues' });
+      const secResult = await gateKeeper.checkSecurity(messages || []);
+      gates.push({
+        id: 'security',
+        name: 'Security',
+        status: secResult.status,
+        passed: secResult.status !== 'fail',
+        message: secResult.message,
+      });
+      const verResult = await gateKeeper.checkVerification(messages || []);
       gates.push({
         id: 'verification',
         name: 'Verification Check',
-        status: 'pass',
-        passed: true,
-        message: 'Verification gate passed',
+        status: verResult.status,
+        passed: verResult.status !== 'fail',
+        message: verResult.message,
       });
       const passed = gates.filter((g) => g.status === 'fail').length === 0;
       res.json({ passed, gates });

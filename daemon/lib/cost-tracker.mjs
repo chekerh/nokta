@@ -50,6 +50,31 @@ function estimateCost(model, inputTokens, outputTokens) {
   return { inputCost, outputCost, totalCost: inputCost + outputCost, pricing };
 }
 
+function logCostToDb(entry, metadata = {}) {
+  try {
+    let userId = metadata.userId || metadata.user_id;
+    if (!userId) {
+      const firstUser = prepare('SELECT id FROM users LIMIT 1').get();
+      userId = firstUser ? firstUser.id : null;
+    }
+    if (userId) {
+      const id = 'cst_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+      prepare(
+        'INSERT INTO cost_logs (id, user_id, provider, model, tokens_in, tokens_out, cost, task) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(
+        id,
+        userId,
+        entry.provider || 'unknown',
+        entry.model || 'unknown',
+        entry.inputTokens || 0,
+        entry.outputTokens || 0,
+        entry.totalCost || 0,
+        metadata.task || null,
+      );
+    }
+  } catch {}
+}
+
 export class CostTracker {
   constructor() {
     this._ledger = null;
@@ -100,6 +125,36 @@ export class CostTracker {
       ledger.entries = ledger.entries.slice(-8000);
     }
     await this._save();
+    logCostToDb(entry, metadata);
+    return entry;
+  }
+
+  async recordWithTrustScore(model, inputTokens, outputTokens, trustScore = 1.0, metadata = {}) {
+    const ledger = await this._load();
+    const { inputCost, outputCost, totalCost, pricing } = estimateCost(model, inputTokens, outputTokens);
+    const entry = {
+      timestamp: new Date().toISOString(),
+      model,
+      provider: pricing.provider,
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      inputCost: Math.round(inputCost * 100) / 100,
+      outputCost: Math.round(outputCost * 100) / 100,
+      totalCost: Math.round(totalCost * 100) / 100,
+      trustScore: Math.round(trustScore * 100) / 100,
+      exchangeRate: 1,
+      ...metadata,
+    };
+    ledger.entries.push(entry);
+    ledger.totalCost = Math.round((ledger.totalCost + totalCost * trustScore) * 100) / 100;
+    ledger.totalTokens += inputTokens + outputTokens;
+    this._dirty = true;
+    if (ledger.entries.length > 10000) {
+      ledger.entries = ledger.entries.slice(-8000);
+    }
+    await this._save();
+    logCostToDb(entry, metadata);
     return entry;
   }
 
@@ -133,11 +188,32 @@ export class CostTracker {
   async getSummary() {
     const ledger = await this._load();
     const monthly = await this.getMonthlySpend();
+    const trustScores = ledger.entries.map((e) => e.trustScore || 1.0);
+    const avgTrustScore = trustScores.length > 0
+      ? trustScores.reduce((a, b) => a + b, 0) / trustScores.length
+      : 1.0;
     return {
       allTimeCost: ledger.totalCost,
       allTimeTokens: ledger.totalTokens,
       monthly,
+      avgTrustScore: Math.round(avgTrustScore * 100) / 100,
       entries: ledger.entries.slice(-100).reverse(),
+    };
+  }
+
+  async checkProviderHealth(provider) {
+    const ledger = await this._load();
+    const providerEntries = ledger.entries.filter((e) => e.provider === provider);
+    if (providerEntries.length === 0) return { healthy: true, avgResponseTime: 0, successRate: 1.0 };
+
+    const successful = providerEntries.filter((e) => e.status !== 'error').length;
+    const successRate = successful / providerEntries.length;
+    const avgResponseTime = providerEntries.reduce((sum, e) => sum + (e.responseTime || 0), 0) / providerEntries.length;
+
+    return {
+      healthy: successRate >= 0.8,
+      avgResponseTime: Math.round(avgResponseTime),
+      successRate: Math.round(successRate * 100) / 100,
     };
   }
 

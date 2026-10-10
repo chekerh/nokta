@@ -1,6 +1,7 @@
 import { compileContext } from '../../compiler/lib/nokta.mjs';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import { NOOP_LOG } from './route-utils.mjs';
 
 const CONCISENESS_PROMPTS = {
   verbose: '',
@@ -25,7 +26,7 @@ export class ChatHandler {
   constructor(providerManager, options = {}) {
     this.providerManager = providerManager;
     this.projectRoot = options.projectRoot || process.cwd();
-    this.log = options.log || { debug() {}, info() {}, warn() {}, error: console.error };
+    this.log = options.log || NOOP_LOG;
     this.costTracker = options.costTracker || null;
     this.gateKeeper = options.gateKeeper || null;
     this.defaultSystemPrompt =

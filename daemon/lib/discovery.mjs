@@ -31,7 +31,7 @@ function isCacheFresh(cached) {
   return age < CACHE_TTL_MS;
 }
 
-function parseRepoUrl(url) {
+export function parseRepoUrl(url) {
   url = url.replace(/\.git$/, '').trim();
   const match = url.match(/github\.com[:/]([^/]+)\/([^/]+)/);
   if (match) return { owner: match[1], repo: match[2].replace(/\.git$/, ''), url };
@@ -212,6 +212,23 @@ async function checkSourceUpdates() {
     /* ignore */
   }
   return results;
+}
+
+export function detectLanguage(code) {
+  const patterns = {
+    javascript: /(?:function\s+\w+|const\s+\w+|let\s+\w+|var\s+\w+|=>)|(?:import\s+[\w{}]|from\s+['\"])/,
+    python: /(?:def\s+\w+|import\s+[\w.]|from\s+['\"])/,
+    typescript: /(?:interface\s+\w+|type\s+\w+|import\s+[\w{}]|from\s+['\"])/,
+    go: /(?:func\s+\w+|import\s+[\w"\']|package\s+[\w])/,
+    rust: /(?:fn\s+\w+|use\s+[\w::]+)/,
+  };
+
+  const scored = Object.entries(patterns).map(([lang, regex]) => ({
+    language: lang,
+    score: regex.test(code) ? 1 : 0,
+  }));
+
+  return scored.sort((a, b) => b.score - a.score)[0]?.language || 'unknown';
 }
 
 export async function runDiscovery(force = false) {
