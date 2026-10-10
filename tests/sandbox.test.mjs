@@ -1,9 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import path from 'node:path';
+import * as fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SANDBOX_DIR = path.join(DIR, '.nokta', 'sandbox');
+
+/* Clean sandbox directory before each test so leftover files don’t affect later ones */
+async function cleanupSandbox() {
+  try { await fs.rm(SANDBOX_DIR, { recursive: true, force: true }); } catch {}
+}
+
+/* Run once before the first test to guarantee the directory exists */
+await cleanupSandbox();
+
+/* Per‑test hook: start fresh every time */
+test.beforeEach(async () => {
+  await cleanupSandbox();
+});
+
+test.afterEach(async () => {
+  await cleanupSandbox();
+});
 
 test('SandboxManager executes valid JavaScript', async () => {
   const { SandboxManager } = await import(path.join(DIR, 'daemon', 'lib', 'sandbox.mjs'));
