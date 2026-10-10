@@ -49,3 +49,4 @@ landing/dist/
 .nokta/workspace.pid
 .nokta/workspace-runtime.json
 .nokta/worktrees/
+.nokta/fleet.json
