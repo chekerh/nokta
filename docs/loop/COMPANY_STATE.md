@@ -41,9 +41,9 @@ Keep Nokta production-ready and drive the unmerged `feature-review-stat-index` b
 
 ## Open Discussion
 
-- `feature-review-stat-index` (30 commits, 416 files, ~27k insertions) is unmerged vs `main`. Merge analysis needed.
+- `feature-review-stat-index` merged into `main` via PR #14 (merge commit `24582dc`, 2026-10-10) after clean-merge + CI verification. Now on `main`; merge chain: main `→` development as needed.
 - `docs/loop/TASK_LOG.md` and `BLOCKERS.md` refreshed with Oct 2026 history.
 
 ## Next Action
 
-Run discovery to pick the next highest-value item: merge-readiness of the feature branch, or continue audit Phase 1 remediation (npm scripts, SSE auth, pagination) per `audit/ACTION-PLAN.md`.
+Run discovery to pick the next highest-value item: continue audit Phase 1 remediation (npm scripts, SSE auth, pagination) per `audit/ACTION-PLAN.md`, or validate OKR metrics from `docs/roadmap.md` (concurrent projects, latency budgets, coverage targets).
