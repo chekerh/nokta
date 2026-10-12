@@ -28,8 +28,8 @@ Examples:
 }
 
 function parseArgs(argv) {
-  const cmd = argv[3];
-  const args = { cmd, url: argv[4] };
+  const cmd = argv[2];
+  const args = { cmd, url: argv[3] };
   return args;
 }
 
