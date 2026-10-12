@@ -5,7 +5,7 @@
 - **Phase:** DOCUMENTING → PERSISTING → SELECTING_NEXT
 - **Completed (2026-10-08 → 2026-10-12):** Fleet tracking/discovery, review gates (rendered-UI + dialog semantics), sandbox stabilization, codebase audit, npm audit remediation, audit Phase 1 (npm scripts, SSE auth, pagination)
 - **Validation:** Lint ✅ 0 errors · Tests ✅ 319/319 pass · npm audit ✅ 0 vulnerabilities
-- **Next Task:** Open PR for `feat/audit-phase1` → then run discovery for the next gap
+- **Next Task:** Discover next gap (audit Phase 1 landed on main via PR #15)
 
 ## Loop State Tracker
 
@@ -43,9 +43,9 @@ Complete audit Phase 1 remediation (`audit/ACTION-PLAN.md`), land it on `main` v
 ## Open Discussion
 
 - `feature-review-stat-index` merged into `main` via PR #14 (merge commit `24582dc`, 2026-10-10) after clean-merge + CI verification. Now on `main`; merge chain: main `→` development as needed.
-- Audit Phase 1 branch `feat/audit-phase1` holds three commits (SSE auth `3242347`, npm scripts `67a3ced`, pagination `cbdff5d`) ready for PR to `main`.
+- Audit Phase 1 merged into `main` via PR #15 (2026-10-12): SSE auth `3242347`, npm scripts `67a3ced`, pagination `cbdff5d`, loop docs `5a0a1cd`. Now on `main`.
 - `docs/loop/TASK_LOG.md` and `BLOCKERS.md` refreshed with Oct 2026 history.
 
 ## Next Action
 
-Run discovery to pick the next highest-value item: audit Phase 1 remaining (Task 1.3 Zod validation on request bodies, or the deferred `agents`/`skills` pagination hardening), or validate OKR metrics from `docs/roadmap.md`.
+Run discovery to pick the next highest-value item: audit Phase 1 remaining (Task 1.3 Zod validation on request bodies — new dependency), or validate OKR metrics from `docs/roadmap.md`.
