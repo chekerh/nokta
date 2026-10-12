@@ -111,11 +111,14 @@ export function registerAuthRoutes(app) {
   );
 
   // Logging out ends every session for the user (all of their refresh tokens are
-  // revoked) and blacklists the current access token. Ending all sessions is the
-  // safer default; a per-device logout would need per-session token ids.
+  // revoked) and blacklists the current access token. Bumping token_version also
+  // rejects access tokens minted earlier in this user's other tabs/devices, so
+  // logout really is a global sign-out. A per-device logout would need
+  // per-session token ids.
   app.post('/api/v1/auth/logout', authMiddleware(), (req, res) => {
     blacklistCurrentToken(req);
     revokeUserRefreshTokens(req.user.id);
+    prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').run(req.user.id);
     res.json({ success: true, message: 'Token revoked.' });
   });
 

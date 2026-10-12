@@ -1892,6 +1892,11 @@
         // refresh token. Concurrent callers share one in-flight request so a burst
         // of 401s triggers a single refresh. The token is read from storage at call
         // time so another tab's rotation is picked up here.
+        //
+        // Resolution contract used by lib/ui.js api():
+        //   true  - refreshed, caller should retry the original request
+        //   false - the refresh token is rejected (401): the session is gone
+        //   null  - transient failure (429/5xx/network): keep the session
         var refreshInFlight = null;
         function refreshAccessToken() {
           var current = localStorage.getItem('nokta-refresh') || authRefreshToken;
@@ -1903,14 +1908,16 @@
             body: JSON.stringify({ refreshToken: current }),
           })
             .then(function (res) {
-              if (!res.ok) return false;
+              if (res.status === 401) return false;
+              if (!res.ok) return null;
               return res.json().then(function (data) {
                 setAuth(data.token, data.user || authUser, data.refreshToken);
                 return true;
               });
             })
             .catch(function () {
-              return false;
+              // A network hiccup is not a dead session; do not log the user out.
+              return null;
             })
             .finally(function () {
               refreshInFlight = null;
@@ -3158,10 +3165,11 @@
               // Only mint a new access token when the current one is actually
               // stale; a transient stream error should not churn tokens.
               if (accessTokenExpired()) {
-                refreshAccessToken().then(function (ok) {
-                  // A failed refresh means the session is gone; stop retrying
-                  // (the next API call surfaces the login overlay).
-                  if (ok) reschedule();
+                refreshAccessToken().then(function (outcome) {
+                  // false = token rejected, session gone: stop retrying (the
+                  // next API call surfaces the login overlay). true/null =
+                  // refreshed or transient failure: reconnect with backoff.
+                  if (outcome !== false) reschedule();
                 });
               } else {
                 reschedule();
@@ -3170,6 +3178,19 @@
           } catch (e) {
             setTimeout(connectAgentEvents, 10000);
           }
+        }
+
+        // Escape a string for inclusion in a single-quoted JS string literal
+        // inside an HTML attribute (used for onclick handlers taking a URL).
+        function jsStr(s) {
+          return String(s)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/\r/g, '\\r')
+            .replace(/\n/g, '\\n')
+            .replace(/</g, '\\u003c')
+            .replace(/\u2028/g, '\\u2028')
+            .replace(/\u2029/g, '\\u2029');
         }
 
         // Skills Scan
@@ -3206,7 +3227,7 @@
               html += '</div>';
               html +=
                 '<button class="btn btn-sm" onclick="importSkills(\'' +
-                url +
+                jsStr(url) +
                 '\')" style="margin-top:10px">📥 Import & Activate Pack</button>';
               html += '</div>';
             }

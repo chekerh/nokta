@@ -18,9 +18,10 @@
     onUnauthorized = fn;
   };
 
-  // Optional: an async () => boolean that tries to refresh the access token.
-  // When present, a 401 is retried once after a successful refresh, so a
-  // short-lived access token is invisible to callers.
+  // Optional: an async () => boolean|null|true that tries to refresh the access
+  // token. A 401 is retried once after a successful refresh (true). A null
+  // (transient failure) means the session is still alive; the original request
+  // fails but the user is NOT logged out. Only a hard false ends the session.
   var onRefresh = null;
   window.setOnRefresh = function (fn) {
     onRefresh = fn;
@@ -37,13 +38,21 @@
     var res = await fetch(window.location.origin + path, opts);
     if (res.status === 401 && token) {
       if (onRefresh && !retriedOnce) {
-        var refreshed = false;
+        var outcome = false;
         try {
-          refreshed = await onRefresh();
+          outcome = await onRefresh();
         } catch {
-          refreshed = false;
+          outcome = null;
         }
-        if (refreshed) return api(method, path, body, true);
+        if (outcome === true) return api(method, path, body, true);
+        if (outcome === null) {
+          throw new Error('Could not refresh the session. Please try again.');
+        }
+        // Our refresh 401'd on a stale token: another tab may have rotated it
+        // and won the race. Retry once with whatever access token is stored
+        // now before deciding the session is dead.
+        var latest = localStorage.getItem('nokta-token') || localStorage.getItem('nokta_token');
+        if (latest && latest !== token) return api(method, path, body, true);
       }
       if (onUnauthorized) onUnauthorized();
       throw new Error('Session expired. Please sign in again.');

@@ -55,7 +55,11 @@ export async function createServer(options = {}) {
   const log = options.log || logger;
 
   const app = express();
-  app.set('trust proxy', 1);
+  // Trust X-Forwarded-For only when the operator opts in (NOKTA_TRUST_PROXY=1).
+  // Default is off so a client cannot spoof the source IP used for rate
+  // limiting by setting the header directly. Set it when behind a real
+  // reverse proxy (nginx, Fly, etc.).
+  app.set('trust proxy', process.env.NOKTA_TRUST_PROXY === '1' || process.env.NOKTA_TRUST_PROXY === 'true' ? 1 : false);
   app.use(requestIdMiddleware);
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 

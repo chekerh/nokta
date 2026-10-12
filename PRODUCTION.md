@@ -283,8 +283,10 @@ node -e "const {getDb}=import('./daemon/db/connection.mjs'); const db=getDb(); d
 | `NOKTA_JWT_SECRET`      | Yes         | —               | JWT signing secret              |
 | `NOKTA_JWT_PREVIOUS_SECRETS` | No    | (empty)         | Retired secrets accepted for verification during rotation (comma-separated) |
 | `NOKTA_API_KEY`         | Recommended | —               | Server-to-server API key        |
-| `NOKTA_ACCESS_TOKEN_TTL_SEC` | No     | 900             | Access-token lifetime the client silently refreshes |
+| `NOKTA_ACCESS_TOKEN_TTL_SEC` | No     | 900             | Access-token lifetime the client silently refreshes (clamped to 24h) |
 | `NOKTA_REFRESH_TOKEN_TTL_SEC` | No    | 604800          | Refresh-token lifetime (7 days) |
+| `NOKTA_REFRESH_MAX_SEC`      | No          | 2592000         | Absolute ceiling for a rotating refresh family (30 days) |
+| `NOKTA_TRUST_PROXY`      | No          | (false)         | `1` only behind a real reverse proxy; enables X-Forwarded-For trust |
 | `NOKTA_CORS_ORIGIN`     | No          | (empty)         | CORS origin (empty=same-origin) |
 | `NOKTA_LOG_LEVEL`       | No          | info            | Log verbosity                   |
 | `NOKTA_DATA_DIR`        | No          | .nokta          | Data directory                  |

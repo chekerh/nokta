@@ -1,25 +1,29 @@
 import { prepare, transaction } from '../db/connection.mjs';
 import { makeId, generateResetToken, hashToken } from './auth.mjs';
+import { logger } from './logger.mjs';
 
 // Long-lived, DB-backed refresh tokens. Only the SHA-256 hash is stored, so a
 // leaked row cannot be replayed. Each use rotates the token (the old one is
 // revoked), which means a stolen refresh token is usable at most once before
 // the legitimate client's next refresh invalidates it.
 //
-// A non-numeric or non-positive TTL falls back to the default rather than
-// producing NaN (which would make a token that never expires).
-function positiveInt(raw, fallback) {
-  const value = parseInt(raw ?? '', 10);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
+// Non-numeric/non-positive values fall back to the default and absurd values
+// are clamped, so a mistyped TTL cannot mint tokens that never expire.
+function positiveInt(raw, fallback, max) {
+  let value = parseInt(raw ?? '', 10);
+  if (!Number.isFinite(value) || value <= 0) value = fallback;
+  if (Number.isFinite(max) && max > 0) value = Math.min(value, max);
+  return value;
 }
 
-const REFRESH_TTL_SEC = positiveInt(process.env.NOKTA_REFRESH_TOKEN_TTL_SEC, 604800); // 7 days
+const REFRESH_TTL_SEC = positiveInt(process.env.NOKTA_REFRESH_TOKEN_TTL_SEC, 604800, 90 * 24 * 3600); // 7 days, ≤90
 // Absolute ceiling for a rotating family. Rotation extends expires_at, but a
 // session can never outlive this window even if refreshed continuously.
-const REFRESH_MAX_SEC = positiveInt(process.env.NOKTA_REFRESH_MAX_SEC, 2592000); // 30 days
+const REFRESH_MAX_SEC = positiveInt(process.env.NOKTA_REFRESH_MAX_SEC, 2592000, 365 * 24 * 3600); // 30 days, ≤365
 // A token revoked less than this long ago is assumed to be a benign race (two
 // tabs refreshing at once) rather than theft, so the family is not torn down.
-const REUSE_GRACE_MS = 60 * 1000;
+// Kept short so a thief who rotates first cannot hide behind it.
+const REUSE_GRACE_MS = 5 * 1000;
 
 function isoFromNow(seconds) {
   return new Date(Date.now() + seconds * 1000).toISOString();
@@ -70,10 +74,14 @@ export function rotateRefreshToken(token) {
     if (!row) return null;
     if (row.revoked_at) {
       // Replaying a consumed token is normally a theft signal. Tolerate a token
-      // revoked within the grace window, since that is the expected outcome of
-      // two concurrent refreshes; otherwise burn the whole family.
+      // revoked moments ago, since that is the expected outcome of two
+      // concurrent refreshes; anything older burns the whole family.
       const revokedAt = new Date(String(row.revoked_at).replace(' ', 'T') + 'Z').getTime();
       if (!Number.isFinite(revokedAt) || now - revokedAt > REUSE_GRACE_MS) {
+        logger.warn('refresh token reuse detected; revoking refresh family', {
+          userId: row.user_id,
+          tokenId: row.id,
+        });
         revokeUserRefreshTokens(row.user_id);
       }
       return null;

@@ -39,7 +39,9 @@ export function prepare(sql) {
 
 export function transaction(fn) {
   const db = getDb();
-  db.exec('BEGIN');
+  // IMMEDIATE takes the write lock up front, so two writers that both read
+  // first cannot deadlock or both succeed a guarded read-then-write.
+  db.exec('BEGIN IMMEDIATE');
   try {
     const result = fn();
     db.exec('COMMIT');
