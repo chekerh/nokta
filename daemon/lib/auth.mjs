@@ -3,7 +3,13 @@ import { prepare } from '../db/connection.mjs';
 import { blacklistToken, isBlacklisted } from './token-blacklist.mjs';
 import { getCurrentKey, getKey } from './jwt-keys.mjs';
 
-const TOKEN_EXPIRY_SEC = parseInt(process.env.NOKTA_TOKEN_TTL_SEC || '604800', 10);
+// Access tokens are short-lived; a long-lived refresh token (see
+// refresh-tokens.mjs) mints new ones. NOKTKA_TOKEN_TTL_SEC is still honoured as
+// a fallback so existing deployments keep their configured lifetime.
+const TOKEN_EXPIRY_SEC = parseInt(
+  process.env.NOKTA_ACCESS_TOKEN_TTL_SEC || process.env.NOKTA_TOKEN_TTL_SEC || '900',
+  10,
+);
 
 function base64url(buf) {
   return buf.toString('base64url');

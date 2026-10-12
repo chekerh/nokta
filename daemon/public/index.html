@@ -1860,6 +1860,7 @@
 
         // Auth state
         var authToken = localStorage.getItem('nokta-token');
+        var authRefreshToken = localStorage.getItem('nokta-refresh');
         var authUser = null;
         try {
           var storedUser = localStorage.getItem('nokta-user');
@@ -1870,16 +1871,49 @@
           return !!authToken;
         }
 
-        function setAuth(token, user) {
+        function setAuth(token, user, refreshToken) {
           authToken = token;
           authUser = user;
+          if (refreshToken !== undefined) authRefreshToken = refreshToken;
           if (token) {
             localStorage.setItem('nokta-token', token);
             localStorage.setItem('nokta-user', JSON.stringify(user));
+            if (authRefreshToken) localStorage.setItem('nokta-refresh', authRefreshToken);
           } else {
+            authToken = null;
+            authRefreshToken = null;
             localStorage.removeItem('nokta-token');
             localStorage.removeItem('nokta-user');
+            localStorage.removeItem('nokta-refresh');
           }
+        }
+
+        // Exchange the stored refresh token for a new access token, rotating the
+        // refresh token. Concurrent callers share one in-flight request so a burst
+        // of 401s triggers a single refresh.
+        var refreshInFlight = null;
+        function refreshAccessToken() {
+          if (!authRefreshToken) return Promise.resolve(false);
+          if (refreshInFlight) return refreshInFlight;
+          refreshInFlight = fetch(API + '/api/v1/auth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: authRefreshToken }),
+          })
+            .then(function (res) {
+              if (!res.ok) return false;
+              return res.json().then(function (data) {
+                setAuth(data.token, data.user || authUser, data.refreshToken);
+                return true;
+              });
+            })
+            .catch(function () {
+              return false;
+            })
+            .finally(function () {
+              refreshInFlight = null;
+            });
+          return refreshInFlight;
         }
 
         // Auth
@@ -1896,6 +1930,8 @@
           setAuth(null, null);
           showAuthOverlay();
         });
+        // ...and let it silently refresh a short-lived access token before giving up.
+        window.setOnRefresh(refreshAccessToken);
         function authShowLogin() {
           $('authRegisterBox').style.display = 'none';
           $('authLoginBox').style.display = 'block';
@@ -1933,7 +1969,7 @@
               throw new Error(e.error || 'Login failed');
             }
             var data = await res.json();
-            setAuth(data.token, data.user);
+            setAuth(data.token, data.user, data.refreshToken);
             hideAuthOverlay();
             toast('Welcome back!', 'success');
             afterAuth();
@@ -1976,7 +2012,7 @@
               throw new Error(e.error || 'Registration failed');
             }
             var data = await res.json();
-            setAuth(data.token, data.user);
+            setAuth(data.token, data.user, data.refreshToken);
             hideAuthOverlay();
             toast('Account created successfully!', 'success');
             afterAuth();
@@ -1990,9 +2026,14 @@
         window.authRegister = authRegister;
 
         function authLogout() {
-          api('POST', '/api/v1/auth/logout').catch(function () {});
-          setAuth(null, null);
-          location.reload();
+          // Let the server revoke the refresh token (and refresh a stale access
+          // token first if needed) before clearing local state.
+          api('POST', '/api/v1/auth/logout')
+            .catch(function () {})
+            .finally(function () {
+              setAuth(null, null);
+              location.reload();
+            });
         }
         window.authLogout = authLogout;
 
@@ -3086,7 +3127,12 @@
               });
             });
             es.onerror = function () {
-              setTimeout(connectAgentEvents, 5000);
+              es.close();
+              // The access token may have expired; refresh it before reconnecting
+              // so the next EventSource carries a valid ?token=.
+              refreshAccessToken().finally(function () {
+                setTimeout(connectAgentEvents, 5000);
+              });
             };
           } catch (e) {
             setTimeout(connectAgentEvents, 10000);

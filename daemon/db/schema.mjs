@@ -1,7 +1,7 @@
 import { getDb } from './connection.mjs';
 import { logger } from '../lib/logger.mjs';
 
-const _SCHEMA_VERSION = 4;
+const _SCHEMA_VERSION = 5;
 
 const MIGRATIONS = [
   // v1: Initial schema
@@ -273,6 +273,24 @@ const MIGRATIONS = [
   `,
     down: `
   DROP TABLE IF EXISTS password_resets;
+  `,
+  },
+  // v5: Refresh tokens (long-lived, DB-backed, rotated on use)
+  {
+    up: `
+  CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
+  CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+  `,
+    down: `
+  DROP TABLE IF EXISTS refresh_tokens;
   `,
   },
 ];

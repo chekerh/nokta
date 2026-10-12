@@ -81,6 +81,7 @@ export async function createServer(options = {}) {
         req.path === '/api/v1/auth/register' ||
         req.path === '/api/v1/auth/forgot-password' ||
         req.path === '/api/v1/auth/reset-password' ||
+        req.path === '/api/v1/auth/refresh' ||
         req.path === '/api/v1/openapi.json' ||
         req.path === '/api/v1/docs' ||
         req.path === '/api/v1/billing/config' ||
