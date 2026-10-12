@@ -1,4 +1,5 @@
 import { asyncHandler } from '../lib/route-utils.mjs';
+import { checkAll } from '../lib/health.mjs';
 
 const routeRegistry = new Set();
 
@@ -12,8 +13,14 @@ export function registerHealthRoute(app, providerManager) {
     asyncHandler(async (req, res) => {
       const health = await providerManager.health();
       const providers = providerManager.list();
+      const dependencies = await checkAll({ providerManager, providerHealth: health });
+      // Top-level status tracks process readiness (db + disk). Provider
+      // reachability lives in dependencies.providers: instance health checks
+      // should keep failing over while a model provider is down, not mark the
+      // whole daemon unhealthy.
+      const coreOk = dependencies.database.status === 'ok' && dependencies.disk.status === 'ok';
       res.json({
-        status: 'ok',
+        status: coreOk ? 'ok' : 'degraded',
         version: '0.3.0',
         providers: providers.map((p) => ({
           id: p.id,
@@ -24,6 +31,7 @@ export function registerHealthRoute(app, providerManager) {
         defaultProvider: providerManager.getDefault()?.id || null,
         autoRoute: true,
         routes: Array.from(routeRegistry).sort(),
+        dependencies,
       });
     }),
   );
