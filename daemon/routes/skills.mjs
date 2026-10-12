@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authMiddleware } from '../lib/auth.mjs';
 import { runDiscovery, getCachedReport, parseRepoUrl } from '../lib/discovery.mjs';
-import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError, parsePagination, paginationMeta } from '../lib/route-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCAN_CACHE_DIR = path.join(__dirname, '..', '..', '.nokta', 'skill-sources.json');
@@ -291,7 +291,13 @@ export function registerSkillRoutes(app, log) {
     authMiddleware(),
     asyncHandler(async (req, res) => {
       const sources = await loadSources();
-      res.json({ cachedSources: sources.length, sources });
+      const { page, limit, enabled } = parsePagination(req.query);
+      const pageSources = enabled ? sources.slice((page - 1) * limit, page * limit) : sources;
+      res.json({
+        cachedSources: sources.length,
+        sources: pageSources,
+        ...(enabled ? { pagination: paginationMeta(sources.length, { page, limit }) } : {}),
+      });
     }),
   );
 

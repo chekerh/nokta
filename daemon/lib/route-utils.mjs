@@ -25,6 +25,21 @@ export function resolveSafeTarget(target) {
   return resolved;
 }
 
+// Pagination from ?page=1&limit=20. Only engages when `page` is present, so
+// callers that want the whole list keep their current behaviour. `limit`
+// clamps to [1, 100]; `page` is 1-indexed.
+export function parsePagination(query = {}) {
+  const pageRaw = Number.parseInt(query.page, 10);
+  const limitRaw = Number.parseInt(query.limit, 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : 20;
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+  return { page, limit, enabled: query.page !== undefined };
+}
+
+export function paginationMeta(total, { page, limit }) {
+  return { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
+}
+
 // Segment-wise containment test: is `child` inside or equal to `parent`?
 // Unlike startsWith(), it does not leak into siblings like /base-evil.
 export function isWithin(parent, child) {

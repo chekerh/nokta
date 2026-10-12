@@ -1,4 +1,4 @@
-import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError, parsePagination, paginationMeta } from '../lib/route-utils.mjs';
 import { authMiddleware, requestToken, verifyToken } from '../lib/auth.mjs';
 import { prepare } from '../db/connection.mjs';
 import { canStartRun, getActiveRunCount } from '../lib/run-limit.mjs';
@@ -28,19 +28,25 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
     authMiddleware(false),
     asyncHandler(async (req, res) => {
       await orchestrator.load();
-      const { status, trigger, limit } = req.query;
-      const runs = orchestrator
-        .listRuns({
-          status,
-          trigger,
-          limit: limit ? parseInt(limit, 10) : undefined,
-          userId: req.user?.id,
-        })
-        .map((run) => ({
+      const { status, trigger } = req.query;
+      const { page, limit, enabled } = parsePagination(req.query);
+      const rawLimit = Number.parseInt(req.query.limit, 10);
+      // Without `page`, keep the historical `?limit=` behaviour of an upper cap.
+      let items = orchestrator.listRuns({
+        status,
+        trigger,
+        limit: !enabled && Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : undefined,
+        userId: req.user?.id,
+      });
+      const total = items.length;
+      if (enabled) items = items.slice((page - 1) * limit, page * limit);
+      res.json({
+        runs: items.map((run) => ({
           ...run,
           queueStatus: jobQueue ? jobQueue.getStatus(run.id) : null,
-        }));
-      res.json({ runs });
+        })),
+        ...(enabled ? { pagination: paginationMeta(total, { page, limit }) } : {}),
+      });
     }),
   );
 

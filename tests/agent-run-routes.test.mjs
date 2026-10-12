@@ -207,6 +207,73 @@ test('a dispatch failure marks the run failed rather than leaving it stuck', asy
   assert.deepEqual(failed, [['run-1', 'queue is full']]);
 });
 
+// Pagination on GET /api/v1/agent-runs only engages when ?page= is present,
+// so existing callers that want the whole list keep their behaviour.
+function seededStubOrchestrator() {
+  const runs = Array.from({ length: 25 }, (_, i) => ({
+    id: `run-${i + 1}`,
+    status: 'completed',
+    goal: `goal ${i + 1}`,
+  }));
+  return {
+    ...stubOrchestrator(),
+    load: async () => {},
+    listRuns: (opts) => {
+      let items = [...runs];
+      if (opts.status) items = items.filter((r) => r.status === opts.status);
+      if (opts.trigger) items = items.filter((r) => r.trigger === opts.trigger);
+      if (opts.limit) items = items.slice(0, opts.limit);
+      return items;
+    },
+  };
+}
+
+const seededRoutes = mountRoutes(seededStubOrchestrator(), null);
+
+test('pagination: no ?page returns the full list and no pagination field', async () => {
+  const res = await invoke(seededRoutes, 'GET /api/v1/agent-runs', { query: {}, user: {} });
+  assert.equal(res.body.runs.length, 25);
+  assert.equal(res.body.pagination, undefined);
+});
+
+test('pagination: ?page=2&limit=10 returns that page with metadata', async () => {
+  const res = await invoke(seededRoutes, 'GET /api/v1/agent-runs', {
+    query: { page: '2', limit: '10' },
+    user: {},
+  });
+  assert.equal(res.body.runs.length, 10);
+  assert.equal(res.body.runs[0].id, 'run-11');
+  assert.deepEqual(res.body.pagination, { page: 2, limit: 10, total: 25, totalPages: 3 });
+});
+
+test('pagination: a page past the end is empty but keeps the total', async () => {
+  const res = await invoke(seededRoutes, 'GET /api/v1/agent-runs', {
+    query: { page: '5', limit: '10' },
+    user: {},
+  });
+  assert.deepEqual(res.body.runs, []);
+  assert.equal(res.body.pagination.total, 25);
+});
+
+test('pagination: ?limit without ?page keeps the historical cap behaviour', async () => {
+  const res = await invoke(seededRoutes, 'GET /api/v1/agent-runs', {
+    query: { limit: '5' },
+    user: {},
+  });
+  assert.equal(res.body.runs.length, 5);
+  assert.equal(res.body.pagination, undefined);
+});
+
+test('pagination: invalid page/limit values fall back to defaults', async () => {
+  const res = await invoke(seededRoutes, 'GET /api/v1/agent-runs', {
+    query: { page: 'nope', limit: 'abc' },
+    user: {},
+  });
+  assert.equal(res.body.runs.length, 20);
+  assert.equal(res.body.pagination.page, 1);
+  assert.equal(res.body.pagination.limit, 20);
+});
+
 // SSE streams every run's events, which EventSource consumes without headers.
 // It must not be open to anonymous callers — the fix accepts a verified JWT
 // from ?token= and rejects everything else. (The happy path needs a real user
