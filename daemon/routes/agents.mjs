@@ -1,4 +1,4 @@
-import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { asyncHandler, AppError, parsePagination, paginationMeta } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
 import { canStartRun, getActiveRunCount } from '../lib/run-limit.mjs';
 import { loadAgentPacks, resolveAgentPack } from '../agent/agent-pack.mjs';
@@ -27,11 +27,17 @@ export function registerAgentRoutes(app, providerManager, _log, orchestrator = n
         installedModels: ollamaProvider?.models || [],
       };
 
+      const { page, limit, enabled } = parsePagination(req.query);
+      let agents = realAgents.length > 0 ? realAgents : providerAgents;
+      const total = agents.length;
+      if (enabled) agents = agents.slice((page - 1) * limit, page * limit);
+
       res.json({
-        agents: realAgents.length > 0 ? realAgents : providerAgents,
+        agents,
         fleet: realAgents,
         providers: providerAgents,
         ollamaStatus,
+        ...(enabled ? { pagination: paginationMeta(total, { page, limit }) } : {}),
       });
     }),
   );

@@ -157,3 +157,15 @@ test('cli: migrate up runs successfully', () => {
     assert.ok(stdout.includes('migrations complete') || stdout.includes('All migrations'));
   }
 });
+
+test('skill:manage list dispatches the command instead of help', () => {
+  // Regression: parseArgs read argv[3]/argv[4], so a standalone invocation
+  // `node nokta-skill.mjs list` treated every command as missing and fell
+  // back to help. argv[2] is the command for a direct script call.
+  const stdout = execFileSync('node', [path.join(ROOT, 'compiler', 'nokta-skill.mjs'), 'list'], {
+    encoding: 'utf8',
+    cwd: ROOT,
+    timeout: 10000,
+  });
+  assert.ok(!stdout.includes('Usage: nokta skill'), `expected command dispatch, got help:\n${stdout}`);
+});

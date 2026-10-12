@@ -1,4 +1,5 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { parsePagination, paginationMeta } from '../lib/route-utils.mjs';
 
 export function registerCostRoutes(app, costTracker) {
   app.get(
@@ -6,7 +7,15 @@ export function registerCostRoutes(app, costTracker) {
     asyncHandler(async (req, res) => {
       const { since, until } = req.query;
       const entries = await costTracker.getCosts(since, until);
-      res.json({ entries, total: entries.reduce((s, e) => s + e.totalCost, 0) });
+      const { page, limit, enabled } = parsePagination(req.query);
+      // `total` stays the whole-range spend even when the page is sliced.
+      const total = entries.reduce((s, e) => s + e.totalCost, 0);
+      const pageEntries = enabled ? entries.slice((page - 1) * limit, page * limit) : entries;
+      res.json({
+        entries: pageEntries,
+        total,
+        ...(enabled ? { pagination: paginationMeta(entries.length, { page, limit }) } : {}),
+      });
     }),
   );
 

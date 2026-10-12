@@ -111,6 +111,16 @@ export function bearerToken(req) {
   return match ? match[1].trim() : null;
 }
 
+// Token for transports that cannot set headers (EventSource / SSE). Falls back
+// to ?token=<jwt> only when the header is absent, and only accepts a string so
+// a repeated query param (?token=a&token=b) is not coerced into an array.
+export function requestToken(req) {
+  const header = bearerToken(req);
+  if (header) return header;
+  const query = req.query?.token;
+  return typeof query === 'string' && query ? query : null;
+}
+
 export function authMiddleware(required = true) {
   return (req, res, next) => {
     const token = bearerToken(req);
