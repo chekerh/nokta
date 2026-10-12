@@ -19,9 +19,11 @@ export function isBlacklisted(jti) {
   if (!jti) return false;
   const expiresAt = blacklist.get(jti);
   if (!expiresAt) return false;
-  if (new Date(expiresAt) < new Date()) {
+  // An entry past its own expiry no longer needs to be remembered; the token is
+  // long gone. Drop it and report "not blacklisted".
+  if (new Date(expiresAt).getTime() < Date.now()) {
     blacklist.delete(jti);
-    return true;
+    return false;
   }
   return true;
 }
@@ -29,24 +31,29 @@ export function isBlacklisted(jti) {
 export function loadBlacklist() {
   try {
     const db = getDb();
-    const rows = db
-      .prepare("SELECT token_id, expires_at FROM token_blacklist WHERE expires_at > datetime('now')")
-      .all();
+    // expires_at is stored as an ISO-8601 string; compare in JS rather than
+    // SQLite, whose datetime() parsing of the fractional/`Z` form is unreliable.
+    const rows = db.prepare('SELECT token_id, expires_at FROM token_blacklist').all();
+    const now = Date.now();
     for (const row of rows) {
-      blacklist.set(row.token_id, row.expires_at);
+      if (new Date(row.expires_at).getTime() >= now) blacklist.set(row.token_id, row.expires_at);
     }
   } catch {}
 }
 
 export function startBlacklistCleanup() {
   setInterval(() => {
-    const now = new Date().toISOString();
+    const now = Date.now();
     for (const [jti, expiresAt] of blacklist) {
-      if (expiresAt < now) blacklist.delete(jti);
+      if (new Date(expiresAt).getTime() < now) blacklist.delete(jti);
     }
     try {
       const db = getDb();
-      db.prepare("DELETE FROM token_blacklist WHERE expires_at < datetime('now')").run();
+      const rows = db.prepare('SELECT token_id, expires_at FROM token_blacklist').all();
+      const del = db.prepare('DELETE FROM token_blacklist WHERE token_id = ?');
+      for (const row of rows) {
+        if (new Date(row.expires_at).getTime() < now) del.run(row.token_id);
+      }
     } catch {}
   }, 60000).unref();
 }

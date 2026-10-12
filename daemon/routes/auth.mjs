@@ -10,8 +10,13 @@ import {
   hashToken,
 } from '../lib/auth.mjs';
 import { prepare } from '../db/connection.mjs';
-import { authRateLimit, recordFailedLogin, clearFailedLogin } from '../lib/rate-limit.mjs';
+import { authRateLimit, refreshRateLimit, recordFailedLogin, clearFailedLogin } from '../lib/rate-limit.mjs';
 import { sendPasswordResetEmail } from '../lib/mailer.mjs';
+import {
+  issueRefreshToken,
+  rotateRefreshToken,
+  revokeUserRefreshTokens,
+} from '../lib/refresh-tokens.mjs';
 import { validateBody } from '../lib/validate.mjs';
 import {
   RegisterSchema,
@@ -19,6 +24,7 @@ import {
   ChangePasswordSchema,
   ForgotPasswordSchema,
   ResetPasswordSchema,
+  RefreshTokenSchema,
 } from '../lib/schemas.mjs';
 
 function validatePassword(password) {
@@ -52,10 +58,12 @@ export function registerAuthRoutes(app) {
         passwordHash,
       );
 
-      const token = createToken({ sub: id, email, role: 'user' });
+      const token = createToken({ sub: id, email, role: 'user', tv: 0 });
+      const refreshToken = issueRefreshToken(id);
       res.status(201).json({
         user: { id, email, name: name || '', role: 'user', tier: 'free' },
         token,
+        refreshToken,
       });
     }),
   );
@@ -82,10 +90,12 @@ export function registerAuthRoutes(app) {
 
       clearFailedLogin(email);
 
-      const token = createToken({ sub: user.id, email: user.email, role: user.role });
+      const token = createToken({ sub: user.id, email: user.email, role: user.role, tv: user.token_version ?? 0 });
+      const refreshToken = issueRefreshToken(user.id);
       res.json({
         user: { id: user.id, email: user.email, name: user.name, role: user.role, tier: user.tier },
         token,
+        refreshToken,
       });
     }),
   );
@@ -100,10 +110,41 @@ export function registerAuthRoutes(app) {
     }),
   );
 
+  // Logging out ends every session for the user (all of their refresh tokens are
+  // revoked) and blacklists the current access token. Ending all sessions is the
+  // safer default; a per-device logout would need per-session token ids.
   app.post('/api/v1/auth/logout', authMiddleware(), (req, res) => {
     blacklistCurrentToken(req);
+    revokeUserRefreshTokens(req.user.id);
     res.json({ success: true, message: 'Token revoked.' });
   });
+
+  // Exchange a refresh token for a fresh access token. The presented refresh
+  // token is rotated (single-use): a new one is returned and the old is revoked.
+  app.post(
+    '/api/v1/auth/refresh',
+    refreshRateLimit,
+    validateBody(RefreshTokenSchema),
+    asyncHandler(async (req, res) => {
+      const { refreshToken } = req.body;
+      if (!refreshToken) throw new AppError('refreshToken required', 400);
+
+      const rotated = rotateRefreshToken(refreshToken);
+      if (!rotated) throw new AppError('Invalid or expired refresh token', 401);
+
+      const user = prepare('SELECT id, email, name, role, tier, token_version FROM users WHERE id = ?').get(
+        rotated.userId,
+      );
+      if (!user) throw new AppError('User not found', 401);
+
+      const token = createToken({ sub: user.id, email: user.email, role: user.role, tv: user.token_version ?? 0 });
+      res.json({
+        token,
+        refreshToken: rotated.token,
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, tier: user.tier },
+      });
+    }),
+  );
 
   app.post(
     '/api/v1/auth/change-password',
@@ -122,7 +163,12 @@ export function registerAuthRoutes(app) {
       if (!valid) throw new AppError('Current password is incorrect', 401);
 
       const newHash = await hashPassword(newPassword);
-      prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(newHash, user.id);
+      // Bumping token_version invalidates every access token minted before this
+      // change; revoking refresh tokens stops other sessions minting new ones.
+      prepare(
+        "UPDATE users SET password_hash = ?, token_version = token_version + 1, updated_at = datetime('now') WHERE id = ?",
+      ).run(newHash, user.id);
+      revokeUserRefreshTokens(user.id);
       res.json({ success: true });
     }),
   );
@@ -186,13 +232,15 @@ export function registerAuthRoutes(app) {
       }
 
       const newHash = await hashPassword(password);
-      prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(
-        newHash,
-        row.user_id,
-      );
+      prepare(
+        "UPDATE users SET password_hash = ?, token_version = token_version + 1, updated_at = datetime('now') WHERE id = ?",
+      ).run(newHash, row.user_id);
       // Consume the token and drop any other outstanding ones for this user.
       prepare("UPDATE password_resets SET used_at = datetime('now') WHERE id = ?").run(row.id);
       prepare('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL').run(row.user_id);
+      // A reset is a recovery event: kill every live refresh token so a
+      // possibly-compromised session cannot mint new access tokens.
+      revokeUserRefreshTokens(row.user_id);
 
       res.json({ success: true, message: 'Password has been reset.' });
     }),

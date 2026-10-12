@@ -86,7 +86,7 @@ test('legacy tokens without a kid verify against the current key', () => {
   assert.equal(verifyToken(token)?.sub, 'legacy');
 });
 
-test('NOKTKA_JWT_PREVIOUS_SECRETS accepts tokens from a retired key', () => {
+test('NOKTA_JWT_PREVIOUS_SECRETS accepts tokens from a retired key', () => {
   const previousSecret = 'retired-signing-key-abc123';
   resetKeys();
   process.env.NOKTA_JWT_PREVIOUS_SECRETS = previousSecret;

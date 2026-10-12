@@ -161,7 +161,8 @@ services:
       NOKTA_API_KEY: ${NOKTA_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      NOKTA_TOKEN_TTL_SEC: 604800
+      NOKTA_ACCESS_TOKEN_TTL_SEC: 900
+      NOKTA_REFRESH_TOKEN_TTL_SEC: 604800
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
     volumes:
@@ -282,7 +283,8 @@ node -e "const {getDb}=import('./daemon/db/connection.mjs'); const db=getDb(); d
 | `NOKTA_JWT_SECRET`      | Yes         | —               | JWT signing secret              |
 | `NOKTA_JWT_PREVIOUS_SECRETS` | No    | (empty)         | Retired secrets accepted for verification during rotation (comma-separated) |
 | `NOKTA_API_KEY`         | Recommended | —               | Server-to-server API key        |
-| `NOKTA_TOKEN_TTL_SEC`   | No          | 604800          | JWT lifetime (7 days)           |
+| `NOKTA_ACCESS_TOKEN_TTL_SEC` | No     | 900             | Access-token lifetime the client silently refreshes |
+| `NOKTA_REFRESH_TOKEN_TTL_SEC` | No    | 604800          | Refresh-token lifetime (7 days) |
 | `NOKTA_CORS_ORIGIN`     | No          | (empty)         | CORS origin (empty=same-origin) |
 | `NOKTA_LOG_LEVEL`       | No          | info            | Log verbosity                   |
 | `NOKTA_DATA_DIR`        | No          | .nokta          | Data directory                  |

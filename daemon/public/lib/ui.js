@@ -18,7 +18,15 @@
     onUnauthorized = fn;
   };
 
-  window.api = async function api(method, path, body) {
+  // Optional: an async () => boolean that tries to refresh the access token.
+  // When present, a 401 is retried once after a successful refresh, so a
+  // short-lived access token is invisible to callers.
+  var onRefresh = null;
+  window.setOnRefresh = function (fn) {
+    onRefresh = fn;
+  };
+
+  window.api = async function api(method, path, body, retriedOnce) {
     var opts = { method: method, headers: {} };
     var token = localStorage.getItem('nokta-token') || localStorage.getItem('nokta_token');
     if (token) opts.headers['Authorization'] = 'Bearer ' + token;
@@ -28,6 +36,15 @@
     }
     var res = await fetch(window.location.origin + path, opts);
     if (res.status === 401 && token) {
+      if (onRefresh && !retriedOnce) {
+        var refreshed = false;
+        try {
+          refreshed = await onRefresh();
+        } catch {
+          refreshed = false;
+        }
+        if (refreshed) return api(method, path, body, true);
+      }
       if (onUnauthorized) onUnauthorized();
       throw new Error('Session expired. Please sign in again.');
     }
