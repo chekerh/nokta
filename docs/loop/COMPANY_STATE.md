@@ -4,7 +4,7 @@
 
 - **Phase:** DOCUMENTING → PERSISTING → SELECTING_NEXT
 - **Completed (2026-10-08 → 2026-10-12):** Fleet tracking/discovery, review gates (rendered-UI + dialog semantics), sandbox stabilization, codebase audit, npm audit remediation, audit Phase 1 (npm scripts, SSE auth, pagination, zod body validation), audit Phase 3 (password reset, JWT key rotation, refresh tokens)
-- **Validation:** Lint ✅ 0 errors · Tests ✅ 352/352 pass · npm audit ✅ 0 vulnerabilities
+- **Validation:** Lint ✅ 0 errors · Tests ✅ 355/355 pass · npm audit ✅ 0 vulnerabilities
 - **Next Task:** Discover next gap (audit Phase 1 + Phase 3 complete; Phase 2/4 remain)
 
 ## Loop State Tracker
@@ -25,12 +25,12 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 
 - **In scope:** Remaining gap work from discovery, tests, docs, audit phases, merge readiness
 - **Out of scope:** None defined this cycle (Phase 1 + Phase 3 complete)
-- **Constraints:** Must pass lint, 352/352 tests, and npm audit (0 vulnerabilities)
+- **Constraints:** Must pass lint, 355/355 tests, and npm audit (0 vulnerabilities)
 
 ## Validation Status
 
 - **Lint:** ✅ Pass (0 errors, 0 warnings)
-- **Tests:** ✅ 352/352 pass
+- **Tests:** ✅ 355/355 pass
 - **Daemon:** ✅ Starts and responds to health check
 - **npm audit:** ✅ 0 vulnerabilities (proxy-addr, qs, js-yaml, brace-expansion patched)
 - **Fleet:** ✅ Track/discover/plan/queue live opencode + freebuff sessions
@@ -49,7 +49,7 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 - Dependabot alert #10 (`source-map-js` < 1.2.2, dev-only in `landing/`) resolved via PR #16; stale qs PR #13 closed as superseded (fix already on `main`).
 - Audit Phase 3 started: Task 3.4 password reset landed on `feat/password-reset` (TASK-016). Task 3.3 (login rate limiting) was already shipped as `daemon/lib/rate-limit.mjs`.
 - Audit Phase 3 Task 3.1 JWT signing-key rotation landed on `feat/jwt-rotation` (TASK-017): `kid` in every token, key ring verifies retired keys, `NOKTA_JWT_PREVIOUS_SECRETS`.
-- Audit Phase 3 Task 3.2 refresh tokens landed on `feat/refresh-tokens` (TASK-018): short-lived access tokens (15 min), DB-backed single-use rotating refresh tokens with reuse detection, `/api/v1/auth/refresh`, revocation + `token_version` bump on password change/reset, all-session revocation on logout, silent client refresh on 401. Hardened after independent security + code review. **Audit Phase 3 complete.**
+- Audit Phase 3 Task 3.2 refresh tokens landed on `feat/refresh-tokens` (TASK-018): short-lived access tokens (15 min), DB-backed single-use rotating refresh tokens with reuse detection, `/api/v1/auth/refresh`, revocation + `token_version` bump on password change/reset, all-session revocation on logout, silent client refresh on 401. Hardened after independent security + code review, then verified again post-merge by a live E2E run and a second independent security pass; second-pass findings (blacklist eviction fallback, shorter reuse grace, TTL clamps, trust-proxy opt-in, logout token_version bump, auth-limiter store split, cross-tab refresh retry, transient-refresh handling, self-XSS onclick escape, idempotent v5 migration) landed in a follow-up hardening PR. **Audit Phase 3 complete.**
 - Deferred from the TASK-018 review (follow-ups, not blockers): move the refresh token out of `localStorage` into an HttpOnly/SameSite cookie (M4), and make `/auth/register`'s duplicate-email response generic to close the last enumeration vector (L4).
 
 ## Next Action
