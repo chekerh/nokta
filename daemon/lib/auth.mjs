@@ -1,8 +1,7 @@
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { prepare } from '../db/connection.mjs';
 import { blacklistToken, isBlacklisted } from './token-blacklist.mjs';
+import { getCurrentKey, getKey } from './jwt-keys.mjs';
 
 const TOKEN_EXPIRY_SEC = parseInt(process.env.NOKTA_TOKEN_TTL_SEC || '604800', 10);
 
@@ -12,24 +11,6 @@ function base64url(buf) {
 
 function hmacSha256(secret, data) {
   return crypto.createHmac('sha256', secret).update(data).digest();
-}
-
-function getSecret() {
-  const secret = process.env.NOKTA_JWT_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('NOKTA_JWT_SECRET must be set explicitly in production');
-  }
-  const dataDir = process.env.NOKTA_DATA_DIR || path.join(process.cwd(), '.nokta');
-  const secretPath = path.join(dataDir, '.jwt-secret');
-  try {
-    return fs.readFileSync(secretPath, 'utf8').trim();
-  } catch {
-    const key = crypto.randomBytes(32).toString('hex');
-    fs.mkdirSync(path.dirname(secretPath), { recursive: true });
-    fs.writeFileSync(secretPath, key, { mode: 0o600 });
-    return key;
-  }
 }
 
 export function makeId(prefix = '') {
@@ -77,9 +58,9 @@ export function validatePassword(password) {
 }
 
 export function createToken(payload) {
-  const secret = getSecret();
+  const { kid, secret } = getCurrentKey();
   const jti = crypto.randomBytes(16).toString('hex');
-  const header = base64url(Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
+  const header = base64url(Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT', kid })));
   const body = base64url(
     Buffer.from(
       JSON.stringify({
@@ -98,7 +79,13 @@ export function verifyToken(token) {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-    const secret = getSecret();
+
+    // Prefer the signing key named by the token's `kid`; fall back to the
+    // current key for legacy tokens minted before `kid` was added.
+    const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+    const secret = header.kid ? getKey(header.kid) : getCurrentKey().secret;
+    if (!secret) return null;
+
     const expectedSig = base64url(hmacSha256(secret, `${parts[0]}.${parts[1]}`));
     const sigBuf = Buffer.from(parts[2], 'base64url');
     const expectedBuf = Buffer.from(expectedSig, 'base64url');
