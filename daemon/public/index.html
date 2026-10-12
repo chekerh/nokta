@@ -3062,7 +3062,9 @@
         function connectAgentEvents() {
           if (typeof EventSource === 'undefined') return;
           try {
-            var es = new EventSource(API + '/api/v1/agent-runs/events');
+            var es = new EventSource(
+              API + '/api/v1/agent-runs/events' + (authToken ? '?token=' + encodeURIComponent(authToken) : '')
+            );
             var handlers = [
               'run:created',
               'run:started',

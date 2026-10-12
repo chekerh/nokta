@@ -32,7 +32,7 @@ import { SprintEngine } from './lib/sprint-engine.mjs';
 import { AgentOrchestrator } from './agent/orchestrator.mjs';
 import { AutoWatcher } from './lib/auto-watcher.mjs';
 import { AgentJobQueue } from './agent/job-queue.mjs';
-import { authMiddleware, bearerToken, verifyToken } from './lib/auth.mjs';
+import { authMiddleware, bearerToken, requestToken, verifyToken } from './lib/auth.mjs';
 import { runDiscovery } from './lib/discovery.mjs';
 import { requestIdMiddleware } from './lib/request-id.mjs';
 import { registerCleanup } from './lib/shutdown.mjs';
@@ -90,7 +90,10 @@ export async function createServer(options = {}) {
       ) {
         return next();
       }
-      const provided = bearerToken(req);
+      // EventSource cannot set Authorization headers, so the SSE stream accepts
+      // its token via ?token=<jwt> instead. Everywhere else, headers only.
+      const provided =
+        req.path === '/api/v1/agent-runs/events' ? requestToken(req) : bearerToken(req);
       if (provided === authToken) {
         return next();
       }

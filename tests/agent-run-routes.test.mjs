@@ -52,6 +52,14 @@ function fakeRes() {
   return res;
 }
 
+function invokeSSE(routes, req) {
+  const chain = routes.get('GET /api/v1/agent-runs/events');
+  assert.ok(chain, 'route not registered: GET /api/v1/agent-runs/events');
+  const res = fakeRes();
+  chain[chain.length - 1]({ on: () => {}, ...req }, res, () => {});
+  return res;
+}
+
 function stubOrchestrator(overrides = {}) {
   return {
     projectRoot: '/repo',
@@ -197,4 +205,34 @@ test('a dispatch failure marks the run failed rather than leaving it stuck', asy
 
   assert.equal(res.statusCode, 201, 'dispatch failures are async and do not change the create response');
   assert.deepEqual(failed, [['run-1', 'queue is full']]);
+});
+
+// SSE streams every run's events, which EventSource consumes without headers.
+// It must not be open to anonymous callers — the fix accepts a verified JWT
+// from ?token= and rejects everything else. (The happy path needs a real user
+// row, exercised at the HTTP level; here we pin the reject paths.)
+const SSE_ROUTES = mountRoutes(stubOrchestrator(), null);
+
+test('SSE events stream rejects a request with no token', () => {
+  const res = invokeSSE(SSE_ROUTES, { query: {}, headers: {} });
+  assert.equal(res.statusCode, 401);
+  assert.match(res.body.error, /Authentication required/);
+});
+
+test('SSE events stream rejects an invalid header token', () => {
+  const res = invokeSSE(SSE_ROUTES, {
+    query: {},
+    headers: { authorization: 'Bearer definitely-not-a-token' },
+  });
+  assert.equal(res.statusCode, 401);
+});
+
+test('SSE events stream rejects an invalid query token', () => {
+  const res = invokeSSE(SSE_ROUTES, { query: { token: 'bad-token' }, headers: {} });
+  assert.equal(res.statusCode, 401);
+});
+
+test('SSE events stream does not treat a repeated query param as a valid token', () => {
+  const res = invokeSSE(SSE_ROUTES, { query: { token: ['a', 'b'] }, headers: {} });
+  assert.equal(res.statusCode, 401);
 });

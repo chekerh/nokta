@@ -1,5 +1,6 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
-import { authMiddleware } from '../lib/auth.mjs';
+import { authMiddleware, requestToken, verifyToken } from '../lib/auth.mjs';
+import { prepare } from '../db/connection.mjs';
 import { canStartRun, getActiveRunCount } from '../lib/run-limit.mjs';
 import { normalizeSteps } from '../agent/orchestrator.mjs';
 
@@ -82,6 +83,67 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
     }),
   );
 
+  // SSE: EventSource cannot send an Authorization header, so the token is
+  // accepted from ?token=<jwt> (verified against the header first). Rejecting
+  // unauth'd streams closes an info leak: a caller could watch every run's
+  // events without any credentials before.
+  // Registered before GET /api/v1/agent-runs/:id — Express matches in
+  // registration order, so the parameterised route would otherwise shadow it.
+  app.get('/api/v1/agent-runs/events', (req, res) => {
+    const token = requestToken(req);
+    const payload = token ? verifyToken(token) : null;
+    const user = payload
+      ? prepare('SELECT id, email, name, role, tier FROM users WHERE id = ?').get(payload.sub)
+      : null;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required', status: 401 });
+    }
+    req.user = user;
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    // Node buffers headers until the first write; flush so the client gets the
+    // 200 immediately even before any event fires.
+    res.flushHeaders();
+
+    const handler = (event, data) => {
+      if (res.closed) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const eventTypes = [
+      'run:created',
+      'run:started',
+      'run:completed',
+      'run:updated',
+      'run:step-start',
+      'run:step-complete',
+      'run:deleted',
+    ];
+    const listeners = eventTypes.map((evt) => {
+      const fn = (data) => handler(evt, data);
+      orchestrator.on(evt, fn);
+      return [evt, fn];
+    });
+
+    // Also relay job queue events
+    if (jobQueue) {
+      jobQueue.on('job:queued', (data) => handler('run:queued', data));
+      jobQueue.on('job:completed', (data) => handler('run:completed', data));
+      jobQueue.on('job:failed', (data) => handler('run:failed', data));
+    }
+
+    req.on('close', () => {
+      for (const [evt, fn] of listeners) {
+        orchestrator.off(evt, fn);
+      }
+    });
+  });
+
   app.get(
     '/api/v1/agent-runs/:id',
     authMiddleware(false),
@@ -161,46 +223,4 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
       res.status(201).json({ run: { ...run, status: 'running' }, started: true });
     }),
   );
-
-  app.get('/api/v1/agent-runs/events', (req, res) => {
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
-
-    const handler = (event, data) => {
-      if (res.closed) return;
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    };
-
-    const eventTypes = [
-      'run:created',
-      'run:started',
-      'run:completed',
-      'run:updated',
-      'run:step-start',
-      'run:step-complete',
-      'run:deleted',
-    ];
-    const listeners = eventTypes.map((evt) => {
-      const fn = (data) => handler(evt, data);
-      orchestrator.on(evt, fn);
-      return [evt, fn];
-    });
-
-    // Also relay job queue events
-    if (jobQueue) {
-      jobQueue.on('job:queued', (data) => handler('run:queued', data));
-      jobQueue.on('job:completed', (data) => handler('run:completed', data));
-      jobQueue.on('job:failed', (data) => handler('run:failed', data));
-    }
-
-    req.on('close', () => {
-      for (const [evt, fn] of listeners) {
-        orchestrator.off(evt, fn);
-      }
-    });
-  });
 }
