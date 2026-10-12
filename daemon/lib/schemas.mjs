@@ -34,6 +34,8 @@ export const ChangePasswordSchema = loose({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(1),
 });
+export const ForgotPasswordSchema = loose({ email: z.string().min(1) });
+export const ResetPasswordSchema = loose({ token: z.string().min(1), password: z.string().min(1) });
 
 // ── Agents ───────────────────────────────────────────────────────
 export const AgentRecommendSchema = loose({ prompt: z.string().min(1) });
