@@ -277,20 +277,27 @@ const MIGRATIONS = [
   // token version so a credential change can invalidate outstanding access
   // tokens too.
   {
-    up: `
-  ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;
-  CREATE TABLE IF NOT EXISTS refresh_tokens (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    family_expires_at TEXT,
-    revoked_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-  CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
-  CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
-  `,
+    // Function-based so the ALTER is conditional: a migration that was half
+    // applied (column created, version row lost) can be re-run safely.
+    up: (db) => {
+      const cols = db.prepare('PRAGMA table_info(users)').all();
+      if (!cols.some((c) => c.name === 'token_version')) {
+        db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;');
+      }
+      db.exec(`
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      family_expires_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+    `);
+    },
     down: `
   DROP TABLE IF EXISTS refresh_tokens;
   `,
@@ -309,9 +316,22 @@ export function migrate() {
 
   for (let i = currentVersion; i < MIGRATIONS.length; i++) {
     const version = i + 1;
+    const migration = MIGRATIONS[i];
     logger.info(`Running migration v${version}...`);
-    db.exec(MIGRATIONS[i].up);
-    db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(version);
+    // Each migration applies atomically: either the schema change and its
+    // version record both land, or neither does.
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      if (typeof migration.up === 'function') migration.up(db);
+      else db.exec(migration.up);
+      db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (?)').run(version);
+      db.exec('COMMIT');
+    } catch (err) {
+      try {
+        db.exec('ROLLBACK');
+      } catch {}
+      throw err;
+    }
     logger.info(`Migration v${version} complete.`);
   }
 

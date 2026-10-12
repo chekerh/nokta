@@ -17,6 +17,11 @@ const REFRESH_RATE_LIMIT = { windowMs: 60000, max: 60 };
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 
+// authRateLimit keeps its own store: the global rateLimit() middleware and
+// refreshRateLimit() share the process but must not consume login's budget.
+// Before this split, any non-auth request (including automatic /auth/refresh
+// calls) from an IP made its next login attempt hit the 5/min cap.
+const authStores = new Map();
 const refreshStores = new Map();
 
 // Get real client IP, avoiding X-Forwarded-For spoofing.
@@ -51,12 +56,12 @@ export function authRateLimit(req, res, next) {
     }
   }
 
-  if (!ipStores.has(ip)) {
-    ipStores.set(ip, []);
+  if (!authStores.has(ip)) {
+    authStores.set(ip, []);
   }
-  const timestamps = ipStores.get(ip).filter((t) => now - t < AUTH_RATE_LIMIT.windowMs);
+  const timestamps = authStores.get(ip).filter((t) => now - t < AUTH_RATE_LIMIT.windowMs);
   timestamps.push(now);
-  ipStores.set(ip, timestamps);
+  authStores.set(ip, timestamps);
 
   res.setHeader('X-RateLimit-Limit', AUTH_RATE_LIMIT.max);
   res.setHeader('X-RateLimit-Remaining', Math.max(0, AUTH_RATE_LIMIT.max - timestamps.length));
@@ -251,7 +256,7 @@ export function getAllProviderBucketStats() {
 // Cleanup stale entries every 5 min
 setInterval(() => {
   const now = Date.now();
-  for (const store of [ipStores, userStores, refreshStores]) {
+  for (const store of [ipStores, userStores, authStores, refreshStores]) {
     for (const [key, timestamps] of store) {
       const valid = timestamps.filter((t) => now - t < 120000);
       if (valid.length === 0) store.delete(key);

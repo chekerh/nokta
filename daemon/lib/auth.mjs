@@ -7,15 +7,20 @@ import { getCurrentKey, getKey } from './jwt-keys.mjs';
 // refresh-tokens.mjs) mints new ones. NOKTA_TOKEN_TTL_SEC is still honoured as
 // a fallback so existing deployments keep their configured lifetime. A
 // non-numeric or non-positive value falls back to the default rather than
-// yielding NaN (which would produce tokens with a null `exp`).
-function positiveInt(raw, fallback) {
-  const value = parseInt(raw ?? '', 10);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
+// yielding NaN (which would produce tokens with a null `exp`), and absurd
+// values are clamped so a mistyped TTL cannot mint effectively-never-expiring
+// tokens.
+function positiveInt(raw, fallback, max) {
+  let value = parseInt(raw ?? '', 10);
+  if (!Number.isFinite(value) || value <= 0) value = fallback;
+  if (Number.isFinite(max) && max > 0) value = Math.min(value, max);
+  return value;
 }
 
 const TOKEN_EXPIRY_SEC = positiveInt(
   process.env.NOKTA_ACCESS_TOKEN_TTL_SEC || process.env.NOKTA_TOKEN_TTL_SEC,
   900,
+  24 * 3600, // never longer than a day, even if misconfigured
 );
 
 function base64url(buf) {

@@ -17,15 +17,23 @@ export function blacklistToken(jti, expiresAt) {
 
 export function isBlacklisted(jti) {
   if (!jti) return false;
-  const expiresAt = blacklist.get(jti);
-  if (!expiresAt) return false;
-  // An entry past its own expiry no longer needs to be remembered; the token is
-  // long gone. Drop it and report "not blacklisted".
-  if (new Date(expiresAt).getTime() < Date.now()) {
+  const mem = blacklist.get(jti);
+  if (mem) {
+    if (new Date(mem).getTime() >= Date.now()) return true;
     blacklist.delete(jti);
     return false;
   }
-  return true;
+  // The in-memory Map is capped (FIFO eviction), so a still-valid revocation
+  // can be evicted. Fall back to the DB before declaring a token unblacklisted.
+  try {
+    const db = getDb();
+    const row = db.prepare('SELECT expires_at FROM token_blacklist WHERE token_id = ?').get(jti);
+    if (row && new Date(row.expires_at).getTime() >= Date.now()) {
+      blacklist.set(jti, row.expires_at);
+      return true;
+    }
+  } catch {}
+  return false;
 }
 
 export function loadBlacklist() {

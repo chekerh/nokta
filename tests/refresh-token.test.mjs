@@ -280,6 +280,38 @@ test('a password change invalidates outstanding access tokens', async () => {
   assert.equal(after.statusCode, 401);
 });
 
+test('logout invalidates other outstanding access tokens too', async () => {
+  const { token, refreshToken } = await registeredUser();
+
+  // Rotate once so there are two distinct access tokens for this user.
+  const rotated = await invoke(refresh, fakeReq({ refreshToken }));
+  assert.equal(rotated.statusCode, 200);
+
+  // Logout with the CURRENT access token: blacklists it AND bumps
+  // token_version, killing the earlier token minted by /auth/refresh.
+  const out = await invoke(logout, fakeReq({}, rotated.body.token));
+  assert.equal(out.statusCode, 200);
+
+  const stale = await invoke(me, fakeReq({}, token));
+  assert.equal(stale.statusCode, 401);
+});
+
+test('a refresh raced within the grace window does not tear down the family', async () => {
+  const { refreshToken } = await registeredUser();
+
+  const first = await invoke(refresh, fakeReq({ refreshToken }));
+  assert.equal(first.statusCode, 200);
+
+  // Replay the consumed token immediately (inside the 5s grace window): it is
+  // rejected, but -- unlike a late replay -- the newly issued token survives.
+  await assert.rejects(
+    () => invoke(refresh, fakeReq({ refreshToken })),
+    (err) => err instanceof AppError && err.status === 401,
+  );
+  const again = await invoke(refresh, fakeReq({ refreshToken: first.body.refreshToken }));
+  assert.equal(again.statusCode, 200);
+});
+
 after(() => {
   resetMailTransport();
   closeDb();
