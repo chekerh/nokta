@@ -27,6 +27,7 @@ _None._
 | TASK-014 | Audit Phase 1 — Task 1.4: pagination (page/limit) on agent-runs, agents, skills, costs list endpoints                              | HIGH     | COMPLETED | 2026-10-12 |
 | TASK-015 | Audit Phase 1 — Task 1.3: zod request-body validation on all body-reading routes                                                   | HIGH     | COMPLETED | 2026-10-12 |
 | TASK-016 | Audit Phase 3 — Task 3.4: password reset flow (forgot/reset routes, hashed one-time tokens, injectable mailer)                     | HIGH     | COMPLETED | 2026-10-12 |
+| TASK-017 | Audit Phase 3 — Task 3.1: JWT signing-key rotation (`kid` header, key ring, prior-secret verification)                             | HIGH     | COMPLETED | 2026-10-12 |
 
 ## Task Details
 
@@ -122,3 +123,8 @@ _None._
 
 - **Description:** Implemented Task 3.4 (account recovery). Migration v4 adds `password_resets` (only the SHA-256 hash of the token is stored). `POST /api/v1/auth/forgot-password` is rate limited and always returns a generic response (no email enumeration); on a match it supersedes prior links and emails a 1h link. `POST /api/v1/auth/reset-password` enforces the password policy, rejects unknown/expired/reused tokens (single-use), and writes the new hash. New injectable `daemon/lib/mailer.mjs` (no bundled SMTP client); both routes added to the API-key allowlist. Noted Task 3.3 (login rate limiting) already shipped as `daemon/lib/rate-limit.mjs`.
 - **Evidence:** 331/331 tests pass (6 new in `tests/password-reset.test.mjs`: happy path, no-enumeration, token single-use, expiry, policy, required field); lint clean
+
+### TASK-017: Audit Phase 3 — JWT signing-key rotation (2026-10-12)
+
+- **Description:** Implemented Task 3.1. New `daemon/lib/jwt-keys.mjs` key ring (current signing key + retired keys for verification only), each keyed by a `kid` fingerprint. `createToken` embeds `kid` in the JWT header; `verifyToken` resolves by `kid` and falls back to the current key for legacy kid-less tokens, so upgrading does not log anyone out. Rotation: set `NOKTA_JWT_SECRET` to the new key + list retired keys in `NOKTA_JWT_PREVIOUS_SECRETS` (or call `rotateKeys()`). Documented in `.env.example` and `PRODUCTION.md`.
+- **Evidence:** 337/337 tests pass (6 new in `tests/jwt-rotation.test.mjs`: kid emitted/verified, rotation keeps old tokens valid, unknown kid rejected, bad signature rejected, legacy token verified, env previous-secret accepted); lint clean
