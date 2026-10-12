@@ -6,11 +6,20 @@ import {
   makeId,
   authMiddleware,
   blacklistCurrentToken,
+  generateResetToken,
+  hashToken,
 } from '../lib/auth.mjs';
 import { prepare } from '../db/connection.mjs';
 import { authRateLimit, recordFailedLogin, clearFailedLogin } from '../lib/rate-limit.mjs';
+import { sendPasswordResetEmail } from '../lib/mailer.mjs';
 import { validateBody } from '../lib/validate.mjs';
-import { RegisterSchema, LoginSchema, ChangePasswordSchema } from '../lib/schemas.mjs';
+import {
+  RegisterSchema,
+  LoginSchema,
+  ChangePasswordSchema,
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+} from '../lib/schemas.mjs';
 
 function validatePassword(password) {
   if (password.length < 8) return 'Password must be at least 8 characters';
@@ -115,6 +124,77 @@ export function registerAuthRoutes(app) {
       const newHash = await hashPassword(newPassword);
       prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(newHash, user.id);
       res.json({ success: true });
+    }),
+  );
+
+  // Start a reset. Always reports success (and is rate limited) so the endpoint
+  // cannot be used to discover which emails are registered.
+  app.post(
+    '/api/v1/auth/forgot-password',
+    authRateLimit,
+    validateBody(ForgotPasswordSchema),
+    asyncHandler(async (req, res) => {
+      const email = String(req.body.email || '').trim();
+      const generic = {
+        success: true,
+        message: 'If that email is registered, a reset link has been sent.',
+      };
+      if (!email) {
+        res.json(generic);
+        return;
+      }
+
+      const user = prepare('SELECT id, email FROM users WHERE email = ?').get(email);
+      if (user) {
+        const token = generateResetToken();
+        const ttlSec = parseInt(process.env.NOKTA_PASSWORD_RESET_TTL_SEC || '3600', 10);
+        const expiresAt = new Date(Date.now() + ttlSec * 1000).toISOString();
+        // Only one live reset link per user at a time.
+        prepare('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL').run(user.id);
+        prepare(
+          'INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)',
+        ).run(makeId('pr_'), user.id, hashToken(token), expiresAt);
+
+        const base = (process.env.NOKTA_PUBLIC_URL || '').replace(/\/$/, '');
+        const resetUrl = `${base}/reset-password?token=${token}`;
+        await sendPasswordResetEmail(user.email, resetUrl);
+      }
+
+      res.json(generic);
+    }),
+  );
+
+  // Complete a reset with the one-time token from the email.
+  app.post(
+    '/api/v1/auth/reset-password',
+    authRateLimit,
+    validateBody(ResetPasswordSchema),
+    asyncHandler(async (req, res) => {
+      const { token, password } = req.body;
+      if (!token || !password) throw new AppError('Token and new password required', 400);
+      const passwordError = validatePassword(password);
+      if (passwordError) throw new AppError(passwordError, 400);
+
+      const row = prepare(
+        'SELECT id, user_id, expires_at FROM password_resets WHERE token_hash = ? AND used_at IS NULL',
+      ).get(hashToken(token));
+      if (!row) throw new AppError('Invalid or expired reset token', 400);
+
+      if (new Date(row.expires_at).getTime() < Date.now()) {
+        prepare('DELETE FROM password_resets WHERE id = ?').run(row.id);
+        throw new AppError('Invalid or expired reset token', 400);
+      }
+
+      const newHash = await hashPassword(password);
+      prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(
+        newHash,
+        row.user_id,
+      );
+      // Consume the token and drop any other outstanding ones for this user.
+      prepare("UPDATE password_resets SET used_at = datetime('now') WHERE id = ?").run(row.id);
+      prepare('DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL').run(row.user_id);
+
+      res.json({ success: true, message: 'Password has been reset.' });
     }),
   );
 }

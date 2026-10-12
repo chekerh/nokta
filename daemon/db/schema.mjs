@@ -1,7 +1,7 @@
 import { getDb } from './connection.mjs';
 import { logger } from '../lib/logger.mjs';
 
-const _SCHEMA_VERSION = 3;
+const _SCHEMA_VERSION = 4;
 
 const MIGRATIONS = [
   // v1: Initial schema
@@ -255,6 +255,24 @@ const MIGRATIONS = [
   DROP TABLE IF EXISTS scope_declarations;
   DROP TABLE IF EXISTS model_pricing;
   DROP TABLE IF EXISTS token_blacklist;
+  `,
+  },
+  // v4: Password reset tokens
+  {
+    up: `
+  CREATE TABLE IF NOT EXISTS password_resets (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+  CREATE INDEX IF NOT EXISTS idx_password_resets_hash ON password_resets(token_hash);
+  `,
+    down: `
+  DROP TABLE IF EXISTS password_resets;
   `,
   },
 ];

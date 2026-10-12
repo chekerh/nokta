@@ -25,6 +25,8 @@ _None._
 | TASK-012 | Audit Phase 1 — Task 1.1: skill/agent/workspace tooling as npm scripts (skill:index, skill:manage, agent:convert, workspace:check) | HIGH     | COMPLETED | 2026-10-12 |
 | TASK-013 | Audit Phase 1 — Task 1.5: authenticate the SSE run-events stream (route was shadowed by /runs/:id and open to anonymous callers)   | HIGH     | COMPLETED | 2026-10-12 |
 | TASK-014 | Audit Phase 1 — Task 1.4: pagination (page/limit) on agent-runs, agents, skills, costs list endpoints                              | HIGH     | COMPLETED | 2026-10-12 |
+| TASK-015 | Audit Phase 1 — Task 1.3: zod request-body validation on all body-reading routes                                                   | HIGH     | COMPLETED | 2026-10-12 |
+| TASK-016 | Audit Phase 3 — Task 3.4: password reset flow (forgot/reset routes, hashed one-time tokens, injectable mailer)                     | HIGH     | COMPLETED | 2026-10-12 |
 
 ## Task Details
 
@@ -115,3 +117,8 @@ _None._
 
 - **Description:** Completed Task 1.3 (previously deferred as "new dependency"). Added `zod` + `daemon/lib/schemas.mjs` (one schema family per route group) and `daemon/lib/validate.mjs` (`validateBody` middleware: missing body → `{}`, replaces `req.body` with parsed/defaulted value, raises a 400 `AppError` carrying per-field `{ path, message }` issues). Wired into all 24 mutating route files; unwired routes are body-less (run execute/cancel, fleet queue send, planner estimate) or raw-signed (billing webhook). `AppError` now carries optional `details`, merged into the JSON error response. Schemas are intentionally permissive (`.nullish()` / `.catchall`) so routes keep their own domain errors and the UI keeps working.
 - **Evidence:** 325/325 tests pass (6 new in `tests/validation.test.mjs`); lint clean; static audit shows every `req.body`-reading mutating route runs `validateBody`; `audit/REQUEST-BODY-INVENTORY.md` documents the route→schema mapping
+
+### TASK-016: Audit Phase 3 — password reset flow (2026-10-12)
+
+- **Description:** Implemented Task 3.4 (account recovery). Migration v4 adds `password_resets` (only the SHA-256 hash of the token is stored). `POST /api/v1/auth/forgot-password` is rate limited and always returns a generic response (no email enumeration); on a match it supersedes prior links and emails a 1h link. `POST /api/v1/auth/reset-password` enforces the password policy, rejects unknown/expired/reused tokens (single-use), and writes the new hash. New injectable `daemon/lib/mailer.mjs` (no bundled SMTP client); both routes added to the API-key allowlist. Noted Task 3.3 (login rate limiting) already shipped as `daemon/lib/rate-limit.mjs`.
+- **Evidence:** 331/331 tests pass (6 new in `tests/password-reset.test.mjs`: happy path, no-enumeration, token single-use, expiry, policy, required field); lint clean

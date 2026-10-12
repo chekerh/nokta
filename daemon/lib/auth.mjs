@@ -36,6 +36,17 @@ export function makeId(prefix = '') {
   return prefix + crypto.randomBytes(16).toString('hex');
 }
 
+// Opaque, high-entropy value for one-time links (e.g. password reset). 32 bytes
+// of entropy makes the token unguessable; only its hash is ever persisted.
+export function generateResetToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Deterministic hash so a leaked database row cannot be replayed as a token.
+export function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
 export function hashPassword(password) {
   return new Promise((resolve, reject) => {
     const salt = crypto.randomBytes(16).toString('hex');
