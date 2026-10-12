@@ -5,6 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
 import { prepare } from '../db/connection.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import {
+  UiuxSearchSchema,
+  UiuxDesignSystemSchema,
+  UiuxRecommendationsSchema,
+  UiuxComponentSuggestionsSchema,
+  UiuxTemplatesSchema,
+  UiuxMetricsSchema,
+} from '../lib/schemas.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT_PATH = [
@@ -48,6 +57,7 @@ export function registerUiUxRoutes(app, log, sprintEngine) {
   app.post(
     '/api/v1/uiux/search',
     authMiddleware(false),
+    validateBody(UiuxSearchSchema),
     asyncHandler(async (req, res) => {
       const { query, domain, stack, limit = 3, category } = req.body || {};
       if (!query) throw new AppError('query is required', 400);
@@ -86,6 +96,7 @@ export function registerUiUxRoutes(app, log, sprintEngine) {
   app.post(
     '/api/v1/uiux/design-system',
     authMiddleware(false),
+    validateBody(UiuxDesignSystemSchema),
     asyncHandler(async (req, res) => {
       const { query, projectName = 'My Project', format = 'markdown', persist = false, includeExamples = true } = req.body || {};
       if (!query) throw new AppError('query/keywords is required', 400);
@@ -118,6 +129,7 @@ export function registerUiUxRoutes(app, log, sprintEngine) {
   app.post(
     '/api/v1/uiux/recommendations',
     authMiddleware(false),
+    validateBody(UiuxRecommendationsSchema),
     asyncHandler(async (req, res) => {
       const { itemId, featureDescription, projectContext } = req.body || {};
       if (!featureDescription && !itemId) throw new AppError('Either featureDescription or itemId is required', 400);
@@ -166,6 +178,7 @@ export function registerUiUxRoutes(app, log, sprintEngine) {
   app.post(
     '/api/v1/uiux/component-suggestions',
     authMiddleware(false),
+    validateBody(UiuxComponentSuggestionsSchema),
     asyncHandler(async (req, res) => {
       const { functionality, platform = 'web', preferences = {}, includeAccessibility = true } = req.body || {};
       if (!functionality) throw new AppError('functionality is required', 400);
@@ -222,6 +235,7 @@ export function registerUiUxRoutes(app, log, sprintEngine) {
   app.post(
     '/api/v1/uiux/design-system-templates',
     authMiddleware(false),
+    validateBody(UiuxTemplatesSchema),
     asyncHandler(async (req, res) => {
       const { templateType, platform = 'web' } = req.body || {};
       if (!templateType) throw new AppError('templateType is required', 400);
@@ -297,6 +311,7 @@ content: |
   app.post(
     '/api/v1/uiux/metrics',
     authMiddleware(false),
+    validateBody(UiuxMetricsSchema),
     asyncHandler(async (req, res) => {
       const { timeframe = '30d', metricTypes = [] } = req.body || {};
 

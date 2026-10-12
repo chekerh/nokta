@@ -110,3 +110,8 @@ _None._
 
 - **Description:** `GET /api/v1/agent-runs`, `/agents`, `/skills`, `/costs` accept `?page=1&limit=20`. Only engages when `page` present (backward compatible); `pagination` object (page, limit, total, totalPages); `/costs` keeps whole-range total. Shared `parsePagination`/`paginationMeta` in `route-utils.mjs`.
 - **Evidence:** 319/319 tests pass; live: runs 0/0, costs total 7778 across 824 entries (page 3), agents 5 of 267 page 1, skills 0/0
+
+### TASK-015: Audit Phase 1 — zod request-body validation (2026-10-12)
+
+- **Description:** Completed Task 1.3 (previously deferred as "new dependency"). Added `zod` + `daemon/lib/schemas.mjs` (one schema family per route group) and `daemon/lib/validate.mjs` (`validateBody` middleware: missing body → `{}`, replaces `req.body` with parsed/defaulted value, raises a 400 `AppError` carrying per-field `{ path, message }` issues). Wired into all 24 mutating route files; unwired routes are body-less (run execute/cancel, fleet queue send, planner estimate) or raw-signed (billing webhook). `AppError` now carries optional `details`, merged into the JSON error response. Schemas are intentionally permissive (`.nullish()` / `.catchall`) so routes keep their own domain errors and the UI keeps working.
+- **Evidence:** 325/325 tests pass (6 new in `tests/validation.test.mjs`); lint clean; static audit shows every `req.body`-reading mutating route runs `validateBody`; `audit/REQUEST-BODY-INVENTORY.md` documents the route→schema mapping

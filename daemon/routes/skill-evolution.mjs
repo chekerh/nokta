@@ -1,11 +1,14 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
 import { synthesizeSkills, getSkills, rankSkills } from '../lib/skill-synthesizer.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { SkillSynthesizeSchema } from '../lib/schemas.mjs';
 
 export function registerSkillEvolutionRoutes(app, projectRoot) {
   app.post(
     '/api/v1/skills/synthesize',
     authMiddleware(),
+    validateBody(SkillSynthesizeSchema),
     asyncHandler(async (req, res) => {
       const { sources } = req.body;
 

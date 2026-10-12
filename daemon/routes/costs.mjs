@@ -1,5 +1,7 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { parsePagination, paginationMeta } from '../lib/route-utils.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { CostEstimateSchema } from '../lib/schemas.mjs';
 
 export function registerCostRoutes(app, costTracker) {
   app.get(
@@ -45,6 +47,7 @@ export function registerCostRoutes(app, costTracker) {
 
   app.post(
     '/api/v1/costs/estimate',
+    validateBody(CostEstimateSchema),
     asyncHandler(async (req, res) => {
       const { model, inputTokens, outputTokens } = req.body;
       if (!model) throw new AppError('model is required', 400);

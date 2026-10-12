@@ -1,6 +1,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { asyncHandler, AppError, resolveSafeTarget, isWithin } from '../lib/route-utils.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { TrailResumeSchema, TrailStartSchema, TrailUpdateSchema } from '../lib/schemas.mjs';
 
 function getTrailDir(target) {
   return path.join(resolveSafeTarget(target), '.ai', 'trail');
@@ -68,6 +70,7 @@ export function registerTrailRoutes(app) {
 
   app.post(
     '/api/v1/trail/start',
+    validateBody(TrailStartSchema),
     asyncHandler(async (req, res) => {
       const { target, task, agent } = req.body;
       const sessionsDir = getSessionsDir(target);
@@ -165,6 +168,7 @@ Not ready for handoff.
 
   app.put(
     '/api/v1/trail/update',
+    validateBody(TrailUpdateSchema),
     asyncHandler(async (req, res) => {
       const { target, sessionFile, content } = req.body;
       if (!sessionFile || !content) throw new AppError('sessionFile and content are required', 400);
@@ -240,6 +244,7 @@ Not ready for handoff.
 
   app.post(
     '/api/v1/trail/resume',
+    validateBody(TrailResumeSchema),
     asyncHandler(async (req, res) => {
       const { target, sessionId } = req.body;
       if (!sessionId) throw new AppError('sessionId is required', 400);

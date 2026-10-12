@@ -4,6 +4,8 @@ import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { semanticSearch } from '../lib/semantic.mjs';
 import { TEXT_EXTENSIONS, IGNORE_EXTENSIONS } from '../lib/file-extensions.mjs';
 import { IGNORE_DIRS } from '../lib/search-ignore.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { SearchSchema, SemanticSearchSchema } from '../lib/schemas.mjs';
 
 const IGNORE_EXTS = IGNORE_EXTENSIONS;
 const TEXT_EXTS = TEXT_EXTENSIONS;
@@ -207,6 +209,7 @@ async function walkDir(dir, queryTokens, projectRoot, maxResults, scope, symbolT
 export function registerSearchRoutes(app) {
   app.post(
     '/api/v1/search',
+    validateBody(SearchSchema),
     asyncHandler(async (req, res) => {
       const { query, target, maxResults = 20, dir, ext, regex } = req.body;
       if (!query) throw new AppError('Query is required', 400);
@@ -286,6 +289,7 @@ export function registerSearchRoutes(app) {
 
   app.post(
     '/api/v1/search/semantic',
+    validateBody(SemanticSearchSchema),
     asyncHandler(async (req, res) => {
       const { query, target, maxResults = 20 } = req.body;
       if (!query) throw new AppError('Query is required', 400);

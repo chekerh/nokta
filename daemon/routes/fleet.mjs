@@ -1,6 +1,8 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
 import { discoverAgents } from '../lib/fleet.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { FleetPlanSchema, FleetRegisterSchema, FleetRunSchema } from '../lib/schemas.mjs';
 
 export function registerFleetRoutes(app, fleet) {
   app.get(
@@ -15,6 +17,7 @@ export function registerFleetRoutes(app, fleet) {
   app.post(
     '/api/v1/fleet',
     authMiddleware(),
+    validateBody(FleetRegisterSchema),
     asyncHandler(async (req, res) => {
       const { project, provider = 'opencode', pid, port, cwd } = req.body || {};
       if (!project) throw new AppError('project is required', 400);
@@ -39,6 +42,7 @@ export function registerFleetRoutes(app, fleet) {
   app.post(
     '/api/v1/fleet/:project/run',
     authMiddleware(),
+    validateBody(FleetRunSchema),
     asyncHandler(async (req, res) => {
       const { prompt, provider = 'opencode', timeoutMs } = req.body || {};
       if (!prompt || typeof prompt !== 'string') throw new AppError('prompt is required', 400);
@@ -58,6 +62,7 @@ export function registerFleetRoutes(app, fleet) {
   app.post(
     '/api/v1/fleet/:project/plan',
     authMiddleware(),
+    validateBody(FleetPlanSchema),
     asyncHandler(async (req, res) => {
       const { prompt, provider = 'opencode' } = req.body || {};
       if (!prompt || typeof prompt !== 'string') throw new AppError('prompt is required', 400);

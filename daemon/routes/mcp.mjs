@@ -3,6 +3,8 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { asyncHandler, AppError, resolveSafeTarget } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { McpExecuteSchema, McpServersSchema } from '../lib/schemas.mjs';
 
 const serverProcesses = new Map();
 const pendingRequests = new Map();
@@ -108,6 +110,7 @@ export function registerMcpRoutes(app, log) {
   app.post(
     '/api/v1/mcp/execute',
     authMiddleware(true),
+    validateBody(McpExecuteSchema),
     asyncHandler(async (req, res) => {
       const { serverId, toolName, args, target } = req.body;
       if (!serverId || !toolName) throw new AppError('serverId and toolName are required', 400);
@@ -134,6 +137,7 @@ export function registerMcpRoutes(app, log) {
   app.post(
     '/api/v1/mcp/servers',
     authMiddleware(true),
+    validateBody(McpServersSchema),
     asyncHandler(async (req, res) => {
       const { target, servers } = req.body;
       if (!Array.isArray(servers)) throw new AppError('servers array is required', 400);

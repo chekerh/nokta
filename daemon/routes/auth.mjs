@@ -9,6 +9,8 @@ import {
 } from '../lib/auth.mjs';
 import { prepare } from '../db/connection.mjs';
 import { authRateLimit, recordFailedLogin, clearFailedLogin } from '../lib/rate-limit.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { RegisterSchema, LoginSchema, ChangePasswordSchema } from '../lib/schemas.mjs';
 
 function validatePassword(password) {
   if (password.length < 8) return 'Password must be at least 8 characters';
@@ -22,6 +24,7 @@ export function registerAuthRoutes(app) {
   app.post(
     '/api/v1/auth/register',
     authRateLimit,
+    validateBody(RegisterSchema),
     asyncHandler(async (req, res) => {
       const { email, password, name } = req.body;
       if (!email || !password) throw new AppError('Email and password required', 400);
@@ -51,6 +54,7 @@ export function registerAuthRoutes(app) {
   app.post(
     '/api/v1/auth/login',
     authRateLimit,
+    validateBody(LoginSchema),
     asyncHandler(async (req, res) => {
       const { email, password } = req.body;
       if (!email || !password) throw new AppError('Email and password required', 400);
@@ -95,6 +99,7 @@ export function registerAuthRoutes(app) {
   app.post(
     '/api/v1/auth/change-password',
     authMiddleware(),
+    validateBody(ChangePasswordSchema),
     asyncHandler(async (req, res) => {
       const { currentPassword, newPassword } = req.body;
       if (!currentPassword || !newPassword) throw new AppError('Current and new password required', 400);

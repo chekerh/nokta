@@ -1,6 +1,8 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { prepare } from '../db/connection.mjs';
 import { authMiddleware, requireRole } from '../lib/auth.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { AdminRoleSchema, AdminTierSchema } from '../lib/schemas.mjs';
 
 export function registerAdminRoutes(app) {
   // All admin endpoints require authentication and admin role
@@ -22,6 +24,7 @@ export function registerAdminRoutes(app) {
   app.patch(
     '/api/v1/admin/users/:id/role',
     ...adminGuard,
+    validateBody(AdminRoleSchema),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       const { role } = req.body;
@@ -49,6 +52,7 @@ export function registerAdminRoutes(app) {
   app.patch(
     '/api/v1/admin/users/:id/tier',
     ...adminGuard,
+    validateBody(AdminTierSchema),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       const { tier } = req.body;

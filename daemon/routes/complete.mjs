@@ -1,8 +1,11 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { CompleteSchema } from '../lib/schemas.mjs';
 
 export function registerCompleteRoutes(app, providerManager) {
   app.post(
     '/api/v1/chat/complete',
+    validateBody(CompleteSchema),
     asyncHandler(async (req, res) => {
       const { prompt, context = [], model, maxTokens, temperature } = req.body;
 

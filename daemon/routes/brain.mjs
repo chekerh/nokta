@@ -1,5 +1,7 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { BrainDnaSchema, BrainPatternSchema } from '../lib/schemas.mjs';
 
 export function registerBrainRoutes(app, userBrain) {
   app.get(
@@ -19,6 +21,7 @@ export function registerBrainRoutes(app, userBrain) {
   app.patch(
     '/api/v1/brain/dna',
     authMiddleware(),
+    validateBody(BrainDnaSchema),
     asyncHandler(async (req, res) => {
       const userId = req.user?.id;
 
@@ -39,6 +42,7 @@ export function registerBrainRoutes(app, userBrain) {
   app.post(
     '/api/v1/brain/patterns',
     authMiddleware(),
+    validateBody(BrainPatternSchema),
     asyncHandler(async (req, res) => {
       const userId = req.user?.id;
 

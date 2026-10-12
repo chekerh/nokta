@@ -2,6 +2,8 @@ import { asyncHandler, AppError, isWithin } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
 import { SandboxManager } from '../lib/sandbox.mjs';
 import path from 'node:path';
+import { validateBody } from '../lib/validate.mjs';
+import { SandboxExecFileSchema, SandboxExecSchema } from '../lib/schemas.mjs';
 
 export function registerSandboxRoutes(app, log) {
   const sandbox = new SandboxManager({ log });
@@ -9,6 +11,7 @@ export function registerSandboxRoutes(app, log) {
   app.post(
     '/api/v1/sandbox/exec',
     authMiddleware(),
+    validateBody(SandboxExecSchema),
     asyncHandler(async (req, res) => {
       const { code, fileName, timeoutMs, memoryLimit } = req.body;
 
@@ -29,6 +32,7 @@ export function registerSandboxRoutes(app, log) {
   app.post(
     '/api/v1/sandbox/exec-file',
     authMiddleware(),
+    validateBody(SandboxExecFileSchema),
     asyncHandler(async (req, res) => {
       const { file, target, timeoutMs, memoryLimit } = req.body;
 
