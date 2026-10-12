@@ -168,12 +168,17 @@ export class AppError extends Error {
   /**
    * @param {string} message
    * @param {number} [status=500]
+   * @param {Object} [details] - Extra JSON fields merged into the error response (e.g. `{ issues }`)
    */
-  constructor(message, status = 500) {
+  constructor(message, status = 500, details = undefined) {
     super(message);
     this.name = 'AppError';
     /** @type {number} */
     this.status = status;
+    if (details && typeof details === 'object') {
+      /** @type {Object} */
+      this.details = details;
+    }
   }
 }
 

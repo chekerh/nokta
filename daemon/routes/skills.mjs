@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { authMiddleware } from '../lib/auth.mjs';
 import { runDiscovery, getCachedReport, parseRepoUrl } from '../lib/discovery.mjs';
 import { asyncHandler, AppError, parsePagination, paginationMeta } from '../lib/route-utils.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { SkillImportSchema, SkillScanSchema } from '../lib/schemas.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCAN_CACHE_DIR = path.join(__dirname, '..', '..', '.nokta', 'skill-sources.json');
@@ -180,6 +182,7 @@ export function registerSkillRoutes(app, log) {
   app.post(
     '/api/v1/skills/scan',
     authMiddleware(),
+    validateBody(SkillScanSchema),
     asyncHandler(async (req, res) => {
       const { url } = req.body || {};
       if (!url) throw new AppError('url is required', 400);
@@ -205,6 +208,7 @@ export function registerSkillRoutes(app, log) {
   app.post(
     '/api/v1/skills/import',
     authMiddleware(),
+    validateBody(SkillImportSchema),
     asyncHandler(async (req, res) => {
       const { url } = req.body || {};
       if (!url) throw new AppError('url is required', 400);

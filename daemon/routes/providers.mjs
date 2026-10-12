@@ -1,5 +1,12 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import {
+  ProviderDefaultSchema,
+  ProviderAutoRouteSchema,
+  ProviderConfigureSchema,
+  ProviderUpdateSchema,
+} from '../lib/schemas.mjs';
 
 export function registerProviderRoutes(app, providerManager) {
   // List providers (load from DB if user is authenticated)
@@ -29,6 +36,7 @@ export function registerProviderRoutes(app, providerManager) {
   app.post(
     '/api/v1/providers/default',
     authMiddleware(false),
+    validateBody(ProviderDefaultSchema),
     asyncHandler(async (req, res) => {
       const { id } = req.body;
       if (!id) throw new AppError('Provider ID is required', 400);
@@ -41,6 +49,7 @@ export function registerProviderRoutes(app, providerManager) {
   app.post(
     '/api/v1/providers/auto-route',
     authMiddleware(false),
+    validateBody(ProviderAutoRouteSchema),
     asyncHandler(async (req, res) => {
       const { enabled } = req.body;
       if (req.user) providerManager.setDbUser(req.user.id);
@@ -52,6 +61,7 @@ export function registerProviderRoutes(app, providerManager) {
   app.post(
     '/api/v1/providers/configure',
     authMiddleware(false),
+    validateBody(ProviderConfigureSchema),
     asyncHandler(async (req, res) => {
       const { id, apiKey, baseUrl, models, enabled } = req.body;
       if (!id) throw new AppError('Provider ID is required', 400);
@@ -82,6 +92,7 @@ export function registerProviderRoutes(app, providerManager) {
   app.patch(
     '/api/v1/providers/:id',
     authMiddleware(false),
+    validateBody(ProviderUpdateSchema),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
       const { apiKey, baseUrl, models, enabled, maxTokens, temperature } = req.body;

@@ -1,10 +1,19 @@
 import { asyncHandler } from '../lib/route-utils.mjs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { validateBody } from '../lib/validate.mjs';
+import {
+  GatesCheckSchema,
+  GatesCheckSecuritySchema,
+  GatesCheckTokenSchema,
+  GatesConfigSchema,
+  GatesEvaluateSchema,
+} from '../lib/schemas.mjs';
 
 export function registerGateRoutes(app, gateKeeper) {
   app.post(
     '/api/v1/gates',
+    validateBody(GatesCheckSchema),
     asyncHandler(async (req, res) => {
       const { target, messages = [] } = req.body;
       const projectRoot = target ? path.resolve(target) : process.cwd();
@@ -78,6 +87,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.post(
     '/api/v1/gates/evaluate',
+    validateBody(GatesEvaluateSchema),
     asyncHandler(async (req, res) => {
       const { messages, estimatedTokens } = req.body;
       if (!messages) {
@@ -90,6 +100,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.post(
     '/api/v1/gates/check-token',
+    validateBody(GatesCheckTokenSchema),
     asyncHandler(async (req, res) => {
       const { messages, estimatedTokens } = req.body;
       const result = await gateKeeper.checkToken(messages, estimatedTokens);
@@ -99,6 +110,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.post(
     '/api/v1/gates/check-security',
+    validateBody(GatesCheckSecuritySchema),
     asyncHandler(async (req, res) => {
       const { messages } = req.body;
       const result = await gateKeeper.checkSecurity(messages);
@@ -118,6 +130,7 @@ export function registerGateRoutes(app, gateKeeper) {
 
   app.put(
     '/api/v1/gates/config',
+    validateBody(GatesConfigSchema),
     asyncHandler(async (req, res) => {
       const { tokenLimit, severity } = req.body;
       if (tokenLimit !== undefined) gateKeeper.tokenLimit = tokenLimit;

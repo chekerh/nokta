@@ -3,6 +3,8 @@ import { authMiddleware, requestToken, verifyToken } from '../lib/auth.mjs';
 import { prepare } from '../db/connection.mjs';
 import { canStartRun, getActiveRunCount } from '../lib/run-limit.mjs';
 import { normalizeSteps } from '../agent/orchestrator.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { AgentRunCreateSchema, AgentRunGenerateSchema } from '../lib/schemas.mjs';
 
 export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) {
   // Starting a run is the same three lines whichever route asks for it, and it
@@ -53,6 +55,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
   app.post(
     '/api/v1/agent-runs',
     authMiddleware(true),
+    validateBody(AgentRunCreateSchema),
     asyncHandler(async (req, res) => {
       if (req.user?.id && !canStartRun(req.user.id)) {
         const count = getActiveRunCount(req.user.id);
@@ -201,6 +204,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
   app.post(
     '/api/v1/agent-runs/generate',
     authMiddleware(true),
+    validateBody(AgentRunGenerateSchema),
     asyncHandler(async (req, res) => {
       const { goal, metadata } = req.body;
       if (!goal) throw new AppError('goal is required', 400);
@@ -212,6 +216,7 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
   app.post(
     '/api/v1/agent-runs/auto',
     authMiddleware(true),
+    validateBody(AgentRunGenerateSchema),
     asyncHandler(async (req, res) => {
       const { goal, metadata } = req.body;
       if (!goal) throw new AppError('goal is required', 400);

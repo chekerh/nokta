@@ -1,5 +1,7 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { CodeExplainSchema, CodeFixSchema, CodeRefactorSchema, CodeTestSchema } from '../lib/schemas.mjs';
 
 export function registerCodeActionRoutes(app, chatHandler) {
   async function runChat(messages, task) {
@@ -13,6 +15,7 @@ export function registerCodeActionRoutes(app, chatHandler) {
   app.post(
     '/api/v1/code-actions/explain',
     authMiddleware(true),
+    validateBody(CodeExplainSchema),
     asyncHandler(async (req, res) => {
       const { code, language } = req.body;
       if (!code) throw new AppError('Code is required', 400);
@@ -27,6 +30,7 @@ export function registerCodeActionRoutes(app, chatHandler) {
   app.post(
     '/api/v1/code-actions/refactor',
     authMiddleware(true),
+    validateBody(CodeRefactorSchema),
     asyncHandler(async (req, res) => {
       const { code, language, suggestion } = req.body;
       if (!code) throw new AppError('Code is required', 400);
@@ -39,6 +43,7 @@ export function registerCodeActionRoutes(app, chatHandler) {
   app.post(
     '/api/v1/code-actions/generate-tests',
     authMiddleware(true),
+    validateBody(CodeTestSchema),
     asyncHandler(async (req, res) => {
       const { code, language, testFramework } = req.body;
       if (!code) throw new AppError('Code is required', 400);
@@ -51,6 +56,7 @@ export function registerCodeActionRoutes(app, chatHandler) {
   app.post(
     '/api/v1/code-actions/fix-errors',
     authMiddleware(true),
+    validateBody(CodeFixSchema),
     asyncHandler(async (req, res) => {
       const { code, language, errors } = req.body;
       if (!code) throw new AppError('Code is required', 400);

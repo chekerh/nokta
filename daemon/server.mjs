@@ -259,7 +259,12 @@ export async function createServer(options = {}) {
     if (!err.status) {
       log.error('Unhandled error', { requestId: req.id, error: err.message, method: req.method, path: req.path });
     }
-    res.status(status).json({ error: status === 500 ? 'Internal server error' : message, status, requestId: req.id });
+    res.status(status).json({
+      error: status === 500 ? 'Internal server error' : message,
+      status,
+      ...(err.details && typeof err.details === 'object' ? err.details : {}),
+      requestId: req.id,
+    });
   });
 
   return { app, providerManager, chatHandler, sprintEngine, port };

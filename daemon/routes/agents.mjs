@@ -2,6 +2,8 @@ import { asyncHandler, AppError, parsePagination, paginationMeta } from '../lib/
 import { authMiddleware } from '../lib/auth.mjs';
 import { canStartRun, getActiveRunCount } from '../lib/run-limit.mjs';
 import { loadAgentPacks, resolveAgentPack } from '../agent/agent-pack.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { AgentRecommendSchema, AgentExecuteSchema } from '../lib/schemas.mjs';
 
 export function registerAgentRoutes(app, providerManager, _log, orchestrator = null, jobQueue = null) {
   app.get(
@@ -44,6 +46,7 @@ export function registerAgentRoutes(app, providerManager, _log, orchestrator = n
 
   app.post(
     '/api/v1/agents/recommend',
+    validateBody(AgentRecommendSchema),
     asyncHandler(async (req, res) => {
       const { prompt } = req.body;
       if (!prompt) throw new AppError('Prompt is required', 400);
@@ -78,6 +81,7 @@ export function registerAgentRoutes(app, providerManager, _log, orchestrator = n
   app.post(
     '/api/v1/agents/:id/execute',
     authMiddleware(true),
+    validateBody(AgentExecuteSchema),
     asyncHandler(async (req, res) => {
       if (!orchestrator) throw new AppError('Agent execution is not available', 503);
       const { goal } = req.body || {};

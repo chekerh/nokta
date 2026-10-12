@@ -1,4 +1,19 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import {
+  PlannerAutoPrioritizeSchema,
+  PlannerBrainstormSchema,
+  PlannerEpicCreateSchema,
+  PlannerEpicUpdateSchema,
+  PlannerFeedbackSchema,
+  PlannerInitiativeCreateSchema,
+  PlannerItemCreateSchema,
+  PlannerItemUpdateSchema,
+  PlannerLinkDecisionSchema,
+  PlannerSprintCreateSchema,
+  PlannerSprintItemsSchema,
+  PlannerSprintUpdateSchema,
+} from '../lib/schemas.mjs';
 
 export function registerPlannerRoutes(app, sprintEngine) {
   app.get(
@@ -30,6 +45,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/items',
+    validateBody(PlannerItemCreateSchema),
     asyncHandler(async (req, res) => {
       const item = await sprintEngine.createItem(req.body);
       res.status(201).json(item);
@@ -54,6 +70,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.patch(
     '/api/v1/planner/items/:itemId',
+    validateBody(PlannerItemUpdateSchema),
     asyncHandler(async (req, res) => {
       const { itemId } = req.params;
       const updates = req.body;
@@ -87,6 +104,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/items/:itemId/feedback',
+    validateBody(PlannerFeedbackSchema),
     asyncHandler(async (req, res) => {
       const { itemId } = req.params;
       const { action } = req.body;
@@ -116,6 +134,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/sprints',
+    validateBody(PlannerSprintCreateSchema),
     asyncHandler(async (req, res) => {
       const sprint = await sprintEngine.createSprint(req.body);
       res.status(201).json(sprint);
@@ -140,6 +159,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.patch(
     '/api/v1/planner/sprints/:sprintId',
+    validateBody(PlannerSprintUpdateSchema),
     asyncHandler(async (req, res) => {
       const { sprintId } = req.params;
       const updates = req.body;
@@ -189,6 +209,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/sprints/:sprintId/items',
+    validateBody(PlannerSprintItemsSchema),
     asyncHandler(async (req, res) => {
       const { sprintId } = req.params;
       const { itemIds } = req.body;
@@ -209,6 +230,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/sprints/:sprintId/items/remove',
+    validateBody(PlannerSprintItemsSchema),
     asyncHandler(async (req, res) => {
       const { sprintId } = req.params;
       const { itemIds } = req.body;
@@ -237,6 +259,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/epics',
+    validateBody(PlannerEpicCreateSchema),
     asyncHandler(async (req, res) => {
       const epic = await sprintEngine.createEpic(req.body);
       res.status(201).json(epic);
@@ -261,6 +284,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.patch(
     '/api/v1/planner/epics/:epicId',
+    validateBody(PlannerEpicUpdateSchema),
     asyncHandler(async (req, res) => {
       const { epicId } = req.params;
       const updates = req.body;
@@ -302,6 +326,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/initiatives',
+    validateBody(PlannerInitiativeCreateSchema),
     asyncHandler(async (req, res) => {
       const initiative = await sprintEngine.createInitiative(req.body);
       res.status(201).json(initiative);
@@ -326,6 +351,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/brainstorm',
+    validateBody(PlannerBrainstormSchema),
     asyncHandler(async (req, res) => {
       const { context, prompts } = req.body;
       if (!prompts || !prompts.features) {
@@ -372,6 +398,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/auto-prioritize',
+    validateBody(PlannerAutoPrioritizeSchema),
     asyncHandler(async (req, res) => {
       const { recentChanges, deadlines } = req.body || {};
       const prioritized = await sprintEngine.autoPrioritize({ recentChanges, deadlines });
@@ -381,6 +408,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
 
   app.post(
     '/api/v1/planner/items/:itemId/link-decision/:decisionId',
+    validateBody(PlannerLinkDecisionSchema),
     asyncHandler(async (req, res) => {
       const { itemId, decisionId } = req.params;
       const { relationship } = req.body;

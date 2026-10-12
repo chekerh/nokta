@@ -1,9 +1,12 @@
 import { asyncHandler } from '../lib/route-utils.mjs';
 import { compileContext, detectProject, loadPacks } from '../../compiler/lib/nokta.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { ContextSchema, DetectSchema } from '../lib/schemas.mjs';
 
 export function registerContextRoutes(app) {
   app.post(
     '/api/v1/context',
+    validateBody(ContextSchema),
     asyncHandler(async (req, res) => {
       const { target, task, adapter = 'codex', budget = 6000 } = req.body;
       const result = compileContext({
@@ -21,6 +24,7 @@ export function registerContextRoutes(app) {
 
   app.post(
     '/api/v1/detect',
+    validateBody(DetectSchema),
     asyncHandler(async (req, res) => {
       const { target } = req.body;
       const detected = detectProject(target || process.cwd());

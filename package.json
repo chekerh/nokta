@@ -30,7 +30,8 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.1.0",
-    "helmet": "^8.2.0"
+    "helmet": "^8.2.0",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "eslint": "^9.0.0",

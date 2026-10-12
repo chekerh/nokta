@@ -3,6 +3,8 @@ import { authMiddleware } from '../lib/auth.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CriticAgent } from '../lib/critic-agent.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { AdversarialCritiqueSchema, AdversarialReviewSchema } from '../lib/schemas.mjs';
 
 function safePath(base, targetPath) {
   const resolved = path.resolve(base, targetPath);
@@ -18,6 +20,7 @@ export function registerAdversarialRoutes(app, chatHandler, log) {
   app.post(
     '/api/v1/adversarial/review',
     authMiddleware(),
+    validateBody(AdversarialReviewSchema),
     asyncHandler(async (req, res) => {
       const { code, file, target, provider, model, maxRounds } = req.body;
       const filePath = file || 'unknown';
@@ -53,6 +56,7 @@ export function registerAdversarialRoutes(app, chatHandler, log) {
   app.post(
     '/api/v1/adversarial/critique',
     authMiddleware(),
+    validateBody(AdversarialCritiqueSchema),
     asyncHandler(async (req, res) => {
       const { code, file, target, provider, model } = req.body;
       const filePath = file || 'unknown';

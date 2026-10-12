@@ -1,6 +1,8 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { prepare } from '../db/connection.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { BillingPortalSchema, BillingUpgradeSchema } from '../lib/schemas.mjs';
 
 const PRICE_IDS = {
   pro: {
@@ -87,6 +89,7 @@ export async function registerBillingRoutes(app) {
   app.post(
     '/api/v1/billing/upgrade',
     authMiddleware(true),
+    validateBody(BillingUpgradeSchema),
     asyncHandler(async (req, res) => {
       const { tier = 'pro' } = req.body;
       if (!TIER_FEATURES[tier]) throw new AppError(`Invalid tier: ${tier}`, 400);
@@ -141,6 +144,7 @@ export async function registerBillingRoutes(app) {
   app.post(
     '/api/v1/billing/portal',
     authMiddleware(true),
+    validateBody(BillingPortalSchema),
     asyncHandler(async (req, res) => {
       if (!stripe) throw new AppError('Stripe not configured. Use /api/v1/billing/upgrade directly.', 400);
 

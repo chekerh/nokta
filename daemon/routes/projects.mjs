@@ -1,10 +1,13 @@
 import { asyncHandler, AppError } from '../lib/route-utils.mjs';
 import { authMiddleware } from '../lib/auth.mjs';
+import { validateBody } from '../lib/validate.mjs';
+import { ProjectCreateSchema } from '../lib/schemas.mjs';
 
 export function registerProjectRoutes(app, projectManager) {
   app.post(
     '/api/v1/projects',
     authMiddleware(),
+    validateBody(ProjectCreateSchema),
     asyncHandler(async (req, res) => {
       const { name, rootPath, techStack = 'unknown' } = req.body;
       const userId = req.user?.id;
