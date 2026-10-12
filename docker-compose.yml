@@ -35,8 +35,11 @@ services:
       # Allowed CORS origin(s). Set to your frontend domain in production.
       # Empty means same-origin only (most secure). '*' means allow all (dev only).
       - NOKTA_CORS_ORIGIN=${NOKTA_CORS_ORIGIN:-}
-      # JWT token TTL in seconds (default: 604800 = 7 days). Shorter = more frequent re-login.
-      - NOKTA_TOKEN_TTL_SEC=${NOKTA_TOKEN_TTL_SEC:-604800}
+      # Access-token TTL in seconds (default: 900 = 15 min). The client silently
+      # refreshes it; see NOKTA_REFRESH_TOKEN_TTL_SEC for the rolling session.
+      - NOKTA_ACCESS_TOKEN_TTL_SEC=${NOKTA_ACCESS_TOKEN_TTL_SEC:-900}
+      # Refresh-token TTL in seconds (default: 604800 = 7 days)
+      - NOKTA_REFRESH_TOKEN_TTL_SEC=${NOKTA_REFRESH_TOKEN_TTL_SEC:-604800}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:4217/health"]
       interval: 30s

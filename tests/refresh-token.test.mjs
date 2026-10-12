@@ -9,10 +9,10 @@ process.env.NOKTA_DATA_DIR = dataDir;
 delete process.env.NOKTA_ACCESS_TOKEN_TTL_SEC;
 delete process.env.NOKTA_TOKEN_TTL_SEC;
 
-const { closeDb } = await import('../daemon/db/connection.mjs');
+const { closeDb, prepare } = await import('../daemon/db/connection.mjs');
 const { migrate } = await import('../daemon/db/schema.mjs');
 const { registerAuthRoutes } = await import('../daemon/routes/auth.mjs');
-const { verifyToken } = await import('../daemon/lib/auth.mjs');
+const { verifyToken, hashToken } = await import('../daemon/lib/auth.mjs');
 const { setMailTransport, resetMailTransport } = await import('../daemon/lib/mailer.mjs');
 const { AppError } = await import('../daemon/lib/route-utils.mjs');
 
@@ -90,6 +90,7 @@ const login = routes.get('POST /api/v1/auth/login');
 const refresh = routes.get('POST /api/v1/auth/refresh');
 const logout = routes.get('POST /api/v1/auth/logout');
 const changePassword = routes.get('POST /api/v1/auth/change-password');
+const me = routes.get('GET /api/v1/auth/me');
 
 let userSeq = 0;
 function credentials() {
@@ -124,13 +125,7 @@ test('refresh rotates the token and mints a new access token', async () => {
   assert.notEqual(first.body.refreshToken, refreshToken);
   assert.equal(verifyToken(first.body.token)?.sub, decodePayload(first.body.token).sub);
 
-  // The presented refresh token is single-use.
-  await assert.rejects(
-    () => invoke(refresh, fakeReq({ refreshToken })),
-    (err) => err instanceof AppError && err.status === 401,
-  );
-
-  // The freshly issued one still works.
+  // The freshly issued refresh token still works.
   const second = await invoke(refresh, fakeReq({ refreshToken: first.body.refreshToken }));
   assert.equal(second.statusCode, 200);
 });
@@ -193,6 +188,96 @@ test('login issues a fresh refresh token for an existing user', async () => {
   const res = await invoke(login, fakeReq({ email, password }));
   assert.equal(res.statusCode, 200);
   assert.ok(res.body.refreshToken);
+});
+
+test('reusing a rotated refresh token revokes the whole family', async () => {
+  const { refreshToken } = await registeredUser();
+
+  const first = await invoke(refresh, fakeReq({ refreshToken }));
+  assert.equal(first.statusCode, 200);
+  const goodToken = first.body.refreshToken;
+
+  // Age the original token's revocation past the reuse grace window so the
+  // replay is treated as theft rather than a concurrent-refresh race.
+  prepare("UPDATE refresh_tokens SET revoked_at = datetime('now', '-10 minutes') WHERE token_hash = ?").run(
+    hashToken(refreshToken),
+  );
+
+  await assert.rejects(
+    () => invoke(refresh, fakeReq({ refreshToken })),
+    (err) => err instanceof AppError && err.status === 401,
+  );
+
+  // The token the legitimate client held is revoked too.
+  await assert.rejects(
+    () => invoke(refresh, fakeReq({ refreshToken: goodToken })),
+    (err) => err instanceof AppError && err.status === 401,
+  );
+});
+
+test('concurrent refreshes with the same token: exactly one succeeds', async () => {
+  const { refreshToken } = await registeredUser();
+
+  const results = await Promise.allSettled([
+    invoke(refresh, fakeReq({ refreshToken })),
+    invoke(refresh, fakeReq({ refreshToken })),
+  ]);
+  const ok = results.filter((r) => r.status === 'fulfilled' && r.value.statusCode === 200);
+  assert.equal(ok.length, 1, 'the conditional revoke lets only one refresh win');
+});
+
+test('an expired refresh token is rejected', async () => {
+  const { user } = await registeredUser();
+  const raw = 'expired-refresh-value-for-test';
+  const past = new Date(Date.now() - 60_000).toISOString();
+  prepare(
+    'INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, family_expires_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('rt_expired_test', user.id, hashToken(raw), past, past);
+
+  await assert.rejects(
+    () => invoke(refresh, fakeReq({ refreshToken: raw })),
+    (err) => err instanceof AppError && err.status === 401,
+  );
+});
+
+test('a missing or wrongly-typed refresh token is a 400', async () => {
+  await assert.rejects(
+    () => invoke(refresh, fakeReq({})),
+    (err) => err instanceof AppError && err.status === 400,
+  );
+  await assert.rejects(
+    () => invoke(refresh, fakeReq({ refreshToken: 12345 })),
+    (err) => err instanceof AppError && err.status === 400,
+  );
+});
+
+test('revoking one user\u2019s tokens leaves another user\u2019s valid', async () => {
+  const a = await registeredUser();
+  const b = await registeredUser();
+
+  const out = await invoke(logout, fakeReq({}, a.token));
+  assert.equal(out.statusCode, 200);
+
+  const res = await invoke(refresh, fakeReq({ refreshToken: b.refreshToken }));
+  assert.equal(res.statusCode, 200);
+});
+
+test('a password change invalidates outstanding access tokens', async () => {
+  const { token, password } = await registeredUser();
+
+  const before = await invoke(me, fakeReq({}, token));
+  assert.equal(before.statusCode, 200);
+
+  const changed = await invoke(
+    changePassword,
+    fakeReq({ currentPassword: password, newPassword: 'Rotated99!' }, token),
+  );
+  assert.equal(changed.statusCode, 200);
+
+  // authMiddleware answers with a 401 response (rather than throwing), so assert
+  // on the resolved status code.
+  const after = await invoke(me, fakeReq({}, token));
+  assert.equal(after.statusCode, 401);
 });
 
 after(() => {

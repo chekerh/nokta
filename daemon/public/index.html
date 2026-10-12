@@ -1890,15 +1890,17 @@
 
         // Exchange the stored refresh token for a new access token, rotating the
         // refresh token. Concurrent callers share one in-flight request so a burst
-        // of 401s triggers a single refresh.
+        // of 401s triggers a single refresh. The token is read from storage at call
+        // time so another tab's rotation is picked up here.
         var refreshInFlight = null;
         function refreshAccessToken() {
-          if (!authRefreshToken) return Promise.resolve(false);
+          var current = localStorage.getItem('nokta-refresh') || authRefreshToken;
+          if (!current) return Promise.resolve(false);
           if (refreshInFlight) return refreshInFlight;
           refreshInFlight = fetch(API + '/api/v1/auth/refresh', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: authRefreshToken }),
+            body: JSON.stringify({ refreshToken: current }),
           })
             .then(function (res) {
               if (!res.ok) return false;
@@ -1914,6 +1916,21 @@
               refreshInFlight = null;
             });
           return refreshInFlight;
+        }
+
+        // Decode (without verifying) the access token's exp so the SSE reconnect
+        // path only refreshes when the token is actually stale, instead of on
+        // every transient stream error.
+        function accessTokenExpired() {
+          if (!authToken) return true;
+          try {
+            var part = authToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            var padded = part + '==='.slice((part.length + 3) % 4);
+            var payload = JSON.parse(atob(padded));
+            return !payload.exp || payload.exp * 1000 <= Date.now();
+          } catch (e) {
+            return true;
+          }
         }
 
         // Auth
@@ -3100,12 +3117,16 @@
         }
 
         // Live agent status updates
+        var sseRetryDelay = 5000;
         function connectAgentEvents() {
           if (typeof EventSource === 'undefined') return;
           try {
             var es = new EventSource(
               API + '/api/v1/agent-runs/events' + (authToken ? '?token=' + encodeURIComponent(authToken) : '')
             );
+            es.onopen = function () {
+              sseRetryDelay = 5000;
+            };
             var handlers = [
               'run:created',
               'run:started',
@@ -3128,11 +3149,23 @@
             });
             es.onerror = function () {
               es.close();
-              // The access token may have expired; refresh it before reconnecting
-              // so the next EventSource carries a valid ?token=.
-              refreshAccessToken().finally(function () {
-                setTimeout(connectAgentEvents, 5000);
-              });
+              // Anonymous visitors have no stream access; don't spin reconnecting.
+              if (!authRefreshToken && !authToken) return;
+              var reschedule = function () {
+                setTimeout(connectAgentEvents, sseRetryDelay);
+                sseRetryDelay = Math.min(sseRetryDelay * 2, 60000);
+              };
+              // Only mint a new access token when the current one is actually
+              // stale; a transient stream error should not churn tokens.
+              if (accessTokenExpired()) {
+                refreshAccessToken().then(function (ok) {
+                  // A failed refresh means the session is gone; stop retrying
+                  // (the next API call surfaces the login overlay).
+                  if (ok) reschedule();
+                });
+              } else {
+                reschedule();
+              }
             };
           } catch (e) {
             setTimeout(connectAgentEvents, 10000);

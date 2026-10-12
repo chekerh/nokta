@@ -4,11 +4,18 @@ import { blacklistToken, isBlacklisted } from './token-blacklist.mjs';
 import { getCurrentKey, getKey } from './jwt-keys.mjs';
 
 // Access tokens are short-lived; a long-lived refresh token (see
-// refresh-tokens.mjs) mints new ones. NOKTKA_TOKEN_TTL_SEC is still honoured as
-// a fallback so existing deployments keep their configured lifetime.
-const TOKEN_EXPIRY_SEC = parseInt(
-  process.env.NOKTA_ACCESS_TOKEN_TTL_SEC || process.env.NOKTA_TOKEN_TTL_SEC || '900',
-  10,
+// refresh-tokens.mjs) mints new ones. NOKTA_TOKEN_TTL_SEC is still honoured as
+// a fallback so existing deployments keep their configured lifetime. A
+// non-numeric or non-positive value falls back to the default rather than
+// yielding NaN (which would produce tokens with a null `exp`).
+function positiveInt(raw, fallback) {
+  const value = parseInt(raw ?? '', 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+const TOKEN_EXPIRY_SEC = positiveInt(
+  process.env.NOKTA_ACCESS_TOKEN_TTL_SEC || process.env.NOKTA_TOKEN_TTL_SEC,
+  900,
 );
 
 function base64url(buf) {
@@ -97,7 +104,8 @@ export function verifyToken(token) {
     const expectedBuf = Buffer.from(expectedSig, 'base64url');
     if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    // A missing or non-numeric exp is treated as invalid, not as "never expires".
+    if (!Number.isFinite(payload.exp) || payload.exp < Math.floor(Date.now() / 1000)) return null;
     if (payload.jti && isBlacklisted(payload.jti)) return null;
     return payload;
   } catch {
@@ -142,9 +150,19 @@ export function authMiddleware(required = true) {
       return next();
     }
 
-    const user = prepare('SELECT id, email, name, role, tier FROM users WHERE id = ?').get(payload.sub);
+    const user = prepare(
+      'SELECT id, email, name, role, tier, token_version FROM users WHERE id = ?',
+    ).get(payload.sub);
     if (!user) {
       if (required) return res.status(401).json({ error: 'User not found', status: 401 });
+      req.user = null;
+      return next();
+    }
+
+    // A credential change bumps token_version, which invalidates every access
+    // token minted before it — independent of the short TTL.
+    if ((payload.tv ?? 0) !== (user.token_version ?? 0)) {
+      if (required) return res.status(401).json({ error: 'Token no longer valid', status: 401 });
       req.user = null;
       return next();
     }
@@ -158,7 +176,7 @@ export function blacklistCurrentToken(req) {
   const token = bearerToken(req);
   if (token) {
     const payload = verifyToken(token);
-    if (payload?.jti) {
+    if (payload?.jti && Number.isFinite(payload.exp)) {
       blacklistToken(payload.jti, new Date(payload.exp * 1000).toISOString());
     }
   }

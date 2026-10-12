@@ -38,6 +38,7 @@ import { requestIdMiddleware } from './lib/request-id.mjs';
 import { registerCleanup } from './lib/shutdown.mjs';
 import { startAutoBackup } from './lib/backup.mjs';
 import { loadBlacklist, startBlacklistCleanup } from './lib/token-blacklist.mjs';
+import { startRefreshTokenCleanup } from './lib/refresh-tokens.mjs';
 import { registerTrustRoutes } from './routes/trust.mjs';
 import { DecisionEngine } from './lib/decision-engine.mjs';
 import { ProjectManager } from './lib/project-manager.mjs';
@@ -115,6 +116,7 @@ export async function createServer(options = {}) {
 
   loadBlacklist();
   startBlacklistCleanup();
+  startRefreshTokenCleanup();
 
   registerAuthRoutes(app);
   trackRoute('auth');

@@ -13,8 +13,11 @@ const TIER_LIMITS = {
 const DEFAULT_TIER_LIMIT = { windowMs: 60000, max: 100 };
 
 const AUTH_RATE_LIMIT = { windowMs: 60000, max: 5 };
+const REFRESH_RATE_LIMIT = { windowMs: 60000, max: 60 };
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
+const refreshStores = new Map();
 
 // Get real client IP, avoiding X-Forwarded-For spoofing.
 // Only trust X-Forwarded-For when trust proxy is set and the header value
@@ -64,6 +67,31 @@ export function authRateLimit(req, res, next) {
       error: 'Too many authentication attempts, please try again later',
       status: 429,
       retryAfterMs: AUTH_RATE_LIMIT.windowMs,
+    });
+  }
+
+  next();
+}
+
+// Refresh is called automatically by clients (often right after a 401), so it
+// needs a higher ceiling than login while still bounding token brute-forcing.
+export function refreshRateLimit(req, res, next) {
+  const now = Date.now();
+  const ip = getClientIp(req);
+  if (!refreshStores.has(ip)) refreshStores.set(ip, []);
+  const timestamps = refreshStores.get(ip).filter((t) => now - t < REFRESH_RATE_LIMIT.windowMs);
+  timestamps.push(now);
+  refreshStores.set(ip, timestamps);
+
+  res.setHeader('X-RateLimit-Limit', REFRESH_RATE_LIMIT.max);
+  res.setHeader('X-RateLimit-Remaining', Math.max(0, REFRESH_RATE_LIMIT.max - timestamps.length));
+  res.setHeader('X-RateLimit-Reset', Math.ceil((now + REFRESH_RATE_LIMIT.windowMs) / 1000));
+
+  if (timestamps.length > REFRESH_RATE_LIMIT.max) {
+    return res.status(429).json({
+      error: 'Too many refresh attempts, please try again later',
+      status: 429,
+      retryAfterMs: REFRESH_RATE_LIMIT.windowMs,
     });
   }
 
@@ -223,7 +251,7 @@ export function getAllProviderBucketStats() {
 // Cleanup stale entries every 5 min
 setInterval(() => {
   const now = Date.now();
-  for (const store of [ipStores, userStores]) {
+  for (const store of [ipStores, userStores, refreshStores]) {
     for (const [key, timestamps] of store) {
       const valid = timestamps.filter((t) => now - t < 120000);
       if (valid.length === 0) store.delete(key);

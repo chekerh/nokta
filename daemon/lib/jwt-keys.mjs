@@ -9,8 +9,8 @@ import * as path from 'node:path';
 // previous one available to verify tokens that are still in flight — no user is
 // logged out by a rotation.
 //
-// Durable rotation is a configuration change: point NOKTKA_JWT_SECRET at the new
-// key and list the retired key(s) in NOKTKA_JWT_PREVIOUS_SECRETS, then restart.
+// Durable rotation is a configuration change: point NOKTA_JWT_SECRET at the new
+// key and list the retired key(s) in NOKTA_JWT_PREVIOUS_SECRETS, then restart.
 // rotateKeys() performs the same move in-process (tests, programmatic rotation).
 
 let currentKey = null; // { kid, secret }

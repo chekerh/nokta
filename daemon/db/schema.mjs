@@ -1,8 +1,6 @@
 import { getDb } from './connection.mjs';
 import { logger } from '../lib/logger.mjs';
 
-const _SCHEMA_VERSION = 5;
-
 const MIGRATIONS = [
   // v1: Initial schema
   {
@@ -275,14 +273,18 @@ const MIGRATIONS = [
   DROP TABLE IF EXISTS password_resets;
   `,
   },
-  // v5: Refresh tokens (long-lived, DB-backed, rotated on use)
+  // v5: Refresh tokens (long-lived, DB-backed, rotated on use) + per-user
+  // token version so a credential change can invalidate outstanding access
+  // tokens too.
   {
     up: `
+  ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;
   CREATE TABLE IF NOT EXISTS refresh_tokens (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL,
     expires_at TEXT NOT NULL,
+    family_expires_at TEXT,
     revoked_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
