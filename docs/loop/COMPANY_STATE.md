@@ -3,9 +3,9 @@
 ## Current Loop
 
 - **Phase:** DOCUMENTING → PERSISTING → SELECTING_NEXT
-- **Completed (2026-10-08 → 2026-10-13):** Fleet tracking/discovery, review gates (rendered-UI + dialog semantics), sandbox stabilization, codebase audit, npm audit remediation, audit Phase 1 (npm scripts, SSE auth, pagination, zod body validation), audit Phase 3 (password reset, JWT key rotation, refresh tokens), audit Phase 4 Task 4.1 (per-dependency health checks)
-- **Validation:** Lint ✅ 0 errors · Tests ✅ 368/368 pass · npm audit ✅ 0 vulnerabilities
-- **Next Task:** Audit Phase 4 Task 4.2 (Prometheus `/metrics` endpoint); Phase 2 remains
+- **Completed (2026-10-08 → 2026-10-13):** Fleet tracking/discovery, review gates (rendered-UI + dialog semantics), sandbox stabilization, codebase audit, npm audit remediation, audit Phase 1 (npm scripts, SSE auth, pagination, zod body validation), audit Phase 3 (password reset, JWT key rotation, refresh tokens), audit Phase 4 Task 4.1 (per-dependency health checks), Task 4.2 (Prometheus metrics)
+- **Validation:** Lint ✅ 0 errors · Tests ✅ 382/382 pass · npm audit ✅ 0 vulnerabilities
+- **Next Task:** Audit Phase 4 Task 4.3 (distributed tracing); Tasks 4.4 (OpenAPI→TS types) and Phase 2 remain
 
 ## Loop State Tracker
 
@@ -25,12 +25,12 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 
 - **In scope:** Remaining gap work from discovery, tests, docs, audit phases, merge readiness
 - **Out of scope:** None defined this cycle (Phase 1 + Phase 3 complete)
-- **Constraints:** Must pass lint, 368/368 tests, and npm audit (0 vulnerabilities)
+- **Constraints:** Must pass lint, 382/382 tests, and npm audit (0 vulnerabilities)
 
 ## Validation Status
 
 - **Lint:** ✅ Pass (0 errors, 0 warnings)
-- **Tests:** ✅ 368/368 pass
+- **Tests:** ✅ 382/382 pass
 - **Daemon:** ✅ Starts and responds to health check
 - **npm audit:** ✅ 0 vulnerabilities (proxy-addr, qs, js-yaml, brace-expansion patched)
 - **Fleet:** ✅ Track/discover/plan/queue live opencode + freebuff sessions
@@ -51,6 +51,7 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 - Audit Phase 3 Task 3.1 JWT signing-key rotation landed on `feat/jwt-rotation` (TASK-017): `kid` in every token, key ring verifies retired keys, `NOKTA_JWT_PREVIOUS_SECRETS`.
 - Audit Phase 3 Task 3.2 refresh tokens landed on `feat/refresh-tokens` (TASK-018): short-lived access tokens (15 min), DB-backed single-use rotating refresh tokens with reuse detection, `/api/v1/auth/refresh`, revocation + `token_version` bump on password change/reset, all-session revocation on logout, silent client refresh on 401. Hardened after independent security + code review, then verified again post-merge by a live E2E run and a second independent security pass; second-pass findings (blacklist eviction fallback, shorter reuse grace, TTL clamps, trust-proxy opt-in, logout token_version bump, auth-limiter store split, cross-tab refresh retry, transient-refresh handling, self-XSS onclick escape, idempotent v5 migration) landed in a follow-up hardening PR. **Audit Phase 3 complete.**
 - Audit Phase 4 Task 4.1 per-dependency health checks landed on `feat/health-checks` (TASK-019): `daemon/lib/health.mjs` probes database (schema/sqlite version), disk (free bytes/percent), and providers; `/health` exposes `dependencies`. Provider sweep cached 5 s + 8 s timeout; top-level status tracks db+disk readiness. Hardened after an independent code review (unguarded sweep, cache/timeout, error-vs-degraded, raw-ratio disk threshold).
+- Audit Phase 4 Task 4.2 Prometheus metrics landed on `feat/prometheus-metrics` (TASK-020): `daemon/lib/metrics.mjs` (prom-client) exposes HTTP latency/requests/errors, active-runs and queue-length gauges, and an LLM token counter fed by `CostTracker`; `/metrics` requires the API key when set and is rate-limit exempt. Hardened after an independent code review (auth on `/metrics`, SSE duration, abort labelling, defensive gauge reads).
 - Deferred from the TASK-018 review (follow-ups, not blockers): move the refresh token out of `localStorage` into an HttpOnly/SameSite cookie (M4), and make `/auth/register`'s duplicate-email response generic to close the last enumeration vector (L4).
 
 ## Next Action
