@@ -226,6 +226,25 @@ test('daemon returns routes in health check', async () => {
   }
 });
 
+test('daemon metrics endpoint requires authentication', async () => {
+  const port = findPort();
+  const proc = startDaemon(port);
+  try {
+    await waitForHealth(`http://localhost:${port}/health`, 20000);
+
+    const unauth = await httpGetNoAuth(`http://localhost:${port}/metrics`);
+    assert.equal(unauth.status, 401, '/metrics must not be publicly readable when an API key is set');
+
+    const body = await httpGet(`http://localhost:${port}/metrics`);
+    assert.equal(typeof body, 'string');
+    assert.match(body, /# TYPE nokta_http_requests_total counter/);
+    assert.match(body, /# TYPE nokta_active_runs gauge/);
+    assert.match(body, /nokta_http_requests_total\{[^}]*route="\/health"/);
+  } finally {
+    await killProcess(proc);
+  }
+});
+
 test('daemon projects route requires authentication', async () => {
   const port = findPort();
   const proc = startDaemon(port);

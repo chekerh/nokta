@@ -341,6 +341,34 @@ pm2 monit
 
 ---
 
+## Metrics
+
+The daemon exposes application metrics at `GET /metrics` in Prometheus text format:
+
+| Metric                                | Type                | Labels                          |
+| ------------------------------------- | ------------------- | ------------------------------- |
+| `nokta_http_request_duration_seconds` | histogram           | `method`, `route`, `status_code` |
+| `nokta_http_requests_total`           | counter             | `method`, `route`, `status_code` |
+| `nokta_http_errors_total`             | counter (status ≥ 400) | `method`, `route`, `status_code` |
+| `nokta_active_runs`                   | gauge               | —                               |
+| `nokta_queue_length`                  | gauge               | —                               |
+| `nokta_llm_tokens_total`              | counter             | `provider`, `direction`         |
+
+Requests are labelled by the matched route *pattern* (e.g. `/api/v1/agents/:id`), so label cardinality stays bounded. `/metrics` is **not** on the auth allowlist: when `NOKTA_API_KEY` is set, scraping must present it (Prometheus `bearer_token_file`) or a valid JWT. `/metrics` alone is exempt from the global rate limiter so scraping never competes with (or consumes) client traffic; `/health` remains rate limited.
+
+> The daemon binds to `127.0.0.1` by default, but the shipped Docker image sets `NOKTA_HOST=0.0.0.0` and publishes the port. In that setup `/metrics` is reachable from anything that can reach the container, so always set `NOKTA_API_KEY` and scrape over the private network (or restrict the port at the proxy).
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: nokta
+    bearer_token_file: /etc/prometheus/nokta_api_key
+    static_configs:
+      - targets: ['localhost:4217']
+```
+
+---
+
 ## Logging
 
 Logs are written to stdout (，适合systemd/docker). To capture to file:
