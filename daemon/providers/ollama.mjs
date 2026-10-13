@@ -1,4 +1,5 @@
 import { Provider } from './base.mjs';
+import { correlationHeaders } from '../lib/request-id.mjs';
 
 export class OllamaProvider extends Provider {
   constructor(config = {}) {
@@ -17,7 +18,7 @@ export class OllamaProvider extends Provider {
     const response = await fetch(url, {
       signal: options.signal ?? AbortSignal.timeout(options.timeout ?? this.timeout),
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers },
+      headers: { 'Content-Type': 'application/json', ...correlationHeaders(), ...options.headers },
     });
     if (!response.ok) {
       const text = await response.text().catch(() => '');

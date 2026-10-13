@@ -1,4 +1,5 @@
 import { Provider } from './base.mjs';
+import { correlationHeaders } from '../lib/request-id.mjs';
 
 export class OpenAIProvider extends Provider {
   constructor(config = {}) {
@@ -19,6 +20,7 @@ export class OpenAIProvider extends Provider {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
+        ...correlationHeaders(),
         ...options.headers,
       },
     });

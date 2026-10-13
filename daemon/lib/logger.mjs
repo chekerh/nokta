@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as fsSync from 'node:fs';
 import path from 'node:path';
+import { currentRequestId } from './request-id.mjs';
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
 const COLORS = { debug: 90, info: 36, warn: 33, error: 31 };
@@ -55,20 +56,25 @@ function log(level, msg, meta) {
   if (LEVELS[level] < currentLevel) return;
   const ts = new Date().toISOString();
   const useJson = process.env.NOKTA_LOG_FORMAT === 'json';
+  // Correlate every log line with the request that triggered it (when any).
+  const requestId = currentRequestId();
 
   if (useJson) {
-    const entry = { timestamp: ts, level, message: msg, ...meta };
+    // `requestId` is applied after `meta` so a caller passing
+    // `{ requestId: undefined }` cannot silently drop the correlation field.
+    const entry = { timestamp: ts, level, message: msg, ...meta, ...(requestId ? { requestId } : {}) };
     const line = JSON.stringify(entry);
     process.stderr.write(line + '\n');
     if (logPath) writeToFile(line);
   } else {
     const color = COLORS[level];
     const prefix = `\x1b[${color}m[${level.toUpperCase()}]\x1b[0m`;
+    const req = requestId ? ` \x1b[90m(${requestId})\x1b[0m` : '';
     const metaStr = meta ? ` ${JSON.stringify(meta)}` : '';
-    const line = `${ts} ${prefix} ${msg}${metaStr}`;
+    const line = `${ts} ${prefix}${req} ${msg}${metaStr}`;
     process.stderr.write(line + '\n');
     if (logPath) {
-      const plainLine = `${ts} [${level.toUpperCase()}] ${msg}${meta ? ' ' + JSON.stringify(meta) : ''}`;
+      const plainLine = `${ts} [${level.toUpperCase()}]${requestId ? ` (${requestId})` : ''} ${msg}${meta ? ' ' + JSON.stringify(meta) : ''}`;
       writeToFile(plainLine);
     }
   }

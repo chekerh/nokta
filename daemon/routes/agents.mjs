@@ -4,6 +4,7 @@ import { canStartRun, getActiveRunCount } from '../lib/run-limit.mjs';
 import { loadAgentPacks, resolveAgentPack } from '../agent/agent-pack.mjs';
 import { validateBody } from '../lib/validate.mjs';
 import { AgentRecommendSchema, AgentExecuteSchema } from '../lib/schemas.mjs';
+import { currentRequestId } from '../lib/request-id.mjs';
 
 export function registerAgentRoutes(app, providerManager, _log, orchestrator = null, jobQueue = null) {
   app.get(
@@ -107,10 +108,12 @@ export function registerAgentRoutes(app, providerManager, _log, orchestrator = n
       // a queue the run finishes in a separate worker process that never sees
       // this closure.
       if (jobQueue) {
-        jobQueue.enqueue(run.id, { projectRoot: orchestrator.projectRoot, userId }).catch(async (err) => {
-          _log.error(`Agent pack execution failed for ${run.id}: ${err.message}`);
-          await orchestrator.failRun(run.id, userId, err);
-        });
+        jobQueue
+          .enqueue(run.id, { projectRoot: orchestrator.projectRoot, userId, requestId: currentRequestId() })
+          .catch(async (err) => {
+            _log.error(`Agent pack execution failed for ${run.id}: ${err.message}`);
+            await orchestrator.failRun(run.id, userId, err);
+          });
       } else {
         orchestrator.executeRun(run.id, userId).catch(async (err) => {
           _log.error(`Agent pack execution failed for ${run.id}: ${err.message}`);

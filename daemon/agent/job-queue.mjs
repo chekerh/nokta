@@ -7,6 +7,23 @@ import { NOOP_LOG } from '../lib/route-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Builds the environment for a worker child process. Kept pure and exported so
+// the values handed across the process boundary (including the correlation id)
+// can be asserted without spawning a real orchestrator.
+export function buildWorkerEnv(runId, options = {}) {
+  const env = {
+    ...createSafeEnv(),
+    NOKTA_JOB_RUN_ID: runId,
+    NOKTA_JOB_PROJECT_ROOT: options.projectRoot || process.cwd(),
+    NOKTA_JOB_TIMEOUT: String(options.timeout || 300000),
+  };
+  if (options.userId) env.NOKTA_JOB_USER_ID = options.userId;
+  // Carry the originating request's correlation id across the process boundary
+  // so the worker's logs and outbound calls stay attached to it.
+  if (options.requestId) env.NOKTA_JOB_REQUEST_ID = options.requestId;
+  return env;
+}
+
 export class AgentJobQueue extends EventEmitter {
   constructor(options = {}) {
     super();
@@ -72,14 +89,7 @@ export class AgentJobQueue extends EventEmitter {
     this.log.info(`Executing job: ${runId}`);
 
     const workerPath = path.join(__dirname, 'job-worker.mjs');
-    const env = {
-      ...createSafeEnv(),
-      NOKTA_JOB_RUN_ID: runId,
-      NOKTA_JOB_PROJECT_ROOT: options.projectRoot || process.cwd(),
-      NOKTA_JOB_TIMEOUT: String(options.timeout || 300000),
-    };
-
-    if (options.userId) env.NOKTA_JOB_USER_ID = options.userId;
+    const env = buildWorkerEnv(runId, options);
 
     const worker = spawn('node', [workerPath], {
       env,

@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { correlationHeaders } from './request-id.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DISCOVERY_CACHE = path.join(__dirname, '..', '..', '.nokta', 'discovery-cache.json');
@@ -48,7 +49,7 @@ async function fetchJson(url, timeoutMs = 10000) {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'Nokta-Discovery/0.1', Accept: 'application/json' },
+      headers: { 'User-Agent': 'Nokta-Discovery/0.1', Accept: 'application/json', ...correlationHeaders() },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();

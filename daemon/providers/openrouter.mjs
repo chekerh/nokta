@@ -1,4 +1,5 @@
 import { Provider } from './base.mjs';
+import { correlationHeaders } from '../lib/request-id.mjs';
 
 export class OpenRouterProvider extends Provider {
   constructor(config = {}) {
@@ -21,6 +22,7 @@ export class OpenRouterProvider extends Provider {
         Authorization: `Bearer ${this.apiKey}`,
         'HTTP-Referer': 'https://nokta.ai',
         'X-Title': 'Nokta AI',
+        ...correlationHeaders(),
         ...options.headers,
       },
     });

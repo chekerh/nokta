@@ -7,6 +7,7 @@ import { ProductionGate } from '../lib/production-gate.mjs';
 import { evaluateUiGates } from '../../compiler/lib/ui-gates.mjs';
 import { findSecretLikePaths } from '../lib/secret-paths.mjs';
 import { createSafeEnv } from '../lib/safe-env.mjs';
+import { correlationHeaders } from '../lib/request-id.mjs';
 
 const READ_COMMANDS = new Set([
   'ls',
@@ -458,6 +459,7 @@ export async function executeStep(run, step, context = {}) {
               Authorization: `Bearer ${ghToken}`,
               'Content-Type': 'application/json',
               'User-Agent': 'nokta-agent',
+              ...correlationHeaders(),
             },
             body: JSON.stringify({ title: prTitle, body: prBody, head: prHead, base: prBase }),
           });

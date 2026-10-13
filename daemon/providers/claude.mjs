@@ -1,4 +1,5 @@
 import { Provider } from './base.mjs';
+import { correlationHeaders } from '../lib/request-id.mjs';
 
 export class ClaudeProvider extends Provider {
   constructor(config = {}) {
@@ -20,6 +21,7 @@ export class ClaudeProvider extends Provider {
         'Content-Type': 'application/json',
         'x-api-key': this.apiKey,
         'anthropic-version': '2023-06-01',
+        ...correlationHeaders(),
         ...options.headers,
       },
     });
