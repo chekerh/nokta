@@ -3,6 +3,7 @@ import { test, after } from 'node:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import express from 'express';
 
 const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-metrics-test-'));
@@ -22,6 +23,17 @@ function startApp(instance) {
   return new Promise((resolve) => {
     server.on('listening', () => resolve({ server, base: `http://127.0.0.1:${server.address().port}` }));
   });
+}
+
+function listen(app) {
+  const server = app.listen(0);
+  return new Promise((resolve) => {
+    server.on('listening', () => resolve({ server, port: server.address().port }));
+  });
+}
+
+function close(server) {
+  return new Promise((r) => server.close(r));
 }
 
 test('counter, histogram and gauge render in Prometheus text format', async () => {
@@ -119,6 +131,119 @@ test('CostTracker reports token usage through the onTokens hook', async () => {
     await fs.access(path.join(dir, 'ledger.json'));
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('CostTracker still records without the onTokens hook', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-cost-test-'));
+  const tracker = new CostTracker({ ledgerPath: path.join(dir, 'ledger.json') });
+  try {
+    const entry = await tracker.record('gpt-4o', 1, 1);
+    assert.equal(entry.model, 'gpt-4o');
+    assert.equal(entry.provider, 'openai');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a throwing onTokens hook never breaks cost recording', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-cost-test-'));
+  const tracker = new CostTracker({
+    ledgerPath: path.join(dir, 'ledger.json'),
+    onTokens: () => {
+      throw new Error('metrics sink down');
+    },
+  });
+  try {
+    const entry = await tracker.record('gpt-4o', 5, 5);
+    assert.equal(entry.totalTokens, 10);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('streaming responses are counted but never timed', async () => {
+  const m = createMetrics();
+  const app = express();
+  app.use(metricsMiddleware(m));
+  app.get('/normal', (req, res) => res.json({ ok: true }));
+  app.get('/events', (req, res) => {
+    res.set('Content-Type', 'text/event-stream');
+    res.end('data: hello\n\n');
+  });
+  app.get('/metrics', makeMetricsHandler(m));
+  const { server, port } = await listen(app);
+  try {
+    await fetch(`http://127.0.0.1:${port}/normal`);
+    await fetch(`http://127.0.0.1:${port}/events`);
+    const text = await (await fetch(`http://127.0.0.1:${port}/metrics`)).text();
+    assert.match(text, /nokta_http_requests_total\{[^}]*route="\/events"[^}]*\} 1/);
+    assert.doesNotMatch(text, /nokta_http_request_duration_seconds_count\{[^}]*route="\/events"/);
+    // A normal request is still timed, so the histogram is not simply disabled.
+    assert.match(text, /nokta_http_request_duration_seconds_count\{[^}]*route="\/normal"/);
+  } finally {
+    await close(server);
+  }
+});
+
+test('aborted requests are counted exactly once', async () => {
+  const m = createMetrics();
+  const app = express();
+  app.use(metricsMiddleware(m));
+  app.get('/hang', () => {
+    /* never responds */
+  });
+  app.get('/metrics', makeMetricsHandler(m));
+  const { server, port } = await listen(app);
+  try {
+    await new Promise((resolve) => {
+      const req = http.get({ host: '127.0.0.1', port, path: '/hang' }, () => {});
+      req.on('error', () => resolve());
+      setTimeout(() => {
+        req.destroy();
+        resolve();
+      }, 150);
+    });
+    await new Promise((r) => setTimeout(r, 150)); // let the server-side 'close' fire
+    const text = await (await fetch(`http://127.0.0.1:${port}/metrics`)).text();
+    // Labelled distinctly as an abort, counted exactly once, and not timed.
+    assert.match(text, /nokta_http_requests_total\{[^}]*route="\/hang"[^}]*status_code="aborted"[^}]*\} 1/);
+    assert.doesNotMatch(text, /nokta_http_request_duration_seconds_count\{[^}]*route="\/hang"/);
+    const matches = text.match(/nokta_http_requests_total\{[^}]*route="\/hang"[^}]*\}/g) || [];
+    assert.equal(matches.length, 1, 'the aborted request is counted exactly once');
+  } finally {
+    await close(server);
+  }
+});
+
+test('a gauge source that throws does not break the scrape', async () => {
+  const m = createMetrics({
+    source: () => {
+      throw new Error('queue unavailable');
+    },
+  });
+  const text = await m.registry.metrics();
+  assert.match(text, /^nokta_active_runs 0$/m);
+  assert.match(text, /^nokta_queue_length 0$/m);
+});
+
+test('routers mounted under a prefix are labelled by the full pattern', async () => {
+  const m = createMetrics();
+  const app = express();
+  app.use(metricsMiddleware(m));
+  const router = express.Router();
+  router.get('/:id', (req, res) => res.json({ id: req.params.id }));
+  app.use('/api/v1/agents', router);
+  app.get('/metrics', makeMetricsHandler(m));
+  const { server, port } = await listen(app);
+  try {
+    await fetch(`http://127.0.0.1:${port}/api/v1/agents/42`);
+    const text = await (await fetch(`http://127.0.0.1:${port}/metrics`)).text();
+    // One series for the pattern, not one per concrete id.
+    assert.match(text, /nokta_http_requests_total\{[^}]*route="\/api\/v1\/agents\/:id"[^}]*\} 1/);
+    assert.doesNotMatch(text, /route="\/api\/v1\/agents\/42"/);
+  } finally {
+    await close(server);
   }
 });
 

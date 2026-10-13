@@ -84,7 +84,6 @@ export async function createServer(options = {}) {
     app.use((req, res, next) => {
       if (
         req.path === '/health' ||
-        req.path === '/metrics' ||
         req.path === '/api/v1/auth/login' ||
         req.path === '/api/v1/auth/register' ||
         req.path === '/api/v1/auth/forgot-password' ||
@@ -117,7 +116,15 @@ export async function createServer(options = {}) {
 
   // Optional auth before rate limit so tier-aware limiting works
   app.use(authMiddleware(false));
-  app.use(rateLimit({ windowMs: 60000, max: options.rateLimit || 100 }));
+  app.use(
+    rateLimit({
+      windowMs: 60000,
+      max: options.rateLimit || 100,
+      // Scraping must never be throttled by (or consume) a client's budget.
+      // /health stays rate limited; only /metrics is exempt (trailing slash ok).
+      skip: (req) => req.path.replace(/\/$/, '') === '/metrics',
+    }),
+  );
 
   migrate();
 

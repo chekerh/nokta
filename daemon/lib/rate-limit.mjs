@@ -130,6 +130,10 @@ export function clearFailedLogin(email) {
 export function rateLimit(options = {}) {
   const defaultLimit = DEFAULT_TIER_LIMIT;
   return (req, res, next) => {
+    // Health and metrics endpoints are polled by infrastructure on their own
+    // cadence; they must not consume (or be throttled by) a client's budget.
+    if (typeof options.skip === 'function' && options.skip(req)) return next();
+
     const now = Date.now();
 
     // Determine limits based on user tier
