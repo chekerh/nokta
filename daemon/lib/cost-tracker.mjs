@@ -76,16 +76,27 @@ function logCostToDb(entry, metadata = {}) {
 }
 
 export class CostTracker {
-  constructor() {
+  constructor(options = {}) {
     this._ledger = null;
     this._dirty = false;
+    this._ledgerPath = options.ledgerPath || LEDGER_PATH;
+    // Optional sink for token-usage metrics; failing to feed metrics must never
+    // break cost recording.
+    this._onTokens = typeof options.onTokens === 'function' ? options.onTokens : null;
+  }
+
+  _emitTokens(provider, tokensIn, tokensOut) {
+    if (!this._onTokens) return;
+    try {
+      this._onTokens(provider, tokensIn, tokensOut);
+    } catch {}
   }
 
   async _load() {
     if (this._ledger) return this._ledger;
     try {
-      await fs.mkdir(path.dirname(LEDGER_PATH), { recursive: true });
-      const data = await fs.readFile(LEDGER_PATH, 'utf8');
+      await fs.mkdir(path.dirname(this._ledgerPath), { recursive: true });
+      const data = await fs.readFile(this._ledgerPath, 'utf8');
       this._ledger = JSON.parse(data);
     } catch {
       this._ledger = { entries: [], totalCost: 0, totalTokens: 0, lastReset: new Date().toISOString() };
@@ -96,7 +107,7 @@ export class CostTracker {
   async _save() {
     if (!this._dirty) return;
     try {
-      await atomicWrite(LEDGER_PATH, this._ledger);
+      await atomicWrite(this._ledgerPath, this._ledger);
       this._dirty = false;
     } catch {}
   }
@@ -126,6 +137,7 @@ export class CostTracker {
     }
     await this._save();
     logCostToDb(entry, metadata);
+    this._emitTokens(pricing.provider, inputTokens, outputTokens);
     return entry;
   }
 
@@ -155,6 +167,7 @@ export class CostTracker {
     }
     await this._save();
     logCostToDb(entry, metadata);
+    this._emitTokens(pricing.provider, inputTokens, outputTokens);
     return entry;
   }
 

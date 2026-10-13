@@ -48,6 +48,7 @@ import { registerBrainRoutes } from './routes/brain.mjs';
 import { registerAdversarialRoutes } from './routes/adversarial.mjs';
 import { registerSandboxRoutes } from './routes/sandbox.mjs';
 import { registerSkillEvolutionRoutes } from './routes/skill-evolution.mjs';
+import { metricsMiddleware, makeMetricsHandler, setGaugeSource, recordLlmTokens } from './lib/metrics.mjs';
 
 export async function createServer(options = {}) {
   const port = options.port || 4217;
@@ -61,6 +62,7 @@ export async function createServer(options = {}) {
   // reverse proxy (nginx, Fly, etc.).
   app.set('trust proxy', process.env.NOKTA_TRUST_PROXY === '1' || process.env.NOKTA_TRUST_PROXY === 'true' ? 1 : false);
   app.use(requestIdMiddleware);
+  app.use(metricsMiddleware());
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
   const corsOrigins = options.corsOrigin
@@ -82,6 +84,7 @@ export async function createServer(options = {}) {
     app.use((req, res, next) => {
       if (
         req.path === '/health' ||
+        req.path === '/metrics' ||
         req.path === '/api/v1/auth/login' ||
         req.path === '/api/v1/auth/register' ||
         req.path === '/api/v1/auth/forgot-password' ||
@@ -129,7 +132,12 @@ export async function createServer(options = {}) {
   await providerManager.initDefaults();
   providerManager.health().catch(() => {});
 
-  const costTracker = new CostTracker();
+  const costTracker = new CostTracker({
+    onTokens: (provider, tokensIn, tokensOut) => {
+      recordLlmTokens(provider, 'input', tokensIn);
+      recordLlmTokens(provider, 'output', tokensOut);
+    },
+  });
   const gateKeeper = new GateKeeper();
   const chatHandler = new ChatHandler(providerManager, { projectRoot, log, costTracker, gateKeeper });
 
@@ -162,6 +170,8 @@ export async function createServer(options = {}) {
   registerCodeActionRoutes(app, chatHandler);
   trackRoute('code-actions');
   registerHealthRoute(app, providerManager);
+  app.get('/metrics', makeMetricsHandler());
+  trackRoute('metrics');
   registerSkillRoutes(app, log);
   trackRoute('skills');
   registerUiUxRoutes(app, log);
@@ -209,6 +219,10 @@ export async function createServer(options = {}) {
   const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler, sprintEngine });
   const jobQueue = new AgentJobQueue({ concurrency: 2, log });
   jobQueue.start();
+  setGaugeSource(() => ({
+    activeRuns: jobQueue.getActiveCount(),
+    queueLength: jobQueue.getQueueLength(),
+  }));
   registerAgentRunRoutes(app, orchestrator, log, jobQueue);
   registerAgentRoutes(app, providerManager, log, orchestrator, jobQueue);
   trackRoute('agent-runs');

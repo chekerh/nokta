@@ -341,6 +341,31 @@ pm2 monit
 
 ---
 
+## Metrics
+
+The daemon exposes application metrics at `GET /metrics` in Prometheus text format:
+
+| Metric                                | Type                | Labels                          |
+| ------------------------------------- | ------------------- | ------------------------------- |
+| `nokta_http_request_duration_seconds` | histogram           | `method`, `route`, `status_code` |
+| `nokta_http_requests_total`           | counter             | `method`, `route`, `status_code` |
+| `nokta_http_errors_total`             | counter (status ≥ 400) | `method`, `route`, `status_code` |
+| `nokta_active_runs`                   | gauge               | —                               |
+| `nokta_queue_length`                  | gauge               | —                               |
+| `nokta_llm_tokens_total`              | counter             | `provider`, `direction`         |
+
+Requests are labelled by the matched route *pattern* (e.g. `/api/v1/agents/:id`), so label cardinality stays bounded. `/metrics` is unauthenticated (like `/health`) and the daemon binds to `127.0.0.1` by default; scrape it over a private network, or put it behind your reverse proxy's access control if you bind with `NOKTA_HOST=0.0.0.0`.
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: nokta
+    static_configs:
+      - targets: ['localhost:4217']
+```
+
+---
+
 ## Logging
 
 Logs are written to stdout (，适合systemd/docker). To capture to file:
