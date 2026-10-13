@@ -5,6 +5,7 @@ import { canStartRun, getActiveRunCount } from '../lib/run-limit.mjs';
 import { normalizeSteps } from '../agent/orchestrator.mjs';
 import { validateBody } from '../lib/validate.mjs';
 import { AgentRunCreateSchema, AgentRunGenerateSchema } from '../lib/schemas.mjs';
+import { currentRequestId } from '../lib/request-id.mjs';
 
 export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) {
   // Starting a run is the same three lines whichever route asks for it, and it
@@ -12,8 +13,11 @@ export function registerAgentRunRoutes(app, orchestrator, log, jobQueue = null) 
   // executes in a separate worker process; the inline path is a fallback for
   // callers that build the routes without one.
   const dispatch = (runId, userId) => {
+    // Capture the correlation id here, inside the request, so the worker can
+    // restart it after the process boundary.
+    const requestId = currentRequestId();
     if (jobQueue) {
-      jobQueue.enqueue(runId, { projectRoot: orchestrator.projectRoot, userId }).catch(async (err) => {
+      jobQueue.enqueue(runId, { projectRoot: orchestrator.projectRoot, userId, requestId }).catch(async (err) => {
         log.error(`Job queue execution failed for ${runId}: ${err.message}`);
         await orchestrator.failRun(runId, userId, err);
       });

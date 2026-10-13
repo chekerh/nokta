@@ -60,7 +60,9 @@ function log(level, msg, meta) {
   const requestId = currentRequestId();
 
   if (useJson) {
-    const entry = { timestamp: ts, level, message: msg, ...(requestId ? { requestId } : {}), ...meta };
+    // `requestId` is applied after `meta` so a caller passing
+    // `{ requestId: undefined }` cannot silently drop the correlation field.
+    const entry = { timestamp: ts, level, message: msg, ...meta, ...(requestId ? { requestId } : {}) };
     const line = JSON.stringify(entry);
     process.stderr.write(line + '\n');
     if (logPath) writeToFile(line);

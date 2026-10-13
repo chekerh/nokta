@@ -68,7 +68,9 @@ export async function createServer(options = {}) {
   const corsOrigins = options.corsOrigin
     ? options.corsOrigin.split(',').map((s) => s.trim())
     : [/^https?:\/\/localhost/, /^https?:\/\/127\.0\.0\.1/];
-  app.use(cors({ origin: corsOrigins }));
+  // Expose the correlation header so browser clients can read it off the
+  // response (distinct from the UI, which is served same-origin).
+  app.use(cors({ origin: corsOrigins, exposedHeaders: ['X-Request-Id'] }));
 
   app.use(
     express.json({

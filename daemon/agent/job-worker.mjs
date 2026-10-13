@@ -4,10 +4,11 @@ import { ProviderManager } from '../lib/provider-manager.mjs';
 import { ChatHandler } from '../lib/chat-handler.mjs';
 import { SprintEngine } from '../lib/sprint-engine.mjs';
 import { logger } from '../lib/logger.mjs';
+import { runWithRequestId } from '../lib/request-id.mjs';
 
 const log = logger.child({ service: 'job-worker' });
 
-async function main() {
+async function execute() {
   const runId = process.env.NOKTA_JOB_RUN_ID;
   const projectRoot = process.env.NOKTA_JOB_PROJECT_ROOT || process.cwd();
   const timeout = parseInt(process.env.NOKTA_JOB_TIMEOUT || '300000', 10);
@@ -51,6 +52,15 @@ async function main() {
     log.error(`Worker failed: ${err.message}`);
     process.exit(1);
   }
+}
+
+async function main() {
+  // AsyncLocalStorage cannot cross the process boundary, so the id the parent
+  // inherited from the originating request is restarted here; everything the
+  // worker logs or calls out to from this point is correlated again.
+  const requestId = process.env.NOKTA_JOB_REQUEST_ID;
+  if (requestId) return runWithRequestId(requestId, execute);
+  return execute();
 }
 
 main().catch((err) => {
