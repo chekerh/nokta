@@ -6,11 +6,12 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 // function signature.
 const storage = new AsyncLocalStorage();
 
-// Honour a caller-supplied id only if it is bounded and printable (no spaces,
-// no control characters), so a client cannot inject newlines into log lines or
-// smuggle control characters into a header — while still accepting the common
-// real-world shapes (UUIDs, W3C traceparent, base64 trace ids).
-const SAFE_ID = /^[!-~]{1,200}$/;
+// Honour a caller-supplied id only if it is bounded and made of characters
+// that cannot break a header or a log line. Whitespace, control characters and
+// the `()[]` used to delimit text log fields are excluded (so a client cannot
+// forge a fake log level or close the `(id)` marker), while the common
+// real-world shapes — UUIDs, W3C traceparent, base64 trace ids — still pass.
+const SAFE_ID = /^[A-Za-z0-9._:/+=@-]{1,200}$/;
 
 export function normalizeRequestId(value) {
   if (typeof value === 'string' && SAFE_ID.test(value)) return value;

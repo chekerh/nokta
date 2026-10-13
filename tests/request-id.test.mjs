@@ -48,6 +48,7 @@ test('normalizeRequestId accepts safe ids and rejects junk', () => {
   );
   assert.match(normalizeRequestId('bad\nid'), UUID, 'newline injection is rejected');
   assert.match(normalizeRequestId('has space'), UUID, 'spaces are rejected');
+  assert.match(normalizeRequestId('x)[ERROR]fake'), UUID, 'log-spoofing characters are rejected');
   assert.match(normalizeRequestId('a'.repeat(300)), UUID, 'oversized ids are rejected');
   assert.match(normalizeRequestId(undefined), UUID);
   assert.match(normalizeRequestId(42), UUID);
