@@ -4,7 +4,7 @@
 
 - **Phase:** DOCUMENTING → PERSISTING → SELECTING_NEXT
 - **Completed (2026-10-08 → 2026-10-13):** Fleet tracking/discovery, review gates (rendered-UI + dialog semantics), sandbox stabilization, codebase audit, npm audit remediation, audit Phase 1 (npm scripts, SSE auth, pagination, zod body validation), audit Phase 3 (password reset, JWT key rotation, refresh tokens), audit Phase 4 Task 4.1 (per-dependency health checks), Task 4.2 (Prometheus metrics), Task 4.3 (request correlation ids)
-- **Validation:** Lint ✅ 0 errors · Tests ✅ 390/390 pass · npm audit ✅ 0 vulnerabilities
+- **Validation:** Lint ✅ 0 errors · Tests ✅ 409/409 pass · npm audit ✅ 0 vulnerabilities
 - **Next Task:** Audit Phase 4 Task 4.4 (TypeScript types from OpenAPI); Phase 2 remains
 
 ## Loop State Tracker
@@ -25,12 +25,13 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 
 - **In scope:** Remaining gap work from discovery, tests, docs, audit phases, merge readiness
 - **Out of scope:** None defined this cycle (Phase 1 + Phase 3 complete)
-- **Constraints:** Must pass lint, 390/390 tests, and npm audit (0 vulnerabilities)
+- **Constraints:** Must pass lint, 409/409 tests, and npm audit (0 vulnerabilities)
 
 ## Validation Status
 
 - **Lint:** ✅ Pass (0 errors, 0 warnings)
-- **Tests:** ✅ 390/390 pass
+- **Tests:** ✅ 409/409 pass
+- Product goal (agent-awareness) landed on `main` via PR #25 (`d15e9c8`, TASK-022): filesystem-only per-project agent detection + machine-wide installed agents (`tool-detector.mjs`), origin-resolving GitHub context with structured failure reasons (`github-context.mjs`), a pure plan+context→prompt renderer (`prompt-builder.mjs`), and agent/GitHub/prompt panels in the existing workspace UI backed by `GET /api/workspace/projects/:id/{context,prompt}`.
 - **Daemon:** ✅ Starts and responds to health check
 - **npm audit:** ✅ 0 vulnerabilities (proxy-addr, qs, js-yaml, brace-expansion patched)
 - **Fleet:** ✅ Track/discover/plan/queue live opencode + freebuff sessions
