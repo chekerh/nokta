@@ -4,6 +4,8 @@ let selected = localStorage.getItem('nokta-workspace-project');
 let editing = null;
 let loading = false;
 let selectedTask = null;
+let contextCache = {};
+let promptText = '';
 const columns = [['ready', 'Ready'], ['in-progress', 'Implementing'], ['testing', 'Testing'], ['review', 'Review'], ['done', 'Done'], ['blocked', 'Blocked']];
 const busy = project => ['queued', 'analyzing', 'running'].includes(project.status);
 
@@ -42,6 +44,7 @@ function render() {
   // Avoid removing a keyboard-focused button during background polling.
   const focusedProject = document.activeElement?.dataset.projectId;
   const focusedTask = document.activeElement?.dataset.taskId;
+  const activeId = document.activeElement?.id;
   $('project-count').textContent = projects.length;
   $('project-list').replaceChildren();
   for (const project of projects) {
@@ -49,13 +52,15 @@ function render() {
     button.dataset.projectId = project.id;
     button.setAttribute('aria-current', String(selected === project.id));
     button.append(element('span', project.name), element('small', `${project.status} · ${project.tasks.filter(task => task.status === 'done').length}/${project.tasks.length} done`));
-    button.addEventListener('click', () => { selected = project.id; localStorage.setItem('nokta-workspace-project', selected); render(); });
+    button.addEventListener('click', () => { selected = project.id; promptText = ''; localStorage.setItem('nokta-workspace-project', selected); render(); });
     $('project-list').append(button);
   }
   const project = current();
   $('welcome').hidden = Boolean(project);
   $('project-view').hidden = !project;
   if (!project) return;
+  loadContext(project.id);
+  loadPrompt(project.id);
   $('project-name').textContent = project.name;
   $('project-path').textContent = project.rootPath;
   $('project-goal').textContent = project.goal;
@@ -110,7 +115,78 @@ function render() {
   if ($('task-dialog').open && selectedTask) renderTask(selectedTask);
   if (focusedProject) document.querySelector(`[data-project-id="${focusedProject}"]`)?.focus({ preventScroll: true });
   if (focusedTask) document.querySelector(`[data-task-id="${focusedTask}"]`)?.focus({ preventScroll: true });
+  if (activeId && document.getElementById(activeId)) document.getElementById(activeId).focus({ preventScroll: true });
 }
+
+function badge(tool) {
+  const wrap = element('div', undefined, 'tool-badge');
+  wrap.append(element('span', tool.name || tool.id, 'tool-name'));
+  if (tool.primary) wrap.append(element('span', 'primary', 'tool-tag'));
+  return wrap;
+}
+
+async function loadContext(id, force = false) {
+  if (contextCache[id] && !force) return;
+  try {
+    const result = await api(`/projects/${id}/context`);
+    contextCache[id] = result;
+    if (selected === id) renderContext(result);
+  } catch (error) { if (selected === id) { $('agent-tool').replaceChildren(element('p', error.message, 'muted')); } }
+}
+
+function renderContext({ tooling, github }) {
+  const toolBox = $('agent-tool');
+  toolBox.replaceChildren();
+  if (tooling.primary) toolBox.append(badge({ ...tooling.primary, primary: true }));
+  else toolBox.append(element('p', 'No coding agent detected in this project yet.', 'muted'));
+  for (const tool of tooling.tools || []) if (!tooling.primary || tool.id !== tooling.primary.id) toolBox.append(badge(tool));
+  const installedList = $('installed-agents');
+  installedList.replaceChildren();
+  const installed = tooling.installed || [];
+  for (const tool of installed) {
+    const name = tooling.tools.find(candidate => candidate.id === tool.id)?.name || tool.id;
+    installedList.append(element('li', `${name}${tool.inProject ? ' · in this project' : ''}`));
+  }
+  if (!installed.length) installedList.append(element('li', 'No agents detected on this machine.', 'muted'));
+
+  const box = $('github-context');
+  box.replaceChildren();
+  if (github.available) {
+    const link = element('a', github.url);
+    link.href = github.url;
+    link.target = '_blank';
+    link.rel = 'noreferrer noopener';
+    box.append(link);
+    if (github.description) box.append(element('p', github.description, 'muted'));
+    box.append(element('p', `Default branch ${github.defaultBranch} · ${github.stars} stars · ${github.authenticated ? 'authenticated' : 'public (unauthenticated)'}`, 'caption'));
+    if (github.openPulls?.length) box.append(element('p', `Open PRs: ${github.openPulls.map(pr => `#${pr.number} ${pr.title}`).join('; ')}`, 'muted'));
+    if (github.openIssues?.length) box.append(element('p', `Open issues: ${github.openIssues.map(issue => `#${issue.number} ${issue.title}`).join('; ')}`, 'muted'));
+    if (github.recentCommits?.length) {
+      const list = element('ul', undefined, 'plain-list');
+      for (const commit of github.recentCommits) list.append(element('li', `${commit.sha} ${commit.message}`));
+      box.append(list);
+    }
+  } else {
+    box.append(element('p', `No GitHub context: ${github.reason || 'unavailable'}.`, 'muted'));
+  }
+}
+
+async function loadPrompt(id, force = false) {
+  if (promptText && !force) return;
+  try {
+    const result = await api(`/projects/${id}/prompt`);
+    promptText = result.prompt;
+    $('generated-prompt').textContent = promptText;
+  } catch (error) { $('generated-prompt').textContent = `Could not generate prompt: ${error.message}`; }
+}
+
+$('copy-prompt').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(promptText);
+    notice('Prompt copied to clipboard.');
+  } catch { notice('Could not copy. Select the prompt text and copy manually.'); }
+});
+$('regen-prompt').addEventListener('click', () => { if (selected) { promptText = ''; loadPrompt(selected, true); } });
 function openForm(project = null) {
   editing = project?.id || null;
   $('project-form').reset();

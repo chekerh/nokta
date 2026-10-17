@@ -23,7 +23,16 @@
     <section id="project-view" hidden>
       <div class="project-heading"><div><p id="project-path" class="path"></p><h1 id="project-name"></h1><p id="project-goal" class="project-goal"></p></div><button id="edit-project" class="button secondary">Configure</button></div>
       <div class="control-bar"><div class="actions"><button id="analyze" class="button secondary">Analyze needs</button><button id="start" class="button primary">Start autopilot</button><button id="pause" class="button secondary" disabled>Pause</button></div><span id="project-state" class="state"></span></div>
-      <p id="project-message" class="muted" role="status"></p>
+      <div id="project-message" class="muted" role="status"></div>
+      <section class="agent-context" aria-label="Agent and GitHub context">
+        <div class="context-col"><h2>Building with</h2><div id="agent-tool" class="tool-badge-wrap"><p class="muted">Detecting agent…</p></div><h3>Installed agents</h3><ul id="installed-agents" class="plain-list"><li class="muted">Checking…</li></ul></div>
+        <div class="context-col"><h2>GitHub</h2><div id="github-context"><p class="muted">Loading repository context…</p></div></div>
+      </section>
+      <section class="prompt-panel" aria-label="Generated agent prompt">
+        <div class="prompt-head"><h2>Paste-ready prompt</h2><div class="prompt-actions"><button id="regen-prompt" class="button secondary" type="button">Regenerate</button><button id="copy-prompt" class="button secondary" type="button">Copy prompt</button></div></div>
+        <p class="caption">Nokta assembled this from the app, its GitHub activity, and the plan. Paste it into the detected tool to hand off the work.</p>
+        <pre id="generated-prompt" tabindex="0">Generating…</pre>
+      </section>
       <div class="run-summary"><span id="model-summary"></span><span id="budget-summary"></span></div>
       <div class="board-heading"><h2>Project board</h2><span id="task-summary" class="muted"></span></div>
       <p id="board-empty" class="empty-hint" hidden>No tasks yet. Analyze needs to build a plan, or start autopilot to analyze and run it.</p>

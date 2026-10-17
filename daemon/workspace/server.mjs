@@ -2,6 +2,9 @@ import express from 'express';
 import helmet from 'helmet';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inspectProjectTooling } from '../lib/tool-detector.mjs';
+import { collectGitHubContext } from '../lib/github-context.mjs';
+import { buildAgentPrompt } from '../lib/prompt-builder.mjs';
 
 export function localOnly(req, res, next) {
   const address = req.socket.remoteAddress;
@@ -36,6 +39,18 @@ export function createWorkspaceApp(service) {
   app.post('/api/workspace/projects/:id/tasks/:taskId/retry', async (req, res) => {
     await service.retry(req.params.id, req.params.taskId);
     res.json({ accepted: true });
+  });
+  // Agent + GitHub context and the paste-ready prompt for one project. The
+  // service keeps projects in memory (via get), so this reads live state.
+  app.get('/api/workspace/projects/:id/context', async (req, res) => {
+    const project = service.get(req.params.id);
+    const [tooling, github] = await Promise.all([inspectProjectTooling(project.rootPath), collectGitHubContext(project.rootPath)]);
+    res.json({ tooling, github });
+  });
+  app.get('/api/workspace/projects/:id/prompt', async (req, res) => {
+    const project = service.get(req.params.id);
+    const [tooling, github] = await Promise.all([inspectProjectTooling(project.rootPath), collectGitHubContext(project.rootPath)]);
+    res.json({ prompt: buildAgentPrompt({ project, tooling, github }) });
   });
   const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
   app.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'workspace.html')));
