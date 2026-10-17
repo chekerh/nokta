@@ -38,3 +38,31 @@ test('HTTP project flow and multi-port fallback share state', async t => {
   assert.equal(service.get(project.id).analysis, 'No further work');
   assert.equal((await fetch(`${base}/api/workspace/projects/unknown/start`, { method: 'POST', headers })).status, 404);
 });
+
+test('context and prompt routes report agent, GitHub state, and a paste-ready prompt', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-http-ctx-'));
+  const repo = path.join(dir, 'repo');
+  await fs.mkdir(path.join(repo, '.claude'), { recursive: true });
+  await fs.writeFile(path.join(repo, 'CLAUDE.md'), '# conventions');
+  const service = new WorkspaceService({ dataDir: dir, skills: { select: async () => [] }, runner: { run: async () => ({ summary: 'No further work', tasks: [] }) } });
+  await service.load();
+  const app = createWorkspaceApp(service);
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await service.close(); await fs.rm(dir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const headers = { 'X-Nokta-Workspace': '1', 'Content-Type': 'application/json' };
+  const created = await fetch(`${base}/api/workspace/projects`, { method: 'POST', headers, body: JSON.stringify({ name: 'Ctx project', rootPath: repo, goal: 'Surface the agent and repo state.', executionModel: 'author', verificationModel: 'reviewer', checks: [['npm', 'test']] }) }).then(res => res.json());
+
+  const context = await fetch(`${base}/api/workspace/projects/${created.id}/context`, { headers }).then(res => res.json());
+  assert.equal(context.tooling.primary.id, 'claude-code', 'the detected agent must be reported');
+  assert.ok(context.github, 'github context must be present even when unavailable');
+
+  const { prompt } = await fetch(`${base}/api/workspace/projects/${created.id}/prompt`, { headers }).then(res => res.json());
+  assert.match(prompt, /You are Claude Code/, 'the prompt must address the detected agent');
+  assert.match(prompt, /Surface the agent and repo state/, 'the prompt must carry the project goal');
+  assert.match(prompt, /npm test/, 'the prompt must carry the configured checks');
+
+  const missing = await fetch(`${base}/api/workspace/projects/nope/prompt`, { headers });
+  assert.equal(missing.status, 404);
+});
