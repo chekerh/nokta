@@ -2,8 +2,9 @@ import express from 'express';
 import helmet from 'helmet';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inspectProjectTooling } from '../lib/tool-detector.mjs';
+import { inspectProjectTooling, detectProjectTools } from '../lib/tool-detector.mjs';
 import { collectGitHubContext } from '../lib/github-context.mjs';
+import { discoverApps } from '../lib/app-discovery.mjs';
 import { buildAgentPrompt } from '../lib/prompt-builder.mjs';
 
 export function localOnly(req, res, next) {
@@ -15,7 +16,7 @@ export function localOnly(req, res, next) {
   next();
 }
 
-export function createWorkspaceApp(service, { inspectTooling = inspectProjectTooling, collectGitHub = collectGitHubContext } = {}) {
+export function createWorkspaceApp(service, { inspectTooling = inspectProjectTooling, collectGitHub = collectGitHubContext, discover = discoverApps } = {}) {
   const app = express();
   app.use(helmet({ contentSecurityPolicy: { directives: { 'script-src': ["'self'"], 'style-src': ["'self'"], 'connect-src': ["'self'"], 'upgrade-insecure-requests': null } } }));
   app.use(localOnly);
@@ -27,6 +28,19 @@ export function createWorkspaceApp(service, { inspectTooling = inspectProjectToo
     let skillsError = null;
     try { skills = await service.skills.inventory(); } catch (error) { skillsError = error.message; }
     res.json({ runners: [await service.runner.available()], skillsRoot: service.skills.root, skillsCount: skills.length, skillsError });
+  });
+  // Scan the configured roots (home by default) for folders that look like
+  // apps, so a project can be added without hand-typing its path. Read-only:
+  // the answer marks which candidates are already registered.
+  app.get('/api/workspace/discover', async (_req, res) => {
+    const { roots, candidates } = await discover();
+    const registered = new Set(service.snapshot().projects.map(project => project.rootPath));
+    const apps = [];
+    for (const candidate of candidates) {
+      const { primary } = await detectProjectTools(candidate.path);
+      apps.push({ ...candidate, agent: primary ? primary.name : null, added: registered.has(candidate.path) });
+    }
+    res.json({ roots, candidates: apps });
   });
   app.post('/api/workspace/projects', async (req, res) => res.status(201).json(await service.add(req.body)));
   app.patch('/api/workspace/projects/:id', async (req, res) => res.json(await service.update(req.params.id, req.body)));

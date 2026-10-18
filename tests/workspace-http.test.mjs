@@ -106,3 +106,39 @@ test('concurrent context and prompt requests share one inspection', async t => {
   assert.equal(toolingCalls, 1, 'settled inspections are reused inside the TTL window');
   assert.equal(githubCalls, 1, 'settled inspections are reused inside the TTL window');
 });
+
+test('discovery lists app candidates with their agent and added state', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-http-discover-'));
+  await fs.mkdir(path.join(dir, 'repo'));
+  await fs.mkdir(path.join(dir, 'other-app'));
+  // The service stores realpath'd roots; the discovery answer must match.
+  const repo = await fs.realpath(path.join(dir, 'repo'));
+  const other = await fs.realpath(path.join(dir, 'other-app'));
+  await fs.writeFile(path.join(repo, 'package.json'), '{}');
+  await fs.writeFile(path.join(other, '.cursorrules'), 'conventions\n');
+  const service = new WorkspaceService({ dataDir: dir, skills: { select: async () => [] }, runner: { run: async () => ({ summary: 'No further work', tasks: [] }) } });
+  await service.load();
+  await service.add({ name: 'Existing app', rootPath: repo, goal: 'Ship it.', executionModel: 'author', verificationModel: 'reviewer', checks: [] });
+  const app = createWorkspaceApp(service, {
+    discover: async () => ({ roots: ['/scan-root'], candidates: [
+      { path: repo, name: 'repo', hasGit: false, manifests: ['package.json'] },
+      { path: other, name: 'other-app', hasGit: false, manifests: [] },
+    ] }),
+  });
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await service.close(); await fs.rm(dir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const headers = { 'X-Nokta-Workspace': '1' };
+
+  const response = await fetch(`${base}/api/workspace/discover`, { headers });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.roots, ['/scan-root']);
+  const existing = body.candidates.find(candidate => candidate.path === repo);
+  assert.equal(existing.added, true, 'a registered folder is marked as already added');
+  assert.equal(existing.agent, null, 'a bare manifest identifies no coding agent');
+  const fresh = body.candidates.find(candidate => candidate.path === other);
+  assert.equal(fresh.added, false);
+  assert.equal(fresh.agent, 'Cursor', 'the detected agent is reported per candidate');
+});

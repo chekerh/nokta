@@ -333,13 +333,52 @@ function invalidateContext(id) {
   failures.delete(`pr:${id}`);
 }
 
+// Discovery: scan the configured roots for app folders, then pre-fill the
+// project form from a candidate so a repository never has to be typed by hand.
+$('detect-apps').addEventListener('click', async () => {
+  if ($('discover-dialog').open) return;
+  $('discover-dialog').showModal();
+  $('discover-roots').textContent = '';
+  const list = $('discover-list');
+  list.replaceChildren(element('li', 'Scanning for apps…', 'muted'));
+  try {
+    const { roots, candidates } = await api('/discover');
+    $('discover-roots').textContent = `Scanned ${roots.join(', ')}`;
+    list.replaceChildren();
+    if (!candidates.length) { list.append(element('li', 'No apps found. Add a project manually, or point NOKTA_DISCOVERY_ROOTS at your code folders.', 'muted')); return; }
+    for (const candidate of candidates) list.append(candidateRow(candidate));
+  } catch (error) {
+    list.replaceChildren(element('li', `Could not scan: ${error.message}`, 'muted'));
+  }
+});
+
+function candidateRow(candidate) {
+  const row = element('li', undefined, 'discover-item');
+  const meta = element('div');
+  meta.append(element('strong', candidate.name));
+  meta.append(element('p', candidate.path, 'path'));
+  const evidence = [candidate.hasGit ? 'git' : null, ...candidate.manifests, candidate.agent].filter(Boolean);
+  if (evidence.length) meta.append(element('p', evidence.join(' · '), 'caption'));
+  row.append(meta);
+  if (candidate.added) row.append(element('span', 'Already added', 'local-tag'));
+  else {
+    const button = element('button', 'Add', 'button secondary');
+    button.addEventListener('click', () => { $('discover-dialog').close(); openForm({ name: candidate.name, rootPath: candidate.path }); });
+    row.append(button);
+  }
+  return row;
+}
+
 function openForm(project = null) {
+  // A discovery candidate has no id: it pre-fills a new project rather than
+  // editing an existing one.
+  const existing = Boolean(project?.id);
   editing = project?.id || null;
   $('project-form').reset();
-  $('form-title').textContent = project ? 'Configure project' : 'Add a project';
+  $('form-title').textContent = existing ? 'Configure project' : 'Add a project';
   for (const name of ['name', 'rootPath', 'goal', 'executionModel', 'verificationModel']) $(name).value = project?.[name] || '';
-  $('name').disabled = Boolean(project);
-  $('rootPath').disabled = Boolean(project);
+  $('name').disabled = existing;
+  $('rootPath').disabled = existing;
   $('checks').value = JSON.stringify(project?.checks || [], null, 2);
   $('taskLimit').value = String(project?.taskLimit || 3);
   $('form-error').textContent = '';

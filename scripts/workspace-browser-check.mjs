@@ -105,6 +105,19 @@ try {
   await page.locator('#agent-tool', { hasText: 'Cursor' }).waitFor();
   await page.locator('#generated-prompt', { hasText: 'Second goal for panel keying.' }).waitFor();
   assert.equal(await page.locator('#copy-prompt').isEnabled(), true, 'copy re-enabled for the selected project prompt');
+  // Discovery: a folder scanned from the configured roots can pre-fill the form.
+  const discoveryRoot = path.join(directory, 'discovery-app');
+  await fs.mkdir(path.join(discoveryRoot, '.git'), { recursive: true });
+  await fs.writeFile(path.join(discoveryRoot, 'package.json'), '{}\n');
+  process.env.NOKTA_DISCOVERY_ROOTS = directory;
+  await page.getByRole('button', { name: 'Detect apps' }).click();
+  const candidate = page.locator('.discover-item', { hasText: 'discovery-app' });
+  await candidate.waitFor();
+  await candidate.getByRole('button', { name: 'Add' }).click();
+  await page.getByLabel('Repository folder').waitFor();
+  assert.equal(await page.getByLabel('Repository folder').inputValue(), await fs.realpath(discoveryRoot), 'the discovered folder pre-fills the project form');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.locator('#project-dialog').waitFor({ state: 'hidden' });
   await page.setViewportSize({ width: 375, height: 812 });
   await page.screenshot({ path: '/tmp/nokta-workspace-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth), true, 'No document overflow on mobile');
@@ -112,7 +125,7 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#project-dialog').evaluate(dialog => dialog.open), false);
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: onboarding, invalid models, analysis, Kanban progression, test evidence, review evidence, reload persistence, agent/prompt panels, per-project prompt keying, mobile width, Escape, no page errors.');
+  console.log('Browser checks passed: onboarding, invalid models, analysis, Kanban progression, test evidence, review evidence, reload persistence, agent/prompt panels, per-project prompt keying, app discovery, mobile width, Escape, no page errors.');
   console.log('Screenshots: /tmp/nokta-workspace-desktop.png and /tmp/nokta-workspace-mobile.png');
 } finally {
   await browser?.close();

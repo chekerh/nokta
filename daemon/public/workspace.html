@@ -13,7 +13,7 @@
 <div class="shell">
   <aside class="sidebar" aria-label="Projects">
     <div class="sidebar-heading"><h2>Your projects</h2><span id="project-count">0</span></div>
-    <button class="button primary full" id="add-project">+ Add project</button>
+    <div class="sidebar-actions"><button class="button primary full" id="add-project">+ Add project</button><button class="button secondary full" id="detect-apps">Detect apps</button></div>
     <nav id="project-list" aria-label="Select a project"><p class="muted">Loading projects…</p></nav>
     <div class="sidebar-bottom"><h3>Local toolkit</h3><p id="tools-status" class="muted">Checking Codex and skills…</p><p class="caption">One active task at a time. Nokta rotates between projects after each task.</p></div>
   </aside>
@@ -60,5 +60,12 @@
   </form>
 </dialog>
 <dialog id="task-dialog"><div class="dialog-heading"><h2 id="task-title"></h2><button class="icon-button" data-close="task-dialog" aria-label="Close task details">×</button></div><div id="task-content"></div></dialog>
+<dialog id="discover-dialog">
+  <div class="dialog-heading"><h2>Detected apps</h2><button type="button" class="icon-button" data-close="discover-dialog" aria-label="Close detected apps">×</button></div>
+  <p class="muted">Folders in your scan roots that look like apps — a repository or a build manifest. Pick one to pre-fill the project form.</p>
+  <p id="discover-roots" class="caption"></p>
+  <ul id="discover-list" class="plain-list"><li class="muted">Scanning for apps…</li></ul>
+  <div class="dialog-actions"><button type="button" class="button secondary" data-close="discover-dialog">Close</button></div>
+</dialog>
 </body>
 </html>
