@@ -120,9 +120,10 @@ test('discovery lists app candidates with their agent and added state', async t 
   await service.load();
   await service.add({ name: 'Existing app', rootPath: repo, goal: 'Ship it.', executionModel: 'author', verificationModel: 'reviewer', checks: [] });
   const app = createWorkspaceApp(service, {
-    discover: async () => ({ roots: ['/scan-root'], candidates: [
+    discover: async () => ({ roots: ['/scan-root'], scanned: 2, truncated: false, candidates: [
       { path: repo, name: 'repo', hasGit: false, manifests: ['package.json'] },
       { path: other, name: 'other-app', hasGit: false, manifests: [] },
+      { path: path.join(repo, 'packages'), name: 'packages', hasGit: false, manifests: [] },
     ] }),
   });
   const server = app.listen(0, '127.0.0.1');
@@ -131,14 +132,24 @@ test('discovery lists app candidates with their agent and added state', async t 
   const base = `http://127.0.0.1:${server.address().port}`;
   const headers = { 'X-Nokta-Workspace': '1' };
 
+  // The read-only scan keeps the same local-only guard as every other route.
+  assert.equal((await fetch(`${base}/api/workspace/discover`)).status, 403, 'the workspace header is required');
+  assert.equal((await fetch(`${base}/api/workspace/discover`, { headers: { ...headers, Origin: 'https://example.com' } })).status, 403, 'cross-origin scans are denied');
+
   const response = await fetch(`${base}/api/workspace/discover`, { headers });
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.deepEqual(body.roots, ['/scan-root']);
+  assert.equal(body.truncated, false);
   const existing = body.candidates.find(candidate => candidate.path === repo);
   assert.equal(existing.added, true, 'a registered folder is marked as already added');
+  assert.equal(existing.overlaps, null, 'an exact match is not also reported as an overlap');
   assert.equal(existing.agent, null, 'a bare manifest identifies no coding agent');
   const fresh = body.candidates.find(candidate => candidate.path === other);
   assert.equal(fresh.added, false);
+  assert.equal(fresh.overlaps, null);
   assert.equal(fresh.agent, 'Cursor', 'the detected agent is reported per candidate');
+  const nested = body.candidates.find(candidate => candidate.name === 'packages');
+  assert.equal(nested.added, false);
+  assert.equal(nested.overlaps, 'Existing app', 'a folder inside a registered project names the project it clashes with');
 });

@@ -29,6 +29,7 @@ test('finds app folders by repository or manifest evidence', async t => {
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const result = await discoverApps({ roots: [root] });
   assert.deepEqual(names(result), ['legacy', 'portal', 'rust-thing']);
+  assert.equal(result.truncated, false, 'a walk that finished is not partial');
   const portal = result.candidates.find(candidate => candidate.name === 'portal');
   assert.deepEqual(portal.manifests, ['package.json']);
   assert.equal(portal.hasGit, false);
@@ -67,6 +68,25 @@ test('never treats the scan root itself as a candidate', async t => {
   assert.deepEqual(names(result), ['dev/app']);
 });
 
+test('reports a configured root that is itself an app, and nested roots once', async t => {
+  const root = await fixture({ 'outer/inner/package.json': '{}', 'outer/inner/vendor/deep/package.json': '{}' });
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const outer = path.join(root, 'outer');
+  const inner = path.join(root, 'outer', 'inner');
+  const inside = result => result.candidates.map(candidate => candidate.path);
+
+  // A root the user pointed at is the app they asked for, and a matched root
+  // is not descended into any more than a matched folder is.
+  assert.deepEqual(inside(await discoverApps({ roots: [inner], includeRoots: true })), [inner]);
+  assert.deepEqual(inside(await discoverApps({ roots: [outer], includeRoots: true })), [inner]);
+  // Without includeRoots a root is only a place to search — the implicit home
+  // directory is frequently a dotfiles repository and must still be walked.
+  assert.deepEqual(inside(await discoverApps({ roots: [inner] })), []);
+  // Overlapping roots report the app once, in either order.
+  assert.deepEqual(inside(await discoverApps({ roots: [outer, inner], includeRoots: true })), [inner]);
+  assert.deepEqual(inside(await discoverApps({ roots: [inner, outer], includeRoots: true })), [inner]);
+});
+
 test('stops at the limit', async t => {
   const files = {};
   for (let index = 0; index < 6; index += 1) files[`app-${index}/package.json`] = '{}';
@@ -74,10 +94,49 @@ test('stops at the limit', async t => {
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const result = await discoverApps({ roots: [root], limit: 3 });
   assert.equal(result.candidates.length, 3);
+  assert.equal(result.truncated, true, 'a capped list must say it is partial');
+});
+
+test('stops early on the directory budget and reports how far it got', async t => {
+  const files = {};
+  for (let index = 0; index < 8; index += 1) files[`dir-${index}/package.json`] = '{}';
+  const root = await fixture(files);
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const result = await discoverApps({ roots: [root], maxDirs: 3 });
+  // The root plus two children fit in the budget; the other six are unseen.
+  assert.equal(result.scanned, 3);
+  assert.equal(result.candidates.length, 2);
+  assert.equal(result.truncated, true);
+});
+
+test('never follows a symlink, so a loop in the tree cannot trap the walk', async t => {
+  const root = await fixture({ 'app/package.json': '{}', 'plain/readme.md': '' });
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  try {
+    await fs.symlink(root, path.join(root, 'plain', 'loop'), 'dir');
+  } catch {
+    t.skip('symlinks unavailable');
+    return;
+  }
+  const result = await discoverApps({ roots: [root], maxDirs: 50 });
+  assert.deepEqual(names(result), ['app']);
+});
+
+test('skips a folder it cannot read instead of failing the scan', async t => {
+  const root = await fixture({ 'open/package.json': '{}', 'locked/package.json': '{}' });
+  const locked = path.join(root, 'locked');
+  t.after(async () => { await fs.chmod(locked, 0o700).catch(() => {}); await fs.rm(root, { recursive: true, force: true }); });
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    t.skip('root can read anything');
+    return;
+  }
+  await fs.chmod(locked, 0o000);
+  const result = await discoverApps({ roots: [root] });
+  assert.deepEqual(names(result), ['open']);
 });
 
 test('reads roots from the environment, splitting on commas', () => {
-  assert.deepEqual(defaultRoots({ NOKTA_DISCOVERY_ROOTS: '/one, /two ' }), ['/one', '/two']);
+  assert.deepEqual(defaultRoots({ NOKTA_APP_DISCOVERY_ROOTS: '/one, /two ' }), ['/one', '/two']);
   assert.deepEqual(defaultRoots({ HOME: '/home/me' }), ['/home/me']);
 });
 

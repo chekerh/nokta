@@ -60,8 +60,8 @@
   </form>
 </dialog>
 <dialog id="task-dialog"><div class="dialog-heading"><h2 id="task-title"></h2><button class="icon-button" data-close="task-dialog" aria-label="Close task details">×</button></div><div id="task-content"></div></dialog>
-<dialog id="discover-dialog">
-  <div class="dialog-heading"><h2>Detected apps</h2><button type="button" class="icon-button" data-close="discover-dialog" aria-label="Close detected apps">×</button></div>
+<dialog id="discover-dialog" aria-labelledby="discover-title">
+  <div class="dialog-heading"><h2 id="discover-title">Detected apps</h2><button type="button" class="icon-button" data-close="discover-dialog" aria-label="Close detected apps">×</button></div>
   <p class="muted">Folders in your scan roots that look like apps — a repository or a build manifest. Pick one to pre-fill the project form.</p>
   <p id="discover-roots" class="caption"></p>
   <ul id="discover-list" class="plain-list"><li class="muted">Scanning for apps…</li></ul>

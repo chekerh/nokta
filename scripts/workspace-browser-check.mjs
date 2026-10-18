@@ -109,7 +109,7 @@ try {
   const discoveryRoot = path.join(directory, 'discovery-app');
   await fs.mkdir(path.join(discoveryRoot, '.git'), { recursive: true });
   await fs.writeFile(path.join(discoveryRoot, 'package.json'), '{}\n');
-  process.env.NOKTA_DISCOVERY_ROOTS = directory;
+  process.env.NOKTA_APP_DISCOVERY_ROOTS = directory;
   await page.getByRole('button', { name: 'Detect apps' }).click();
   const candidate = page.locator('.discover-item', { hasText: 'discovery-app' });
   await candidate.waitFor();

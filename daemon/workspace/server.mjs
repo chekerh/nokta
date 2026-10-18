@@ -31,16 +31,26 @@ export function createWorkspaceApp(service, { inspectTooling = inspectProjectToo
   });
   // Scan the configured roots (home by default) for folders that look like
   // apps, so a project can be added without hand-typing its path. Read-only:
-  // the answer marks which candidates are already registered.
+  // the answer marks which candidates are already registered. A configured
+  // root may itself be an app; the implicit home directory may not, because
+  // it is often a dotfiles repository that still needs walking.
   app.get('/api/workspace/discover', async (_req, res) => {
-    const { roots, candidates } = await discover();
-    const registered = new Set(service.snapshot().projects.map(project => project.rootPath));
+    const { roots, candidates, scanned, truncated } = await discover({ includeRoots: Boolean(process.env.NOKTA_APP_DISCOVERY_ROOTS) });
+    const projects = service.snapshot().projects;
+    const overlaps = (one, other) => one === other || one.startsWith(other + path.sep) || other.startsWith(one + path.sep);
     const apps = [];
     for (const candidate of candidates) {
       const { primary } = await detectProjectTools(candidate.path);
-      apps.push({ ...candidate, agent: primary ? primary.name : null, added: registered.has(candidate.path) });
+      const exact = projects.find(project => project.rootPath === candidate.path);
+      const nested = exact ? null : projects.find(project => overlaps(project.rootPath, candidate.path));
+      apps.push({
+        ...candidate,
+        agent: primary ? primary.name : null,
+        added: Boolean(exact),
+        overlaps: nested ? nested.name : null,
+      });
     }
-    res.json({ roots, candidates: apps });
+    res.json({ roots, candidates: apps, scanned, truncated });
   });
   app.post('/api/workspace/projects', async (req, res) => res.status(201).json(await service.add(req.body)));
   app.patch('/api/workspace/projects/:id', async (req, res) => res.json(await service.update(req.params.id, req.body)));

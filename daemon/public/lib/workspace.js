@@ -335,19 +335,27 @@ function invalidateContext(id) {
 
 // Discovery: scan the configured roots for app folders, then pre-fill the
 // project form from a candidate so a repository never has to be typed by hand.
+let scanToken = 0;
 $('detect-apps').addEventListener('click', async () => {
   if ($('discover-dialog').open) return;
+  const token = (scanToken += 1);
   $('discover-dialog').showModal();
   $('discover-roots').textContent = '';
   const list = $('discover-list');
   list.replaceChildren(element('li', 'Scanning for apps…', 'muted'));
   try {
-    const { roots, candidates } = await api('/discover');
-    $('discover-roots').textContent = `Scanned ${roots.join(', ')}`;
+    const { roots, candidates, scanned, truncated } = await api('/discover');
+    // Closing and reopening the dialog starts a second scan; a slow first
+    // answer must not paint over the newer one.
+    if (token !== scanToken) return;
+    $('discover-roots').textContent = truncated
+      ? `Stopped after ${scanned} folders under ${roots.join(', ')} — narrow NOKTA_APP_DISCOVERY_ROOTS for a complete scan.`
+      : `Scanned ${roots.join(', ')}`;
     list.replaceChildren();
-    if (!candidates.length) { list.append(element('li', 'No apps found. Add a project manually, or point NOKTA_DISCOVERY_ROOTS at your code folders.', 'muted')); return; }
+    if (!candidates.length) { list.append(element('li', 'No apps found. Add a project manually, or point NOKTA_APP_DISCOVERY_ROOTS at your code folders.', 'muted')); return; }
     for (const candidate of candidates) list.append(candidateRow(candidate));
   } catch (error) {
+    if (token !== scanToken) return;
     list.replaceChildren(element('li', `Could not scan: ${error.message}`, 'muted'));
   }
 });
@@ -357,10 +365,13 @@ function candidateRow(candidate) {
   const meta = element('div');
   meta.append(element('strong', candidate.name));
   meta.append(element('p', candidate.path, 'path'));
-  const evidence = [candidate.hasGit ? 'git' : null, ...candidate.manifests, candidate.agent].filter(Boolean);
+  const evidence = [candidate.hasGit ? 'git' : null, ...(candidate.manifests || []), candidate.agent].filter(Boolean);
   if (evidence.length) meta.append(element('p', evidence.join(' · '), 'caption'));
   row.append(meta);
-  if (candidate.added) row.append(element('span', 'Already added', 'local-tag'));
+  // A project that contains (or sits inside) this folder would be rejected by
+  // the service, so the row says why instead of offering a doomed Add.
+  if (candidate.added) row.append(element('span', 'Already added', 'discover-state'));
+  else if (candidate.overlaps) row.append(element('span', `Overlaps ${candidate.overlaps}`, 'discover-state'));
   else {
     const button = element('button', 'Add', 'button secondary');
     button.addEventListener('click', () => { $('discover-dialog').close(); openForm({ name: candidate.name, rootPath: candidate.path }); });

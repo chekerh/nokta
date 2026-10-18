@@ -24,22 +24,39 @@ export const MANIFEST_FILES = new Set([
   'mix.exs',
 ]);
 
-// Home-scale folders that never hold a source project but would slow a scan
-// of the whole home directory down. IGNORE_DIRS covers the build and
-// dependency folders shared by every root.
+// Home-scale folders that never hold a source project but would slow a scan of
+// a whole home directory down. IGNORE_DIRS covers the build and dependency
+// folders shared by every root; these are only relevant when a root is a whole
+// user directory, and roots are meant to be folders that hold code.
 const NEVER_PROJECTS = new Set(['Library', 'Applications', 'Music', 'Movies', 'Pictures', 'Photos', 'Public', 'Volumes']);
 
 // Roots are comma-separated so a machine can opt into scanning only the
 // folders that hold code; without configuration the home directory is scanned.
 export function defaultRoots(env = process.env) {
-  const configured = String(env.NOKTA_DISCOVERY_ROOTS || '').split(',').map(part => part.trim()).filter(Boolean);
+  const configured = String(env.NOKTA_APP_DISCOVERY_ROOTS || '').split(',').map(part => part.trim()).filter(Boolean);
   return configured.length ? configured : [env.HOME || env.USERPROFILE || os.homedir()];
+}
+
+function budget(value, fallback, max) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, max) : fallback;
 }
 
 // Breadth-first so a shallow app is always found before the depth budget runs
 // out. A folder that is itself a project is not descended into: a monorepo's
 // packages are parts of one app, not separate projects.
-export async function discoverApps({ roots = defaultRoots(), maxDepth = Number(process.env.NOKTA_DISCOVERY_DEPTH) || 2, limit = Number(process.env.NOKTA_DISCOVERY_LIMIT) || 50, maxDirs = 4000 } = {}) {
+//
+// `includeRoots` decides whether a root that is itself an app can be reported.
+// It is on for roots the user configured (pointing at one project is the
+// documented way to narrow a scan) and off for the implicit home directory,
+// which is frequently a dotfiles repository and must still be walked.
+export async function discoverApps({
+  roots = defaultRoots(),
+  includeRoots = false,
+  maxDepth = budget(process.env.NOKTA_APP_DISCOVERY_DEPTH, 2, 6),
+  limit = budget(process.env.NOKTA_APP_DISCOVERY_LIMIT, 50, 200),
+  maxDirs = budget(process.env.NOKTA_APP_DISCOVERY_MAX_DIRS, 4000, 20000),
+} = {}) {
   // Resolve symlinks the same way the service does when it stores a project,
   // so a discovered path can be compared directly with a registered one.
   const resolved = [];
@@ -56,9 +73,10 @@ export async function discoverApps({ roots = defaultRoots(), maxDepth = Number(p
     scanned += 1;
     const entries = await readEntries(dir);
     if (!entries) continue;
+    const hasGit = entries.some(entry => entry.name === '.git');
     const manifests = entries.filter(entry => MANIFEST_FILES.has(entry.name)).map(entry => entry.name).sort();
-    if (depth > 0 && (manifests.length || entries.some(entry => entry.name === '.git'))) {
-      candidates.push({ path: dir, name: path.basename(dir), hasGit: entries.some(entry => entry.name === '.git'), manifests });
+    if ((depth > 0 || includeRoots) && (manifests.length || hasGit)) {
+      candidates.push({ path: dir, name: path.basename(dir), hasGit, manifests });
       continue;
     }
     if (depth >= maxDepth) continue;
@@ -71,7 +89,9 @@ export async function discoverApps({ roots = defaultRoots(), maxDepth = Number(p
   }
 
   candidates.sort((a, b) => a.path.localeCompare(b.path));
-  return { roots: resolved, candidates };
+  // A non-empty queue means the walk stopped early — a partial answer must say
+  // so rather than read as "this is everything on the machine".
+  return { roots: resolved, candidates, scanned, truncated: queue.length > 0 };
 }
 
 async function readEntries(dir) {
