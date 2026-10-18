@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { defaultRoots, discoverApps, MANIFEST_FILES } from '../daemon/lib/app-discovery.mjs';
+import { defaultRoots, discoverApps, scanRoots, MANIFEST_FILES } from '../daemon/lib/app-discovery.mjs';
 
 async function fixture(files) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-discovery-')));
@@ -143,6 +143,14 @@ test('skips a folder it cannot read instead of failing the scan', async t => {
 test('reads roots from the environment, splitting on commas', () => {
   assert.deepEqual(defaultRoots({ NOKTA_APP_DISCOVERY_ROOTS: '/one, /two ' }), ['/one', '/two']);
   assert.deepEqual(defaultRoots({ HOME: '/home/me' }), ['/home/me']);
+});
+
+test('a configured root may be an app itself; the implicit home may not', () => {
+  // The env-to-includeRoots mapping is the whole dotfiles safety story, so it
+  // is asserted directly rather than only through the walk.
+  assert.deepEqual(scanRoots({ NOKTA_APP_DISCOVERY_ROOTS: '/code', HOME: '/home/me' }), { roots: ['/code'], includeRoots: true });
+  assert.deepEqual(scanRoots({ HOME: '/home/me' }), { roots: ['/home/me'], includeRoots: false });
+  assert.deepEqual(scanRoots({ NOKTA_APP_DISCOVERY_ROOTS: ' , ', HOME: '/home/me' }), { roots: ['/home/me'], includeRoots: false });
 });
 
 test('resolves a symlinked root so its paths match a stored project root', async t => {

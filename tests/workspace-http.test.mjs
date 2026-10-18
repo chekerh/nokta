@@ -120,10 +120,11 @@ test('discovery lists app candidates with their agent and added state', async t 
   await service.load();
   await service.add({ name: 'Existing app', rootPath: repo, goal: 'Ship it.', executionModel: 'author', verificationModel: 'reviewer', checks: [] });
   const app = createWorkspaceApp(service, {
-    discover: async () => ({ roots: ['/scan-root'], scanned: 2, truncated: false, candidates: [
+    discover: async () => ({ roots: ['/scan-root'], scanned: 3, truncated: false, candidates: [
       { path: repo, name: 'repo', hasGit: false, manifests: ['package.json'] },
       { path: other, name: 'other-app', hasGit: false, manifests: [] },
       { path: path.join(repo, 'packages'), name: 'packages', hasGit: false, manifests: [] },
+      { path: path.dirname(repo), name: 'workspace-dir', hasGit: false, manifests: [] },
     ] }),
   });
   const server = app.listen(0, '127.0.0.1');
@@ -152,4 +153,7 @@ test('discovery lists app candidates with their agent and added state', async t 
   const nested = body.candidates.find(candidate => candidate.name === 'packages');
   assert.equal(nested.added, false);
   assert.equal(nested.overlaps, 'Existing app', 'a folder inside a registered project names the project it clashes with');
+  const container = body.candidates.find(candidate => candidate.name === 'workspace-dir');
+  assert.equal(container.added, false);
+  assert.equal(container.overlaps, 'Existing app', 'a folder containing a registered project is an overlap too');
 });
