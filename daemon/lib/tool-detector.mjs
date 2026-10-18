@@ -158,7 +158,6 @@ export async function detectProjectTools(rootPath) {
         matched.push({ kind: 'file', value: file, at: stat.mtime.toISOString() });
         score += SCORE_FILE;
         if (!lastUsedAt || stat.mtime > lastUsedAt) lastUsedAt = stat.mtime;
-        if (file === tool.instructionFile) instructionFiles.push(file);
       }
     }
 

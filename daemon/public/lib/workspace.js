@@ -131,8 +131,16 @@ const contextCache = new Map();
 const promptCache = new Map();
 const inFlight = new Set();
 const failures = new Map();
+const generations = new Map();
 const shown = { context: null, prompt: null };
 const RETRY_MS = 60000;
+
+// The prompt caches the task list it was built from; when the list moves on
+// (an autopilot cycle finishing, a repair landing) the cached prompt is stale
+// and must be rebuilt even though nobody invalidated it explicitly.
+function projectFingerprint(project) {
+  return project ? `${project.status}:${project.tasks.length}:${project.tasks.filter(task => task.status === 'done').length}` : '';
+}
 
 function panelsBusy(message) {
   $('agent-tool').replaceChildren(element('p', message, 'muted'));
@@ -144,6 +152,13 @@ function panelError(message) {
   $('agent-tool').replaceChildren(element('p', message, 'muted'));
   $('installed-agents').replaceChildren(element('li', 'Unavailable while the context fails to load.', 'muted'));
   $('github-context').replaceChildren(element('p', message, 'muted'));
+}
+
+function promptBusy(id) {
+  shown.prompt = id;
+  promptText = '';
+  $('copy-prompt').disabled = true;
+  $('generated-prompt').textContent = 'Generating prompt…';
 }
 
 function promptError(id, message) {
@@ -159,7 +174,13 @@ async function loadContext(id) {
     if (shown.context !== id) renderContext(id, contextCache.get(id));
     return;
   }
-  if (inFlight.has(key)) return;
+  // The user switched away and back while this project's request is still in
+  // flight: the panels currently show another project, so re-assert this
+  // project's busy state instead of leaving the mismatch on screen.
+  if (inFlight.has(key)) {
+    if (shown.context !== id) { shown.context = id; panelsBusy('Loading agent and GitHub context…'); }
+    return;
+  }
   // A recent failure stays visible (and is not retried on every 3s poll) until
   // it expires; if the user switches back to the failed project, show its error
   // rather than leaving the previous project's panels on screen.
@@ -169,10 +190,13 @@ async function loadContext(id) {
     return;
   }
   inFlight.add(key);
-  if (shown.context !== id) panelsBusy('Loading agent and GitHub context…');
+  // The marker must move with the DOM write, or a later cache hit for another
+  // project sees "already shown" and skips its re-render (stuck busy panels).
+  if (shown.context !== id) { shown.context = id; panelsBusy('Loading agent and GitHub context…'); }
+  const generation = generations.get(id) || 0;
   try {
     const result = await api(`/projects/${id}/context`);
-    contextCache.set(id, result);
+    if ((generations.get(id) || 0) === generation) contextCache.set(id, result);
     failures.delete(key);
     if (selected === id) renderContext(id, result);
   } catch (error) {
@@ -231,24 +255,28 @@ function renderContext(id, { tooling, github }) {
 async function loadPrompt(id) {
   const key = `pr:${id}`;
   if (promptCache.has(id)) {
-    if (shown.prompt !== id) renderPrompt(id, promptCache.get(id));
-    return;
+    const entry = promptCache.get(id);
+    if (entry.fingerprint === projectFingerprint(current())) {
+      if (shown.prompt !== id) renderPrompt(id, entry.text);
+      return;
+    }
+    promptCache.delete(id); // the task list moved on; this prompt is stale
   }
-  if (inFlight.has(key)) return;
+  // Switched away and back mid-flight: never leave another project's prompt
+  // visible (and copyable) under this project — re-assert the busy state.
+  if (inFlight.has(key)) { promptBusy(id); return; }
   const failure = failures.get(key);
   if (failure && Date.now() - failure.at < RETRY_MS) {
     if (shown.prompt !== id) promptError(id, `Could not generate prompt: ${failure.message}`);
     return;
   }
   inFlight.add(key);
-  // Never leave a previous project's prompt (or a copyable stale one) visible
-  // while this project's prompt is still being generated.
-  promptText = '';
-  $('copy-prompt').disabled = true;
-  if (shown.prompt !== id) { shown.prompt = id; $('generated-prompt').textContent = 'Generating prompt…'; }
+  const fingerprint = projectFingerprint(current());
+  const generation = generations.get(id) || 0;
+  promptBusy(id);
   try {
     const result = await api(`/projects/${id}/prompt`);
-    promptCache.set(id, result.prompt);
+    if ((generations.get(id) || 0) === generation) promptCache.set(id, { text: result.prompt, fingerprint });
     failures.delete(key);
     if (selected === id) renderPrompt(id, result.prompt);
   } catch (error) {
@@ -279,6 +307,9 @@ $('regen-prompt').addEventListener('click', () => {
   loadPrompt(selected);
 });
 function invalidateContext(id) {
+  // Bump the generation so an in-flight response started before this
+  // invalidation cannot resurrect the pre-invalidation cache entry.
+  generations.set(id, (generations.get(id) || 0) + 1);
   contextCache.delete(id);
   promptCache.delete(id);
   failures.delete(`ctx:${id}`);

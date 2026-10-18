@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parseRemoteUrl, fetchRepoContext, stripCredentials, collectGitHubContext } from '../daemon/lib/github-context.mjs';
+import { parseRemoteUrl, fetchRepoContext, stripCredentials, collectGitHubContext, resolveRepo } from '../daemon/lib/github-context.mjs';
 
 // parseRemoteUrl must recognize the origin forms git actually produces, or the
 // whole feature silently finds "no repo" for a perfectly normal clone.
@@ -101,6 +101,16 @@ test('a credential-bearing origin never leaks into the collected context', async
   const serialized = JSON.stringify(context);
   assert.ok(!serialized.includes('ghp_Zz9'), 'the remote credential must never appear in a payload');
   assert.ok(!('remoteUrl' in context), 'the raw remote URL is intentionally not part of the payload');
+});
+
+// git's exit codes map to distinct reasons: 128 means "no origin / not a repo"
+// (a normal state for a brand-new app), anything else is an unexpected failure.
+test('resolveRepo reports no-origin for a directory that is not a git repo', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-nogit-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const resolved = await resolveRepo(dir);
+  assert.equal(resolved.repo, null);
+  assert.equal(resolved.reason, 'no-origin');
 });
 
 // A failed sub-request must read as "could not find out", not "there are none".

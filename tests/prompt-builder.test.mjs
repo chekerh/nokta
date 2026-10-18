@@ -43,13 +43,21 @@ test('falls back to a generic address when no agent is detected', () => {
 });
 
 test('mentions the existing instruction file', () => {
-  assert.match(buildAgentPrompt(BASE), /CLAUDE\.md/);
+  const prompt = buildAgentPrompt(BASE);
+  assert.match(prompt, /CLAUDE\.md/);
+  assert.match(prompt, /\n\n## Guardrails/, 'a blank line separates the instruction-file note from the next heading');
 });
 
 test('quotes check commands so a pasted prompt runs the same argv Nokta runs', () => {
   const prompt = buildAgentPrompt({ ...BASE, project: { ...BASE.project, checks: [['sh', '-c', 'npm test && npm run lint'], ['node', 'scripts/a b.js']] } });
-  assert.match(prompt, /- sh -c "npm test && npm run lint"/, 'shell metacharacters must stay quoted inside one argument');
-  assert.match(prompt, /- node "scripts\/a b\.js"/, 'args with spaces must be quoted');
+  assert.match(prompt, /- sh -c 'npm test && npm run lint'/, 'shell metacharacters must stay quoted inside one argument');
+  assert.match(prompt, /- node 'scripts\/a b\.js'/, 'args with spaces must be quoted');
+});
+
+test('single-quotes defeat command substitution in pasted checks', () => {
+  const prompt = buildAgentPrompt({ ...BASE, project: { ...BASE.project, checks: [['node', '-e', '$(id) `date`'], ['echo', "it's"]] } });
+  assert.ok(prompt.includes("'$(id) `date`'"), '$(...) and backticks must be literal, not live');
+  assert.ok(prompt.includes("'it'\\''s'"), 'an embedded single quote is escaped by closing, escaping, and reopening');
 });
 
 test('omits the checks section entirely when no checks are configured', () => {

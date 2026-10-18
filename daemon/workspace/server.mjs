@@ -15,7 +15,7 @@ export function localOnly(req, res, next) {
   next();
 }
 
-export function createWorkspaceApp(service) {
+export function createWorkspaceApp(service, { inspectTooling = inspectProjectTooling, collectGitHub = collectGitHubContext } = {}) {
   const app = express();
   app.use(helmet({ contentSecurityPolicy: { directives: { 'script-src': ["'self'"], 'style-src': ["'self'"], 'connect-src': ["'self'"], 'upgrade-insecure-requests': null } } }));
   app.use(localOnly);
@@ -42,21 +42,32 @@ export function createWorkspaceApp(service) {
   });
   // Agent + GitHub context and the paste-ready prompt for one project. The
   // service keeps projects in memory (via get), so this reads live state.
-  // Both routes need the same tooling + GitHub inspection; a fresh page view
-  // calls both, and every GitHub call counts against a 60/hr unauthenticated
-  // rate limit, so share one result per root path for a short window. Only the
-  // expensive inspection is cached — the prompt is rebuilt from the live
-  // project each time so it always reflects the current task list.
+  // Both routes need the same tooling + GitHub inspection, and a fresh page
+  // view fires them within milliseconds of each other — so concurrent misses
+  // join one in-flight promise, and settled results are shared for a short
+  // window (every GitHub call counts against a 60/hr unauthenticated rate
+  // limit). Only the expensive inspection is cached; the prompt is rebuilt
+  // from the live project each call so it always reflects the current tasks.
   const INSPECT_TTL_MS = 45000;
   const inspections = new Map();
-  async function inspect(rootPath) {
+  function inspect(rootPath) {
     const cached = inspections.get(rootPath);
-    if (cached && Date.now() - cached.at < INSPECT_TTL_MS) return cached;
-    const [tooling, github] = await Promise.all([inspectProjectTooling(rootPath), collectGitHubContext(rootPath)]);
-    const entry = { at: Date.now(), tooling, github };
+    if (cached?.inflight) return cached.inflight;
+    if (cached && Date.now() - cached.at < INSPECT_TTL_MS) return cached.value;
+    const entry = { at: Date.now(), value: null, inflight: null };
+    entry.inflight = Promise.all([inspectTooling(rootPath), collectGitHub(rootPath)])
+      .then(([tooling, github]) => {
+        entry.value = { tooling, github };
+        entry.inflight = null;
+        return entry.value;
+      })
+      .catch(error => {
+        inspections.delete(rootPath);
+        throw error;
+      });
     inspections.set(rootPath, entry);
     if (inspections.size > 100) inspections.delete(inspections.keys().next().value);
-    return entry;
+    return entry.inflight;
   }
   app.get('/api/workspace/projects/:id/context', async (req, res) => {
     const project = service.get(req.params.id);

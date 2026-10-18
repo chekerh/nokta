@@ -37,11 +37,13 @@ function bullets(lines) {
 }
 
 // Checks run as spawn argv in the workspace, but a pasted prompt runs through a
-// shell. Quote anything a shell would reinterpret so `["sh", "-c", "a && b"]`
-// pastes as the same command Nokta runs.
+// shell. Quote anything a shell would reinterpret — POSIX single quotes make
+// every character literal, and an embedded single quote is escaped the one way
+// the shell understands: close, escape, reopen. JSON.stringify is not enough:
+// "$(id)" still substitutes inside double quotes.
 function quoteArg(arg) {
   const value = String(arg);
-  return /^[\w@%+=:,./-]+$/.test(value) ? value : JSON.stringify(value);
+  return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.split("'").join("'\\''")}'`;
 }
 
 function formatCheck(args) {
