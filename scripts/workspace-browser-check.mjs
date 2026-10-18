@@ -53,6 +53,58 @@ try {
   await page.getByRole('button', { name: 'Close task details' }).click();
   await page.reload();
   await page.getByRole('button', { name: 'Handle empty project state, Done', exact: true }).waitFor();
+  // Agent-awareness panels: real content renders (not a stuck busy state), the
+  // prompt is keyed per project, and switching back re-renders from cache.
+  await page.getByText('No coding agent detected in this project yet.').waitFor();
+  await page.locator('#generated-prompt', { hasText: 'Handle empty projects and test the result.' }).waitFor();
+  assert.equal(await page.locator('#copy-prompt').isEnabled(), true, 'copy is enabled once a prompt exists');
+  const secondRoot = path.join(directory, 'second-project');
+  await fs.mkdir(secondRoot);
+  // Give project 2 tool-specific evidence so its agent panel (Cursor primary)
+  // is distinguishable from project 1's ("no coding agent detected").
+  await fs.writeFile(path.join(secondRoot, '.cursorrules'), 'Use the project conventions.\n');
+  // Hold project 2's context response in flight so the switch-back race is
+  // deterministic instead of a timing accident.
+  let releaseContext;
+  const contextGate = new Promise(resolve => { releaseContext = resolve; });
+  let heldContextUrl;
+  await page.route('**/api/workspace/projects/*/context', async route => {
+    heldContextUrl = route.request().url();
+    await contextGate;
+    await route.continue();
+  });
+  await page.locator('#add-project').click();
+  await page.getByLabel('Project name', { exact: true }).fill('Second panel project');
+  await page.getByLabel('Repository folder').fill(secondRoot);
+  await page.getByLabel('What should Nokta achieve?').fill('Second goal for panel keying.');
+  await page.getByLabel('Implementation model').fill('author-test');
+  await page.getByLabel('Independent review model').fill('reviewer-test');
+  await page.getByLabel('Checks to run').fill('[]');
+  await page.getByRole('button', { name: 'Save project' }).click();
+  await page.locator('#project-dialog').waitFor({ state: 'hidden' });
+  // The heading flip proves render() ran for the new selection, and loadContext
+  // writes its busy state synchronously before that — so project 2's panels are
+  // now overwriting project 1's, mid-flight.
+  await page.getByRole('heading', { name: 'Second panel project' }).waitFor();
+  assert.ok(heldContextUrl, 'project 2 issued a context request while the gate is held');
+  await page.getByRole('button', { name: 'UI test project' }).click();
+  // Switching back mid-flight must re-render project 1's cached context and
+  // prompt; leaving project 2's busy state here was the stale-panel bug.
+  await page.locator('#agent-tool', { hasText: 'No coding agent detected in this project yet.' }).waitFor();
+  await page.locator('#generated-prompt', { hasText: 'Handle empty projects and test the result.' }).waitFor();
+  assert.equal(await page.locator('#copy-prompt').isEnabled(), true, 'copy is enabled for the re-rendered project 1 prompt');
+  // Release project 2's response: it lands while project 1 is selected and must
+  // be cached without painting over project 1's panels.
+  releaseContext();
+  const held = await page.waitForResponse(response => response.url() === heldContextUrl);
+  assert.equal(held.status(), 200);
+  await page.waitForTimeout(200);
+  await page.unroute('**/api/workspace/projects/*/context');
+  assert.equal(await page.locator('#agent-tool', { hasText: 'Cursor' }).count(), 0, 'a late response must not paint over the selected project');
+  await page.getByRole('button', { name: 'Second panel project' }).click();
+  await page.locator('#agent-tool', { hasText: 'Cursor' }).waitFor();
+  await page.locator('#generated-prompt', { hasText: 'Second goal for panel keying.' }).waitFor();
+  assert.equal(await page.locator('#copy-prompt').isEnabled(), true, 'copy re-enabled for the selected project prompt');
   await page.setViewportSize({ width: 375, height: 812 });
   await page.screenshot({ path: '/tmp/nokta-workspace-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth), true, 'No document overflow on mobile');
@@ -60,7 +112,7 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#project-dialog').evaluate(dialog => dialog.open), false);
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: onboarding, invalid models, analysis, Kanban progression, test evidence, review evidence, reload persistence, mobile width, Escape, no page errors.');
+  console.log('Browser checks passed: onboarding, invalid models, analysis, Kanban progression, test evidence, review evidence, reload persistence, agent/prompt panels, per-project prompt keying, mobile width, Escape, no page errors.');
   console.log('Screenshots: /tmp/nokta-workspace-desktop.png and /tmp/nokta-workspace-mobile.png');
 } finally {
   await browser?.close();

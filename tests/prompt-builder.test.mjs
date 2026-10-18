@@ -39,9 +39,46 @@ test('lists pending tasks with acceptance criteria and omits done ones', () => {
 
 test('falls back to a generic address when no agent is detected', () => {
   const prompt = buildAgentPrompt({ ...BASE, tooling: { primary: null, tools: [], instructionFiles: [] } });
-  assert.match(prompt, /You are coding agent/);
+  assert.match(prompt, /You are a coding agent/);
 });
 
 test('mentions the existing instruction file', () => {
-  assert.match(buildAgentPrompt(BASE), /CLAUDE\.md/);
+  const prompt = buildAgentPrompt(BASE);
+  assert.match(prompt, /CLAUDE\.md/);
+  assert.match(prompt, /\n\n## Guardrails/, 'a blank line separates the instruction-file note from the next heading');
+});
+
+test('quotes check commands so a pasted prompt runs the same argv Nokta runs', () => {
+  const prompt = buildAgentPrompt({ ...BASE, project: { ...BASE.project, checks: [['sh', '-c', 'npm test && npm run lint'], ['node', 'scripts/a b.js']] } });
+  assert.match(prompt, /- sh -c 'npm test && npm run lint'/, 'shell metacharacters must stay quoted inside one argument');
+  assert.match(prompt, /- node 'scripts\/a b\.js'/, 'args with spaces must be quoted');
+});
+
+test('single-quotes defeat command substitution in pasted checks', () => {
+  const prompt = buildAgentPrompt({ ...BASE, project: { ...BASE.project, checks: [['node', '-e', '$(id) `date`'], ['echo', "it's"]] } });
+  assert.ok(prompt.includes("'$(id) `date`'"), '$(...) and backticks must be literal, not live');
+  assert.ok(prompt.includes("'it'\\''s'"), 'an embedded single quote is escaped by closing, escaping, and reopening');
+});
+
+test('omits the checks section entirely when no checks are configured', () => {
+  const prompt = buildAgentPrompt({ ...BASE, project: { ...BASE.project, checks: [] } });
+  assert.ok(!prompt.includes('## Checks'), 'no checks section without checks');
+  assert.ok(!prompt.includes('configured checks'), 'must not instruct the agent to run checks that do not exist');
+});
+
+test('keeps blocked tasks out of the implement-in-order list', () => {
+  const prompt = buildAgentPrompt({
+    ...BASE,
+    project: {
+      ...BASE.project,
+      tasks: [
+        { title: 'Ready task', description: '', priority: 'P1', status: 'ready', acceptanceCriteria: [] },
+        { title: 'Blocked task', description: '', priority: 'P1', status: 'blocked', acceptanceCriteria: [], error: 'review rejected\nstack trace follows' },
+      ],
+    },
+  });
+  const planned = prompt.slice(prompt.indexOf('## Planned work'), prompt.indexOf('Blocked —'));
+  assert.match(planned, /Ready task/);
+  assert.ok(!planned.includes('Blocked task'), 'blocked tasks must not be told to implement in order');
+  assert.match(prompt, /Blocked task — review rejected/, 'blocked section names the task and its blocker');
 });

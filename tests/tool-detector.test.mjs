@@ -51,18 +51,39 @@ test('detects installed tools from a fake home directory', async () => {
   assert.ok(ids.includes('opencode'));
 });
 
-test('inspectProjectTooling separates installed-but-absent agents as candidates', async () => {
+test('inspectProjectTooling labels installed agents that are unused here', async () => {
   const home = await fixture({ '.claude/thing': 'x', '.windsurf/thing': 'y' });
   const project = await fixture({ 'CLAUDE.md': 'z' });
   const result = await inspectProjectTooling(project, { homeDir: home });
   assert.ok(result.installed.length >= 2);
-  assert.ok(result.candidates.some(tool => tool.id === 'windsurf'), 'windsurf is installed but not used in this project');
-  assert.ok(!result.candidates.some(tool => tool.id === 'claude-code'), 'claude-code is used in the project, not just a candidate');
+  const windsurf = result.installed.find(tool => tool.id === 'windsurf');
+  assert.ok(windsurf && !windsurf.inProject, 'windsurf is installed but not used in this project');
+  const claude = result.installed.find(tool => tool.id === 'claude-code');
+  assert.ok(claude?.inProject, 'claude-code is used in the project');
+  assert.ok(!('candidates' in result), 'the redundant candidates list was replaced by the inProject label');
+});
+
+test('a shared AGENTS.md credits every declaring tool but never picks the primary', async () => {
+  const root = await fixture({ 'AGENTS.md': '# shared', '.cursorrules': 'rules' });
+  const result = await detectProjectTools(root);
+  const ids = result.tools.map(tool => tool.id);
+  for (const id of ['codex', 'opencode', 'aider', 'continue']) assert.ok(ids.includes(id), `${id} should be listed from the shared AGENTS.md`);
+  assert.equal(result.primary.id, 'cursor', 'tool-specific evidence must outrank a shared protocol file');
+  assert.ok(result.instructionFiles.includes('AGENTS.md'));
+});
+
+test('shared-only evidence lists the candidates but yields no primary', async () => {
+  const root = await fixture({ 'AGENTS.md': '# shared' });
+  const result = await detectProjectTools(root);
+  assert.ok(result.tools.length >= 4, 'every tool declaring AGENTS.md is listed as evidence');
+  assert.equal(result.primary, null, 'a shared file alone must not declare a primary tool');
+  assert.ok(result.instructionFiles.includes('AGENTS.md'));
 });
 
 test('every registry entry has the shape the UI relies on', async () => {
   for (const tool of TOOL_REGISTRY) {
     assert.ok(tool.id && tool.name && tool.instructionFile, `registry entry ${tool.id} is missing a required field`);
     assert.ok(Array.isArray(tool.dirs) && Array.isArray(tool.files) && Array.isArray(tool.deps));
+    assert.ok(Object.hasOwn(tool, 'sharedFile'), `registry entry ${tool.id} must declare sharedFile explicitly (null when it has none)`);
   }
 });
