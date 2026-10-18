@@ -57,6 +57,7 @@ test('context and prompt routes report agent, GitHub state, and a paste-ready pr
   const context = await fetch(`${base}/api/workspace/projects/${created.id}/context`, { headers }).then(res => res.json());
   assert.equal(context.tooling.primary.id, 'claude-code', 'the detected agent must be reported');
   assert.ok(context.github, 'github context must be present even when unavailable');
+  assert.ok(!('remoteUrl' in context), 'raw remote URLs (which can embed credentials) must never be in the payload');
 
   const { prompt } = await fetch(`${base}/api/workspace/projects/${created.id}/prompt`, { headers }).then(res => res.json());
   assert.match(prompt, /You are Claude Code/, 'the prompt must address the detected agent');

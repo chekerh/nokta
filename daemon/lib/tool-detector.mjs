@@ -16,14 +16,16 @@ export const TOOL_REGISTRY = [
     dirs: ['.claude'],
     files: ['CLAUDE.md'],
     deps: ['@anthropic-ai/claude-code'],
+    sharedFile: null,
   },
   {
     id: 'codex',
     name: 'Codex CLI',
     instructionFile: 'AGENTS.md',
     dirs: ['.codex'],
-    files: ['AGENTS.md'],
+    files: [],
     deps: ['@openai/codex'],
+    sharedFile: 'AGENTS.md',
   },
   {
     id: 'cursor',
@@ -32,6 +34,7 @@ export const TOOL_REGISTRY = [
     dirs: ['.cursor'],
     files: ['.cursorrules'],
     deps: [],
+    sharedFile: null,
   },
   {
     id: 'windsurf',
@@ -40,6 +43,7 @@ export const TOOL_REGISTRY = [
     dirs: ['.windsurf'],
     files: ['.windsurfrules'],
     deps: [],
+    sharedFile: null,
   },
   {
     id: 'copilot',
@@ -48,6 +52,7 @@ export const TOOL_REGISTRY = [
     dirs: [],
     files: ['.github/copilot-instructions.md'],
     deps: [],
+    sharedFile: null,
   },
   {
     id: 'opencode',
@@ -56,6 +61,7 @@ export const TOOL_REGISTRY = [
     dirs: ['.opencode'],
     files: ['opencode.json'],
     deps: ['opencode-ai'],
+    sharedFile: 'AGENTS.md',
   },
   {
     id: 'aider',
@@ -64,6 +70,7 @@ export const TOOL_REGISTRY = [
     dirs: [],
     files: ['.aider.conf.yml'],
     deps: ['aider-chat'],
+    sharedFile: 'AGENTS.md',
   },
   {
     id: 'gemini',
@@ -72,6 +79,7 @@ export const TOOL_REGISTRY = [
     dirs: ['.gemini'],
     files: ['GEMINI.md'],
     deps: ['@google/gemini-cli'],
+    sharedFile: null,
   },
   {
     id: 'continue',
@@ -80,6 +88,7 @@ export const TOOL_REGISTRY = [
     dirs: ['.continue'],
     files: [],
     deps: ['@continuedev/cli'],
+    sharedFile: 'AGENTS.md',
   },
 ];
 
@@ -99,6 +108,10 @@ export const GLOBAL_HOME_DIRS = {
 const SCORE_DIR = 2;
 const SCORE_FILE = 3;
 const SCORE_DEP = 2;
+// Shared protocol files (AGENTS.md) are the convention of several tools at
+// once, so they are weak evidence: credited to every tool that declares them,
+// weighted below tool-specific evidence, and never enough to pick a primary.
+const SCORE_SHARED = 1;
 
 async function statOrNull(target) {
   try {
@@ -156,16 +169,32 @@ export async function detectProjectTools(rootPath) {
       }
     }
 
-    if (score > 0) tools.push({ id: tool.id, name: tool.name, instructionFile: tool.instructionFile, score, matched, lastUsedAt: lastUsedAt ? lastUsedAt.toISOString() : null });
+    if (tool.sharedFile && !matched.some(match => match.value === tool.sharedFile)) {
+      const stat = await statOrNull(path.join(rootPath, tool.sharedFile));
+      if (stat?.isFile()) {
+        matched.push({ kind: 'shared', value: tool.sharedFile, at: stat.mtime.toISOString() });
+        score += SCORE_SHARED;
+        if (!lastUsedAt || stat.mtime > lastUsedAt) lastUsedAt = stat.mtime;
+      }
+    }
+
+    if (score > 0) {
+      if (matched.some(match => match.value === tool.instructionFile)) instructionFiles.push(tool.instructionFile);
+      tools.push({ id: tool.id, name: tool.name, instructionFile: tool.instructionFile, score, matched, lastUsedAt: lastUsedAt ? lastUsedAt.toISOString() : null });
+    }
   }
 
   // Highest score wins; recency breaks ties so "most recently used" is the default target.
   tools.sort((a, b) => b.score - a.score || String(b.lastUsedAt || '').localeCompare(String(a.lastUsedAt || '')));
 
+  // Shared-only evidence (an AGENTS.md with no tool footprint anywhere) does
+  // not identify a tool — the caller gets no primary and a generic prompt.
+  const decisive = tools.find(tool => tool.matched.some(match => match.kind !== 'shared'));
+
   return {
     rootPath,
     tools,
-    primary: tools[0] ? { id: tools[0].id, name: tools[0].name, instructionFile: tools[0].instructionFile } : null,
+    primary: decisive ? { id: decisive.id, name: decisive.name, instructionFile: decisive.instructionFile } : null,
     instructionFiles: [...new Set(instructionFiles)],
   };
 }
@@ -176,7 +205,7 @@ export async function detectInstalledTools(homeDir) {
   const installed = [];
   for (const [id, relative] of Object.entries(GLOBAL_HOME_DIRS)) {
     const stat = await statOrNull(path.join(home, relative));
-    if (stat) installed.push({ id, at: stat.mtime.toISOString() });
+    if (stat?.isDirectory()) installed.push({ id, at: stat.mtime.toISOString() });
   }
   installed.sort((a, b) => b.at.localeCompare(a.at));
   return installed;
@@ -187,9 +216,8 @@ export async function inspectProjectTooling(rootPath, { homeDir } = {}) {
   const [project, installed] = await Promise.all([detectProjectTools(rootPath), detectInstalledTools(homeDir)]);
   return {
     ...project,
+    // Installed agents with no footprint here are surfaced via inProject so the
+    // UI can label them "not used in this project" without a second list.
     installed: installed.map(tool => ({ ...tool, inProject: project.tools.some(candidate => candidate.id === tool.id) })),
-    // A tool installed on the machine but with no footprint in this project is a
-    // candidate, not evidence. The UI shows it separately.
-    candidates: installed.filter(tool => !project.tools.some(candidate => candidate.id === tool.id)),
   };
 }

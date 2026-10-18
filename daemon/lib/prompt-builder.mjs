@@ -15,23 +15,37 @@ const BASE_GUARDRAILS = [
 ];
 
 // How each tool likes to be addressed. Kept minimal and factual — the point is
-// a prompt that reads naturally in that tool, not a personality gimmick.
+// a prompt that reads naturally in that tool, not a personality gimmick. The
+// "run the checks" instruction is deliberately not here: it belongs to the
+// Checks section below, which only exists when checks are configured.
 const TOOL_STYLE = {
-  'claude-code': { address: 'Claude Code', conventions: 'Follow CLAUDE.md conventions. Use your tool set to inspect files, then edit and run the configured checks.' },
-  codex: { address: 'Codex CLI', conventions: 'Follow AGENTS.md conventions. Use your tool set to inspect files, then edit and run the configured checks.' },
-  cursor: { address: 'Cursor', conventions: 'Follow .cursorrules. Use Cursor agent mode to inspect files, then apply edits and run the configured checks.' },
-  windsurf: { address: 'Windsurf', conventions: 'Follow .windsurfrules. Use Cascade to inspect files, then apply edits and run the configured checks.' },
-  copilot: { address: 'GitHub Copilot', conventions: 'Follow .github/copilot-instructions.md. Use agent mode to inspect files, then apply edits and run the configured checks.' },
-  opencode: { address: 'OpenCode', conventions: 'Follow AGENTS.md conventions. Use your tool set to inspect files, then edit and run the configured checks.' },
-  aider: { address: 'Aider', conventions: 'Follow repo conventions. Use Aider to apply edits, then run the configured checks.' },
-  gemini: { address: 'Gemini CLI', conventions: 'Follow GEMINI.md conventions. Use your tool set to inspect files, then edit and run the configured checks.' },
-  continue: { address: 'Continue', conventions: 'Follow repo conventions. Use Continue to apply edits, then run the configured checks.' },
+  'claude-code': { address: 'Claude Code', conventions: 'Follow CLAUDE.md conventions. Use your tool set to inspect files before editing.' },
+  codex: { address: 'Codex CLI', conventions: 'Follow AGENTS.md conventions. Use your tool set to inspect files before editing.' },
+  cursor: { address: 'Cursor', conventions: 'Follow .cursorrules. Use Cursor agent mode to inspect files before editing.' },
+  windsurf: { address: 'Windsurf', conventions: 'Follow .windsurfrules. Use Cascade to inspect files before editing.' },
+  copilot: { address: 'GitHub Copilot', conventions: 'Follow .github/copilot-instructions.md. Use agent mode to inspect files before editing.' },
+  opencode: { address: 'OpenCode', conventions: 'Follow AGENTS.md conventions. Use your tool set to inspect files before editing.' },
+  aider: { address: 'Aider', conventions: 'Follow repo conventions. Use Aider to apply edits.' },
+  gemini: { address: 'Gemini CLI', conventions: 'Follow GEMINI.md conventions. Use your tool set to inspect files before editing.' },
+  continue: { address: 'Continue', conventions: 'Follow repo conventions. Use Continue to apply edits.' },
 };
 
-const GENERIC_STYLE = { address: 'coding agent', conventions: 'Inspect the repository before editing, then run the configured checks.' };
+const GENERIC_STYLE = { address: 'a coding agent', conventions: 'Inspect the repository before editing.' };
 
 function bullets(lines) {
   return lines.map(line => `- ${line}`).join('\n');
+}
+
+// Checks run as spawn argv in the workspace, but a pasted prompt runs through a
+// shell. Quote anything a shell would reinterpret so `["sh", "-c", "a && b"]`
+// pastes as the same command Nokta runs.
+function quoteArg(arg) {
+  const value = String(arg);
+  return /^[\w@%+=:,./-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function formatCheck(args) {
+  return Array.isArray(args) ? args.map(quoteArg).join(' ') : quoteArg(args);
 }
 
 function formatTask(task, index) {
@@ -69,10 +83,17 @@ export function buildAgentPrompt(context = {}) {
 
   const tasks = Array.isArray(project.tasks) ? project.tasks : [];
   const pending = tasks.filter(task => task.status !== 'done');
-  if (pending.length) {
+  const active = pending.filter(task => task.status !== 'blocked');
+  const blocked = pending.filter(task => task.status === 'blocked');
+  if (active.length) {
     lines.push('## Planned work');
     lines.push('Implement these tasks in order. Do not expand scope beyond them.');
-    lines.push(pending.map((task, index) => formatTask(task, index + 1)).join('\n\n'));
+    lines.push(active.map((task, index) => formatTask(task, index + 1)).join('\n\n'));
+    lines.push('');
+  }
+  if (blocked.length) {
+    lines.push('Blocked — do not start these until the blocker is cleared:');
+    lines.push(bullets(blocked.map(task => `${task.title}${task.error ? ` — ${String(task.error).split('\n')[0]}` : ''}`)));
     lines.push('');
   }
 
@@ -80,11 +101,14 @@ export function buildAgentPrompt(context = {}) {
   if (checks.length) {
     lines.push('## Checks');
     lines.push('Run these after editing and iterate until they pass:');
-    lines.push(bullets(checks.map(args => (Array.isArray(args) ? args.join(' ') : String(args)))));
+    lines.push(bullets(checks.map(formatCheck)));
     lines.push('');
   }
 
-  if (tooling.instructionFiles?.length) lines.push(`Respect the existing instruction file(s) in this repo: ${tooling.instructionFiles.join(', ')}.`);
+  if (tooling.instructionFiles?.length) {
+    lines.push(`Respect the existing instruction file(s) in this repo: ${tooling.instructionFiles.join(', ')}.`);
+    lines.push('');
+  }
 
   lines.push('## Guardrails');
   lines.push(bullets(BASE_GUARDRAILS));

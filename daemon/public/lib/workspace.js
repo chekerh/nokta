@@ -4,7 +4,6 @@ let selected = localStorage.getItem('nokta-workspace-project');
 let editing = null;
 let loading = false;
 let selectedTask = null;
-let contextCache = {};
 let promptText = '';
 const columns = [['ready', 'Ready'], ['in-progress', 'Implementing'], ['testing', 'Testing'], ['review', 'Review'], ['done', 'Done'], ['blocked', 'Blocked']];
 const busy = project => ['queued', 'analyzing', 'running'].includes(project.status);
@@ -52,7 +51,7 @@ function render() {
     button.dataset.projectId = project.id;
     button.setAttribute('aria-current', String(selected === project.id));
     button.append(element('span', project.name), element('small', `${project.status} · ${project.tasks.filter(task => task.status === 'done').length}/${project.tasks.length} done`));
-    button.addEventListener('click', () => { selected = project.id; promptText = ''; localStorage.setItem('nokta-workspace-project', selected); render(); });
+    button.addEventListener('click', () => { selected = project.id; localStorage.setItem('nokta-workspace-project', selected); render(); });
     $('project-list').append(button);
   }
   const project = current();
@@ -125,19 +124,69 @@ function badge(tool) {
   return wrap;
 }
 
-async function loadContext(id, force = false) {
-  if (contextCache[id] && !force) return;
-  try {
-    const result = await api(`/projects/${id}/context`);
-    contextCache[id] = result;
-    if (selected === id) renderContext(result);
-  } catch (error) { if (selected === id) { $('agent-tool').replaceChildren(element('p', error.message, 'muted')); } }
+// Panels are owned per project: every async write is keyed by project id and
+// only applied when that project is still selected. Without this, switching
+// projects mid-flight lets a slow response overwrite the wrong project's panels.
+const contextCache = new Map();
+const promptCache = new Map();
+const inFlight = new Set();
+const failures = new Map();
+const shown = { context: null, prompt: null };
+const RETRY_MS = 60000;
+
+function panelsBusy(message) {
+  $('agent-tool').replaceChildren(element('p', message, 'muted'));
+  $('installed-agents').replaceChildren(element('li', 'Loading…', 'muted'));
+  $('github-context').replaceChildren(element('p', message, 'muted'));
 }
 
-function renderContext({ tooling, github }) {
+function panelError(message) {
+  $('agent-tool').replaceChildren(element('p', message, 'muted'));
+  $('installed-agents').replaceChildren(element('li', 'Unavailable while the context fails to load.', 'muted'));
+  $('github-context').replaceChildren(element('p', message, 'muted'));
+}
+
+function promptError(id, message) {
+  shown.prompt = id;
+  promptText = '';
+  $('generated-prompt').textContent = message;
+  $('copy-prompt').disabled = true;
+}
+
+async function loadContext(id) {
+  const key = `ctx:${id}`;
+  if (contextCache.has(id)) {
+    if (shown.context !== id) renderContext(id, contextCache.get(id));
+    return;
+  }
+  if (inFlight.has(key)) return;
+  // A recent failure stays visible (and is not retried on every 3s poll) until
+  // it expires; if the user switches back to the failed project, show its error
+  // rather than leaving the previous project's panels on screen.
+  const failure = failures.get(key);
+  if (failure && Date.now() - failure.at < RETRY_MS) {
+    if (shown.context !== id) { shown.context = id; panelError(failure.message); }
+    return;
+  }
+  inFlight.add(key);
+  if (shown.context !== id) panelsBusy('Loading agent and GitHub context…');
+  try {
+    const result = await api(`/projects/${id}/context`);
+    contextCache.set(id, result);
+    failures.delete(key);
+    if (selected === id) renderContext(id, result);
+  } catch (error) {
+    failures.set(key, { at: Date.now(), message: error.message });
+    if (selected === id) { shown.context = id; panelError(error.message); }
+  } finally { inFlight.delete(key); }
+}
+
+function renderContext(id, { tooling, github }) {
+  shown.context = id;
   const toolBox = $('agent-tool');
   toolBox.replaceChildren();
   if (tooling.primary) toolBox.append(badge({ ...tooling.primary, primary: true }));
+  else if (tooling.tools?.length) toolBox.append(element('p', 'Shared agent conventions only — no tool-specific evidence in this project.', 'muted'));
   else toolBox.append(element('p', 'No coding agent detected in this project yet.', 'muted'));
   for (const tool of tooling.tools || []) if (!tooling.primary || tool.id !== tooling.primary.id) toolBox.append(badge(tool));
   const installedList = $('installed-agents');
@@ -159,34 +208,83 @@ function renderContext({ tooling, github }) {
     box.append(link);
     if (github.description) box.append(element('p', github.description, 'muted'));
     box.append(element('p', `Default branch ${github.defaultBranch} · ${github.stars} stars · ${github.authenticated ? 'authenticated' : 'public (unauthenticated)'}`, 'caption'));
-    if (github.openPulls?.length) box.append(element('p', `Open PRs: ${github.openPulls.map(pr => `#${pr.number} ${pr.title}`).join('; ')}`, 'muted'));
-    if (github.openIssues?.length) box.append(element('p', `Open issues: ${github.openIssues.map(issue => `#${issue.number} ${issue.title}`).join('; ')}`, 'muted'));
-    if (github.recentCommits?.length) {
+    const partial = github.partial || {};
+    if (partial.pulls) box.append(element('p', `Open PRs: unavailable (${partial.pulls}).`, 'muted'));
+    else if (github.openPulls?.length) box.append(element('p', `Open PRs: ${github.openPulls.map(pr => `#${pr.number} ${pr.title}`).join('; ')}`, 'muted'));
+    else if (Array.isArray(github.openPulls)) box.append(element('p', 'No open pull requests.', 'muted'));
+    if (partial.issues) box.append(element('p', `Open issues: unavailable (${partial.issues}).`, 'muted'));
+    else if (github.openIssues?.length) box.append(element('p', `Open issues: ${github.openIssues.map(issue => `#${issue.number} ${issue.title}`).join('; ')}`, 'muted'));
+    else if (Array.isArray(github.openIssues)) box.append(element('p', 'No open issues.', 'muted'));
+    if (partial.commits) box.append(element('p', `Recent commits: unavailable (${partial.commits}).`, 'muted'));
+    else if (github.recentCommits?.length) {
       const list = element('ul', undefined, 'plain-list');
       for (const commit of github.recentCommits) list.append(element('li', `${commit.sha} ${commit.message}`));
       box.append(list);
+    } else if (Array.isArray(github.recentCommits)) {
+      box.append(element('p', 'No recent commits.', 'muted'));
     }
   } else {
     box.append(element('p', `No GitHub context: ${github.reason || 'unavailable'}.`, 'muted'));
   }
 }
 
-async function loadPrompt(id, force = false) {
-  if (promptText && !force) return;
+async function loadPrompt(id) {
+  const key = `pr:${id}`;
+  if (promptCache.has(id)) {
+    if (shown.prompt !== id) renderPrompt(id, promptCache.get(id));
+    return;
+  }
+  if (inFlight.has(key)) return;
+  const failure = failures.get(key);
+  if (failure && Date.now() - failure.at < RETRY_MS) {
+    if (shown.prompt !== id) promptError(id, `Could not generate prompt: ${failure.message}`);
+    return;
+  }
+  inFlight.add(key);
+  // Never leave a previous project's prompt (or a copyable stale one) visible
+  // while this project's prompt is still being generated.
+  promptText = '';
+  $('copy-prompt').disabled = true;
+  if (shown.prompt !== id) { shown.prompt = id; $('generated-prompt').textContent = 'Generating prompt…'; }
   try {
     const result = await api(`/projects/${id}/prompt`);
-    promptText = result.prompt;
-    $('generated-prompt').textContent = promptText;
-  } catch (error) { $('generated-prompt').textContent = `Could not generate prompt: ${error.message}`; }
+    promptCache.set(id, result.prompt);
+    failures.delete(key);
+    if (selected === id) renderPrompt(id, result.prompt);
+  } catch (error) {
+    failures.set(key, { at: Date.now(), message: error.message });
+    if (selected === id) promptError(id, `Could not generate prompt: ${error.message}`);
+  } finally { inFlight.delete(key); }
+}
+
+function renderPrompt(id, text) {
+  shown.prompt = id;
+  promptText = text;
+  $('generated-prompt').textContent = text || 'No prompt available for this project yet.';
+  $('copy-prompt').disabled = !text;
 }
 
 $('copy-prompt').addEventListener('click', async () => {
+  if (!promptText) { notice('No prompt to copy yet. Generate one first.'); return; }
   try {
     await navigator.clipboard.writeText(promptText);
     notice('Prompt copied to clipboard.');
   } catch { notice('Could not copy. Select the prompt text and copy manually.'); }
 });
-$('regen-prompt').addEventListener('click', () => { if (selected) { promptText = ''; loadPrompt(selected, true); } });
+$('regen-prompt').addEventListener('click', () => {
+  if (!selected) return;
+  promptCache.delete(selected);
+  failures.delete(`pr:${selected}`);
+  shown.prompt = null;
+  loadPrompt(selected);
+});
+function invalidateContext(id) {
+  contextCache.delete(id);
+  promptCache.delete(id);
+  failures.delete(`ctx:${id}`);
+  failures.delete(`pr:${id}`);
+}
+
 function openForm(project = null) {
   editing = project?.id || null;
   $('project-form').reset();
@@ -215,6 +313,7 @@ $('project-form').addEventListener('submit', async event => {
     body.taskLimit = Number($('taskLimit').value);
     const result = await api(`/projects${editing ? `/${editing}` : ''}`, editing ? 'PATCH' : 'POST', body);
     selected = result.id;
+    invalidateContext(selected);
     localStorage.setItem('nokta-workspace-project', selected);
     $('project-dialog').close();
     notice('');
@@ -225,7 +324,7 @@ $('project-form').addEventListener('submit', async event => {
 for (const action of ['analyze', 'start', 'pause']) $(action).addEventListener('click', async () => {
   if (!current()) return;
   $(action).disabled = true;
-  try { await api(`/projects/${selected}/${action}`, 'POST'); notice(''); await refresh(); }
+  try { await api(`/projects/${selected}/${action}`, 'POST'); notice(''); invalidateContext(selected); await refresh(); }
   catch (error) { notice(error.message); render(); }
 });
 function showTask(id) { selectedTask = id; renderTask(id); $('task-dialog').showModal(); }

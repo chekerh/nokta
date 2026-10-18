@@ -42,14 +42,30 @@ export function createWorkspaceApp(service) {
   });
   // Agent + GitHub context and the paste-ready prompt for one project. The
   // service keeps projects in memory (via get), so this reads live state.
+  // Both routes need the same tooling + GitHub inspection; a fresh page view
+  // calls both, and every GitHub call counts against a 60/hr unauthenticated
+  // rate limit, so share one result per root path for a short window. Only the
+  // expensive inspection is cached — the prompt is rebuilt from the live
+  // project each time so it always reflects the current task list.
+  const INSPECT_TTL_MS = 45000;
+  const inspections = new Map();
+  async function inspect(rootPath) {
+    const cached = inspections.get(rootPath);
+    if (cached && Date.now() - cached.at < INSPECT_TTL_MS) return cached;
+    const [tooling, github] = await Promise.all([inspectProjectTooling(rootPath), collectGitHubContext(rootPath)]);
+    const entry = { at: Date.now(), tooling, github };
+    inspections.set(rootPath, entry);
+    if (inspections.size > 100) inspections.delete(inspections.keys().next().value);
+    return entry;
+  }
   app.get('/api/workspace/projects/:id/context', async (req, res) => {
     const project = service.get(req.params.id);
-    const [tooling, github] = await Promise.all([inspectProjectTooling(project.rootPath), collectGitHubContext(project.rootPath)]);
+    const { tooling, github } = await inspect(project.rootPath);
     res.json({ tooling, github });
   });
   app.get('/api/workspace/projects/:id/prompt', async (req, res) => {
     const project = service.get(req.params.id);
-    const [tooling, github] = await Promise.all([inspectProjectTooling(project.rootPath), collectGitHubContext(project.rootPath)]);
+    const { tooling, github } = await inspect(project.rootPath);
     res.json({ prompt: buildAgentPrompt({ project, tooling, github }) });
   });
   const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseRemoteUrl, fetchRepoContext } from '../daemon/lib/github-context.mjs';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { parseRemoteUrl, fetchRepoContext, stripCredentials, collectGitHubContext } from '../daemon/lib/github-context.mjs';
 
 // parseRemoteUrl must recognize the origin forms git actually produces, or the
 // whole feature silently finds "no repo" for a perfectly normal clone.
@@ -66,4 +70,50 @@ test('refuses non-GitHub hosts with an explicit reason', async () => {
   const context = await fetchRepoContext({ host: 'gitlab.com', owner: 'o', repo: 'r' }, { fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
   assert.equal(context.available, false);
   assert.equal(context.reason, 'non-github-host');
+});
+
+// Remote origins can embed credentials (https://<github-pat>@github.com/...).
+// Stripping happens at the source, so nothing downstream can echo them.
+test('strips embedded credentials from remote URLs', () => {
+  assert.equal(stripCredentials('https://ghp_Zz9@github.com/o/r.git'), 'https://github.com/o/r.git');
+  assert.equal(stripCredentials('https://user:pass@github.com/o/r.git'), 'https://github.com/o/r.git');
+  assert.equal(stripCredentials('git@github.com:o/r.git'), 'git@github.com:o/r.git');
+  assert.equal(parseRemoteUrl(stripCredentials('https://ghp_Zz9@github.com/o/r.git')).owner, 'o');
+});
+
+test('a credential-bearing origin never leaks into the collected context', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-origin-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  try {
+    execFileSync('git', ['init', '-q', dir]);
+    execFileSync('git', ['-C', dir, 'remote', 'add', 'origin', 'https://ghp_Zz9@github.com/o/r.git']);
+  } catch {
+    t.skip('git unavailable');
+    return;
+  }
+  const fetchImpl = async url => ({
+    ok: true,
+    status: 200,
+    json: async () => (url === 'https://api.github.com/repos/o/r' ? { html_url: 'https://github.com/o/r', default_branch: 'main', stargazers_count: 0 } : []),
+  });
+  const context = await collectGitHubContext(dir, { fetchImpl });
+  assert.equal(context.available, true, 'credential stripping must not break repo resolution');
+  const serialized = JSON.stringify(context);
+  assert.ok(!serialized.includes('ghp_Zz9'), 'the remote credential must never appear in a payload');
+  assert.ok(!('remoteUrl' in context), 'the raw remote URL is intentionally not part of the payload');
+});
+
+// A failed sub-request must read as "could not find out", not "there are none".
+test('reports partial failures instead of rendering missing data as empty', async () => {
+  const fetchImpl = stubFetch([
+    { includes: '/pulls?', ok: false, status: 403 },
+    { includes: '/issues?', body: [] },
+    { includes: '/commits?', body: [] },
+    { includes: '/repos/o/r', body: { html_url: 'u', default_branch: 'main', stargazers_count: 0 } },
+  ]);
+  const context = await fetchRepoContext({ host: 'github.com', owner: 'o', repo: 'r' }, { fetchImpl });
+  assert.equal(context.available, true);
+  assert.equal(context.partial.pulls, 403, 'the failing section keeps its status');
+  assert.ok(!('issues' in context.partial), 'successful sections are not marked partial');
+  assert.deepEqual(context.openPulls, []);
 });
