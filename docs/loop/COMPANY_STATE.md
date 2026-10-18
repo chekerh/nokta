@@ -30,12 +30,13 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 ## Validation Status
 
 - **Lint:** ✅ Pass (0 errors, 0 warnings)
-- **Tests:** ✅ 409/409 pass
+- **Tests:** ✅ 420/420 pass across 47 files
 - Product goal (agent-awareness) landed on `main` via PR #25 (`d15e9c8`, TASK-022): filesystem-only per-project agent detection + machine-wide installed agents (`tool-detector.mjs`), origin-resolving GitHub context with structured failure reasons (`github-context.mjs`), a pure plan+context→prompt renderer (`prompt-builder.mjs`), and agent/GitHub/prompt panels in the existing workspace UI backed by `GET /api/workspace/projects/:id/{context,prompt}`.
 - **Daemon:** ✅ Starts and responds to health check
 - **npm audit:** ✅ 0 vulnerabilities (proxy-addr, qs, js-yaml, brace-expansion patched)
 - **Fleet:** ✅ Track/discover/plan/queue live opencode + freebuff sessions
 - **Review gates:** ✅ Rendered-UI gate, dialog semantics gate, sandbox useDocker=false
+- Agent-awareness review fixes (TASK-023) landed on `main` via PR #26 (`b07a5a0`): per-project panel state machine (in-flight guards, marker moves, failure backoff, generation counter, prompt fingerprint), shared TTL-cached inspection for `/context` + `/prompt`, shared `AGENTS.md` evidence at weight 1 with tool-specific `primary`, credentials stripped at source, POSIX-quoted check commands, and a mutation-tested browser race check.
 - **Audit:** ✅ 12 dead files removed, 9 audit docs in `audit/` + `AUDIT-COMPLETE.md`
 - **Browser checks:** ✅ `scripts/workspace-browser-check.mjs` green (playwright + Chrome)
 - **CLI:** ✅ `review-pr`, `review-branch`, `compile`, `gates`, `detect`, `search`, `sandbox`, `skills` commands
@@ -58,4 +59,4 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 
 ## Next Action
 
-Run discovery to pick the next highest-value item: audit Phase 4 (observability — health checks, metrics, tracing) or audit Phase 2 refactors.
+Remaining product-goal gap: automatic app/project discovery — the workspace still requires projects to be added by hand. Next: `daemon/lib/project-discovery.mjs` (scan configured roots for git repos/apps) plus a "Detect apps" flow in the workspace sidebar.
