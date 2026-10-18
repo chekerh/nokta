@@ -108,6 +108,12 @@ test('a credential-bearing origin never leaks into the collected context', async
 test('resolveRepo reports no-origin for a directory that is not a git repo', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-nogit-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  try {
+    execFileSync('git', ['--version'], { stdio: 'ignore' });
+  } catch {
+    t.skip('git unavailable');
+    return;
+  }
   const resolved = await resolveRepo(dir);
   assert.equal(resolved.repo, null);
   assert.equal(resolved.reason, 'no-origin');

@@ -62,7 +62,9 @@ export function createWorkspaceApp(service, { inspectTooling = inspectProjectToo
         return entry.value;
       })
       .catch(error => {
-        inspections.delete(rootPath);
+        // Only clear the entry this failure belongs to; a newer inspection for
+        // the same path (after TTL/eviction) must not be dropped by a stale one.
+        if (inspections.get(rootPath) === entry) inspections.delete(rootPath);
         throw error;
       });
     inspections.set(rootPath, entry);

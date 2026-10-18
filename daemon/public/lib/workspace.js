@@ -137,9 +137,14 @@ const RETRY_MS = 60000;
 
 // The prompt caches the task list it was built from; when the list moves on
 // (an autopilot cycle finishing, a repair landing) the cached prompt is stale
-// and must be rebuilt even though nobody invalidated it explicitly.
+// and must be rebuilt even though nobody invalidated it explicitly. The status
+// histogram is exact for every state the prompt's task list can reflect.
 function projectFingerprint(project) {
-  return project ? `${project.status}:${project.tasks.length}:${project.tasks.filter(task => task.status === 'done').length}` : '';
+  return project ? `${project.status}:${project.tasks.map(task => task.status).sort().join(',')}` : '';
+}
+
+function fingerprintOf(id) {
+  return projectFingerprint(projects.find(project => project.id === id));
 }
 
 function panelsBusy(message) {
@@ -200,8 +205,12 @@ async function loadContext(id) {
     failures.delete(key);
     if (selected === id) renderContext(id, result);
   } catch (error) {
-    failures.set(key, { at: Date.now(), message: error.message });
-    if (selected === id) { shown.context = id; panelError(error.message); }
+    // A failure from before an invalidation belongs to a superseded request and
+    // must not impose its backoff on the project the user just acted on.
+    if ((generations.get(id) || 0) === generation) {
+      failures.set(key, { at: Date.now(), message: error.message });
+      if (selected === id) { shown.context = id; panelError(error.message); }
+    }
   } finally { inFlight.delete(key); }
 }
 
@@ -256,7 +265,7 @@ async function loadPrompt(id) {
   const key = `pr:${id}`;
   if (promptCache.has(id)) {
     const entry = promptCache.get(id);
-    if (entry.fingerprint === projectFingerprint(current())) {
+    if (entry.fingerprint === fingerprintOf(id)) {
       if (shown.prompt !== id) renderPrompt(id, entry.text);
       return;
     }
@@ -264,24 +273,32 @@ async function loadPrompt(id) {
   }
   // Switched away and back mid-flight: never leave another project's prompt
   // visible (and copyable) under this project — re-assert the busy state.
-  if (inFlight.has(key)) { promptBusy(id); return; }
+  if (inFlight.has(key)) {
+    if (shown.prompt !== id) promptBusy(id);
+    return;
+  }
   const failure = failures.get(key);
   if (failure && Date.now() - failure.at < RETRY_MS) {
     if (shown.prompt !== id) promptError(id, `Could not generate prompt: ${failure.message}`);
     return;
   }
   inFlight.add(key);
-  const fingerprint = projectFingerprint(current());
+  const fingerprint = fingerprintOf(id);
   const generation = generations.get(id) || 0;
-  promptBusy(id);
+  // A same-project refresh keeps its (still valid) prompt on screen instead of
+  // flashing the busy state; the cross-project case always has a stale marker.
+  if (shown.prompt !== id) promptBusy(id);
   try {
     const result = await api(`/projects/${id}/prompt`);
     if ((generations.get(id) || 0) === generation) promptCache.set(id, { text: result.prompt, fingerprint });
     failures.delete(key);
     if (selected === id) renderPrompt(id, result.prompt);
   } catch (error) {
-    failures.set(key, { at: Date.now(), message: error.message });
-    if (selected === id) promptError(id, `Could not generate prompt: ${error.message}`);
+    // A failure from before an invalidation belongs to a superseded request.
+    if ((generations.get(id) || 0) === generation) {
+      failures.set(key, { at: Date.now(), message: error.message });
+      if (selected === id) promptError(id, `Could not generate prompt: ${error.message}`);
+    }
   } finally { inFlight.delete(key); }
 }
 
@@ -385,7 +402,7 @@ function renderTask(id) {
     const retry = element('button', 'Move back to ready', 'button secondary');
     retry.disabled = busy(project);
     retry.addEventListener('click', async () => {
-      try { await api(`/projects/${project.id}/tasks/${id}/retry`, 'POST'); $('task-dialog').close(); await refresh(); }
+      try { await api(`/projects/${project.id}/tasks/${id}/retry`, 'POST'); invalidateContext(project.id); $('task-dialog').close(); await refresh(); }
       catch (error) { notice(error.message); }
     });
     content.append(retry);
