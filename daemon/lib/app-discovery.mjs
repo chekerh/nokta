@@ -32,9 +32,19 @@ const NEVER_PROJECTS = new Set(['Library', 'Applications', 'Music', 'Movies', 'P
 
 // Roots are comma-separated so a machine can opt into scanning only the
 // folders that hold code; without configuration the home directory is scanned.
-export function defaultRoots(env = process.env) {
+// A root the user configured is explicitly chosen and may be reported as an app
+// itself; the implicit home directory may only be walked, because it is often a
+// dotfiles repository that still needs searching. `scanRoots` returns both
+// decisions from one read of the environment so callers cannot disagree.
+export function scanRoots(env = process.env) {
   const configured = String(env.NOKTA_APP_DISCOVERY_ROOTS || '').split(',').map(part => part.trim()).filter(Boolean);
-  return configured.length ? configured : [env.HOME || env.USERPROFILE || os.homedir()];
+  return configured.length
+    ? { roots: configured, includeRoots: true }
+    : { roots: [env.HOME || env.USERPROFILE || os.homedir()], includeRoots: false };
+}
+
+export function defaultRoots(env = process.env) {
+  return scanRoots(env).roots;
 }
 
 function budget(value, fallback, max) {

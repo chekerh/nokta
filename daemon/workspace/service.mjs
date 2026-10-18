@@ -8,6 +8,11 @@ import { LocalSkills } from './skills.mjs';
 const clone = value => JSON.parse(JSON.stringify(value));
 const now = () => new Date().toISOString();
 function problem(message, status = 400) { return Object.assign(new Error(message), { status }); }
+// Two folders cannot both be registered when one contains the other; the
+// workspace scan reports the same relation, so the rule lives in one place.
+export function overlapsRoot(one, other) {
+  return one === other || one.startsWith(other + path.sep) || other.startsWith(one + path.sep);
+}
 function text(value, name, max = 4000) {
   if (typeof value !== 'string' || !value.trim() || value.length > max) throw problem(`${name} is required (maximum ${max} characters)`);
   return value.trim();
@@ -80,7 +85,7 @@ export class WorkspaceService {
       rootPath = await fs.realpath(requested);
       if (!(await fs.stat(rootPath)).isDirectory()) throw new Error();
     } catch { throw problem('Project folder does not exist or is not readable'); }
-    if (this.state.projects.some(p => p.rootPath === rootPath || p.rootPath.startsWith(rootPath + path.sep) || rootPath.startsWith(p.rootPath + path.sep))) throw problem('This folder or an overlapping project is already registered', 409);
+    if (this.state.projects.some(project => overlapsRoot(project.rootPath, rootPath))) throw problem('This folder or an overlapping project is already registered', 409);
     const config = settings(input);
     const project = { id: randomUUID(), name, goal, rootPath, ...config, status: 'idle', enabled: false, tasks: [], activity: [], createdAt: now(), remaining: 0 };
     this.state.projects.push(project);

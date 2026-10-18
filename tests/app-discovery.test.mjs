@@ -41,14 +41,14 @@ test('finds app folders by repository or manifest evidence', async t => {
 test('does not descend into a project, and skips dependency and build folders', async t => {
   const root = await fixture({
     'app/package.json': '{}',
-    'app/packages/inner/package.json': '{}',
+    'app/child/package.json': '{}',
     'app/node_modules/dep/package.json': '{}',
     'node_modules/top/package.json': '{}',
     'dist/built/package.json': '{}',
   });
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const result = await discoverApps({ roots: [root] });
-  assert.deepEqual(names(result), ['app']);
+  assert.deepEqual(names(result), ['app'], 'a matched project is not walked, so its child is not a second app');
 });
 
 test('respects the depth budget', async t => {
@@ -69,10 +69,11 @@ test('never treats the scan root itself as a candidate', async t => {
 });
 
 test('reports a configured root that is itself an app, and nested roots once', async t => {
-  const root = await fixture({ 'outer/inner/package.json': '{}', 'outer/inner/vendor/deep/package.json': '{}' });
+  const root = await fixture({ 'outer/inner/package.json': '{}', 'outer/inner/child/package.json': '{}' });
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const outer = path.join(root, 'outer');
   const inner = path.join(root, 'outer', 'inner');
+  const child = path.join(inner, 'child');
   const inside = result => result.candidates.map(candidate => candidate.path);
 
   // A root the user pointed at is the app they asked for, and a matched root
@@ -80,8 +81,9 @@ test('reports a configured root that is itself an app, and nested roots once', a
   assert.deepEqual(inside(await discoverApps({ roots: [inner], includeRoots: true })), [inner]);
   assert.deepEqual(inside(await discoverApps({ roots: [outer], includeRoots: true })), [inner]);
   // Without includeRoots a root is only a place to search — the implicit home
-  // directory is frequently a dotfiles repository and must still be walked.
-  assert.deepEqual(inside(await discoverApps({ roots: [inner] })), []);
+  // directory is frequently a dotfiles repository and must still be walked, so
+  // the app below the root is what gets reported.
+  assert.deepEqual(inside(await discoverApps({ roots: [inner] })), [child]);
   // Overlapping roots report the app once, in either order.
   assert.deepEqual(inside(await discoverApps({ roots: [outer, inner], includeRoots: true })), [inner]);
   assert.deepEqual(inside(await discoverApps({ roots: [inner, outer], includeRoots: true })), [inner]);
@@ -109,17 +111,20 @@ test('stops early on the directory budget and reports how far it got', async t =
   assert.equal(result.truncated, true);
 });
 
-test('never follows a symlink, so a loop in the tree cannot trap the walk', async t => {
+test('never follows a symlink, in or out of the tree', async t => {
   const root = await fixture({ 'app/package.json': '{}', 'plain/readme.md': '' });
+  const outside = await fixture({ 'linked-app/package.json': '{}' });
   t.after(() => fs.rm(root, { recursive: true, force: true }));
+  t.after(() => fs.rm(outside, { recursive: true, force: true }));
   try {
     await fs.symlink(root, path.join(root, 'plain', 'loop'), 'dir');
+    await fs.symlink(path.join(outside, 'linked-app'), path.join(root, 'plain', 'linked'), 'dir');
   } catch {
     t.skip('symlinks unavailable');
     return;
   }
   const result = await discoverApps({ roots: [root], maxDirs: 50 });
-  assert.deepEqual(names(result), ['app']);
+  assert.deepEqual(names(result), ['app'], 'a symlinked folder is neither followed nor reported');
 });
 
 test('skips a folder it cannot read instead of failing the scan', async t => {

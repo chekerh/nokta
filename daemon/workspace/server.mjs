@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspectProjectTooling, detectProjectTools } from '../lib/tool-detector.mjs';
 import { collectGitHubContext } from '../lib/github-context.mjs';
-import { discoverApps } from '../lib/app-discovery.mjs';
+import { discoverApps, scanRoots } from '../lib/app-discovery.mjs';
+import { overlapsRoot } from './service.mjs';
 import { buildAgentPrompt } from '../lib/prompt-builder.mjs';
 
 export function localOnly(req, res, next) {
@@ -31,18 +32,16 @@ export function createWorkspaceApp(service, { inspectTooling = inspectProjectToo
   });
   // Scan the configured roots (home by default) for folders that look like
   // apps, so a project can be added without hand-typing its path. Read-only:
-  // the answer marks which candidates are already registered. A configured
-  // root may itself be an app; the implicit home directory may not, because
-  // it is often a dotfiles repository that still needs walking.
+  // the answer marks which candidates are already registered.
   app.get('/api/workspace/discover', async (_req, res) => {
-    const { roots, candidates, scanned, truncated } = await discover({ includeRoots: Boolean(process.env.NOKTA_APP_DISCOVERY_ROOTS) });
+    const { roots, includeRoots } = scanRoots();
+    const { roots: resolvedRoots, candidates, scanned, truncated } = await discover({ roots, includeRoots });
     const projects = service.snapshot().projects;
-    const overlaps = (one, other) => one === other || one.startsWith(other + path.sep) || other.startsWith(one + path.sep);
     const apps = [];
     for (const candidate of candidates) {
       const { primary } = await detectProjectTools(candidate.path);
       const exact = projects.find(project => project.rootPath === candidate.path);
-      const nested = exact ? null : projects.find(project => overlaps(project.rootPath, candidate.path));
+      const nested = exact ? null : projects.find(project => overlapsRoot(project.rootPath, candidate.path));
       apps.push({
         ...candidate,
         agent: primary ? primary.name : null,
@@ -50,7 +49,7 @@ export function createWorkspaceApp(service, { inspectTooling = inspectProjectToo
         overlaps: nested ? nested.name : null,
       });
     }
-    res.json({ roots, candidates: apps, scanned, truncated });
+    res.json({ roots: resolvedRoots, candidates: apps, scanned, truncated });
   });
   app.post('/api/workspace/projects', async (req, res) => res.status(201).json(await service.add(req.body)));
   app.patch('/api/workspace/projects/:id', async (req, res) => res.json(await service.update(req.params.id, req.body)));
