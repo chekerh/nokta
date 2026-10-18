@@ -3,8 +3,8 @@
 ## Current Loop
 
 - **Phase:** DOCUMENTING → PERSISTING → SELECTING_NEXT
-- **Completed (2026-10-08 → 2026-10-13):** Fleet tracking/discovery, review gates (rendered-UI + dialog semantics), sandbox stabilization, codebase audit, npm audit remediation, audit Phase 1 (npm scripts, SSE auth, pagination, zod body validation), audit Phase 3 (password reset, JWT key rotation, refresh tokens), audit Phase 4 Task 4.1 (per-dependency health checks), Task 4.2 (Prometheus metrics), Task 4.3 (request correlation ids)
-- **Validation:** Lint ✅ 0 errors · Tests ✅ 409/409 pass · npm audit ✅ 0 vulnerabilities
+- **Completed (2026-10-08 → 2026-10-18):** Fleet tracking/discovery, review gates (rendered-UI + dialog semantics), sandbox stabilization, codebase audit, npm audit remediation, audit Phase 1 (npm scripts, SSE auth, pagination, zod body validation), audit Phase 3 (password reset, JWT key rotation, refresh tokens), audit Phase 4 Task 4.1 (per-dependency health checks), Task 4.2 (Prometheus metrics), Task 4.3 (request correlation ids), product goal — agent awareness (TASK-022/023) and app discovery (TASK-024)
+- **Validation:** Lint ✅ 0 errors · Tests ✅ 434/434 pass · npm audit ✅ 0 vulnerabilities
 - **Next Task:** Audit Phase 4 Task 4.4 (TypeScript types from OpenAPI); Phase 2 remains
 
 ## Loop State Tracker
@@ -25,18 +25,19 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 
 - **In scope:** Remaining gap work from discovery, tests, docs, audit phases, merge readiness
 - **Out of scope:** None defined this cycle (Phase 1 + Phase 3 complete)
-- **Constraints:** Must pass lint, 409/409 tests, and npm audit (0 vulnerabilities)
+- **Constraints:** Must pass lint, 434/434 tests, and npm audit (0 vulnerabilities)
 
 ## Validation Status
 
 - **Lint:** ✅ Pass (0 errors, 0 warnings)
-- **Tests:** ✅ 420/420 pass across 47 files
+- **Tests:** ✅ 434/434 pass across 49 files
 - Product goal (agent-awareness) landed on `main` via PR #25 (`d15e9c8`, TASK-022): filesystem-only per-project agent detection + machine-wide installed agents (`tool-detector.mjs`), origin-resolving GitHub context with structured failure reasons (`github-context.mjs`), a pure plan+context→prompt renderer (`prompt-builder.mjs`), and agent/GitHub/prompt panels in the existing workspace UI backed by `GET /api/workspace/projects/:id/{context,prompt}`.
 - **Daemon:** ✅ Starts and responds to health check
 - **npm audit:** ✅ 0 vulnerabilities (proxy-addr, qs, js-yaml, brace-expansion patched)
 - **Fleet:** ✅ Track/discover/plan/queue live opencode + freebuff sessions
 - **Review gates:** ✅ Rendered-UI gate, dialog semantics gate, sandbox useDocker=false
 - Agent-awareness review fixes (TASK-023) landed on `main` via PR #26 (`b07a5a0`): per-project panel state machine (in-flight guards, marker moves, failure backoff, generation counter, prompt fingerprint), shared TTL-cached inspection for `/context` + `/prompt`, shared `AGENTS.md` evidence at weight 1 with tool-specific `primary`, credentials stripped at source, POSIX-quoted check commands, and a mutation-tested browser race check.
+- Product goal (app discovery, TASK-024) landed on `main` via PR #27 (`edbf156`): `daemon/lib/app-discovery.mjs` (bounded, symlink-proof, depth-limited scan of configured roots reporting git/manifest apps) + read-only `GET /api/workspace/discover` (agent, `added`, `overlaps`) + a "Detect apps" dialog that pre-fills the project form; overlap rule shared with the service; documented `NOKTA_APP_DISCOVERY_*` env vars. The stated product goal (detect my apps → detect the agent building each → GitHub context → generated prompt → all in one workspace) now runs end to end for both registered and newly-found apps.
 - **Audit:** ✅ 12 dead files removed, 9 audit docs in `audit/` + `AUDIT-COMPLETE.md`
 - **Browser checks:** ✅ `scripts/workspace-browser-check.mjs` green (playwright + Chrome)
 - **CLI:** ✅ `review-pr`, `review-branch`, `compile`, `gates`, `detect`, `search`, `sandbox`, `skills` commands
@@ -56,7 +57,9 @@ Land audit remediation from `audit/ACTION-PLAN.md` on `main` via PR (Phase 1 and
 - Audit Phase 4 Task 4.2 Prometheus metrics landed on `feat/prometheus-metrics` (TASK-020): `daemon/lib/metrics.mjs` (prom-client) exposes HTTP latency/requests/errors, active-runs and queue-length gauges, and an LLM token counter fed by `CostTracker`; `/metrics` requires the API key when set and is rate-limit exempt. Hardened after an independent code review (auth on `/metrics`, SSE duration, abort labelling, defensive gauge reads).
 - Audit Phase 4 Task 4.3 request correlation ids landed on `feat/distributed-tracing` (TASK-021): `request-id.mjs` holds an `AsyncLocalStorage` context (sanitised/echoed `X-Request-Id`, `currentRequestId()`, `correlationHeaders()`); the logger stamps every line with the id; providers, the executor's GitHub call and discovery propagate it; and the job-queue carries it across the worker process boundary. Hardened after an independent code review (cross-process id was lost → now threaded via `NOKTA_JOB_REQUEST_ID`).
 - Deferred from the TASK-018 review (follow-ups, not blockers): move the refresh token out of `localStorage` into an HttpOnly/SameSite cookie (M4), and make `/auth/register`'s duplicate-email response generic to close the last enumeration vector (L4).
+- **Product goal (2026-10-18):** the full loop — find my apps, detect the coding agent building each, pull that repo's GitHub context, generate a paste-ready prompt for that agent, and show it all in the existing workspace — now runs end to end. `app-discovery.mjs` + `GET /api/workspace/discover` + the "Detect apps" dialog (TASK-024) closed the last manual step; a discovered app hands off to the same add-project form and then gets the same agent/context/prompt panels a registered project does. Both PRs (#25/#26/#27) landed after an independent review BLOCK → APPROVE and mutation-tested assertions.
+- Remaining from `audit/ACTION-PLAN.md`: Task 4.4 (TypeScript types generated from the OpenAPI spec) and Phase 2 (architecture refactoring: service container, orchestrator split) — both optional hardening, no user-facing gap.
 
 ## Next Action
 
-Remaining product-goal gap: automatic app/project discovery — the workspace still requires projects to be added by hand. Next: `daemon/lib/project-discovery.mjs` (scan configured roots for git repos/apps) plus a "Detect apps" flow in the workspace sidebar.
+Product goal complete; no open gap. Next candidates, in value order: (1) watch the scan roots so a newly-created repo appears in "Detect apps" without a manual refresh; (2) Act on a candidate directly (start a first autopilot run) rather than stopping at pre-filling the form; (3) Audit Phase 4 Task 4.4 and Phase 2 refactoring.
