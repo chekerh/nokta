@@ -2,8 +2,10 @@ import express from 'express';
 import helmet from 'helmet';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inspectProjectTooling } from '../lib/tool-detector.mjs';
+import { inspectProjectTooling, detectProjectTools } from '../lib/tool-detector.mjs';
 import { collectGitHubContext } from '../lib/github-context.mjs';
+import { discoverApps, scanRoots } from '../lib/app-discovery.mjs';
+import { overlapsRoot } from './service.mjs';
 import { buildAgentPrompt } from '../lib/prompt-builder.mjs';
 
 export function localOnly(req, res, next) {
@@ -15,7 +17,7 @@ export function localOnly(req, res, next) {
   next();
 }
 
-export function createWorkspaceApp(service, { inspectTooling = inspectProjectTooling, collectGitHub = collectGitHubContext } = {}) {
+export function createWorkspaceApp(service, { inspectTooling = inspectProjectTooling, collectGitHub = collectGitHubContext, discover = discoverApps } = {}) {
   const app = express();
   app.use(helmet({ contentSecurityPolicy: { directives: { 'script-src': ["'self'"], 'style-src': ["'self'"], 'connect-src': ["'self'"], 'upgrade-insecure-requests': null } } }));
   app.use(localOnly);
@@ -27,6 +29,27 @@ export function createWorkspaceApp(service, { inspectTooling = inspectProjectToo
     let skillsError = null;
     try { skills = await service.skills.inventory(); } catch (error) { skillsError = error.message; }
     res.json({ runners: [await service.runner.available()], skillsRoot: service.skills.root, skillsCount: skills.length, skillsError });
+  });
+  // Scan the configured roots (home by default) for folders that look like
+  // apps, so a project can be added without hand-typing its path. Read-only:
+  // the answer marks which candidates are already registered.
+  app.get('/api/workspace/discover', async (_req, res) => {
+    const { roots, includeRoots } = scanRoots();
+    const { roots: resolvedRoots, candidates, scanned, truncated } = await discover({ roots, includeRoots });
+    const projects = service.snapshot().projects;
+    const apps = [];
+    for (const candidate of candidates) {
+      const { primary } = await detectProjectTools(candidate.path);
+      const exact = projects.find(project => project.rootPath === candidate.path);
+      const nested = exact ? null : projects.find(project => overlapsRoot(project.rootPath, candidate.path));
+      apps.push({
+        ...candidate,
+        agent: primary ? primary.name : null,
+        added: Boolean(exact),
+        overlaps: nested ? nested.name : null,
+      });
+    }
+    res.json({ roots: resolvedRoots, candidates: apps, scanned, truncated });
   });
   app.post('/api/workspace/projects', async (req, res) => res.status(201).json(await service.add(req.body)));
   app.patch('/api/workspace/projects/:id', async (req, res) => res.json(await service.update(req.params.id, req.body)));
