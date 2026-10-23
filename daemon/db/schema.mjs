@@ -302,6 +302,24 @@ const MIGRATIONS = [
   DROP TABLE IF EXISTS refresh_tokens;
   `,
   },
+  // v6: Project registry for agent preferences and Linear linkage
+  {
+    up: `
+  CREATE TABLE IF NOT EXISTS project_registry (
+    project_root TEXT PRIMARY KEY,
+    last_adapter TEXT NOT NULL DEFAULT 'opencode',
+    preferred_models TEXT NOT NULL DEFAULT '[]',
+    stack_signals TEXT NOT NULL DEFAULT '[]',
+    trail_path TEXT NOT NULL DEFAULT '',
+    linked_linear_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  `,
+    down: `
+  DROP TABLE IF EXISTS project_registry;
+  `,
+  },
 ];
 
 export function migrate() {

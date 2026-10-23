@@ -1608,6 +1608,19 @@
             </div>
           </div>
 
+          <!-- Panel: Agent Monitor -->
+          <div class="panel" id="panel-agent-monitor">
+            <div class="card">
+              <div class="card-title">⚡ Agent Monitor</div>
+              <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap">
+                <button class="btn btn-sm btn-ghost" onclick="refreshAgentMonitor()">↻ Refresh</button>
+                <button class="btn btn-sm btn-ghost" onclick="exportAgentMonitor()">📥 Export</button>
+              </div>
+              <select id="projectSelect" style="flex: 1; min-width: 140px; height: 28px; font-size: 0.8rem"></select>
+              <div style="margin-top: 14px" id="agentMonitorContainer"></div>
+            </div>
+          </div>
+
           <!-- Panel: Settings -->
           <div class="panel" id="panel-settings">
             <div class="card">
@@ -3304,6 +3317,7 @@
           connectAgentEvents();
           populateModels();
           setTimeout(refreshKnownSources, 500);
+          loadAgentMonitorProjects();
           if (window.location.hash) {
             var targetTab = window.location.hash.replace('#', '');
             if (targetTab && panels[targetTab]) window.switchTab(targetTab);
@@ -3517,7 +3531,171 @@
           }
         }
 
-        init();
+          // Agent Monitor functions
+  async function refreshAgentMonitor() {
+    const projectSelect = document.getElementById("projectSelect");
+    const container = document.getElementById("agentMonitorContainer");
+    if (!projectSelect || !container) return;
+    
+    const projectRoot = projectSelect.value;
+    if (!projectRoot) {
+      container.innerHTML = "<div style="color:var(--text-secondary)">Select a project to view agents</div>";
+      return;
+    }
+    
+    container.innerHTML = "<div style="color:var(--text-secondary);text-align:center;padding:20px">Loading agents...</div>";
+    
+    try {
+      const resp = await api("GET", "/api/v1/agent-runs?projectRoot=" + encodeURIComponent(projectRoot));
+      if (!resp.runs || resp.runs.length === 0) {
+        container.innerHTML = "<div style="color:var(--text-secondary);text-align:center;padding:20px">No agent runs found for this project</div>";
+        return;
+      }
+      
+      let html = "";
+      resp.runs.forEach(function(run) {
+        const status = run.status || "unknown";
+        const statusClass = {
+          running: "status-running",
+          completed: "status-completed",
+          failed: "status-failed",
+          queued: "status-queued",
+          created: "status-created"
+        }[status] || "status-unknown";
+        
+        const goal = run.goal ? (run.goal.length > 80 ? run.goal.slice(0, 80) + "..." : run.goal) : "No goal";
+        const elapsed = run.startedAt ? Math.round((Date.now() - new Date(run.startedAt).getTime()) / 1000) : 0;
+        const elapsedStr = elapsed > 60 ? Math.floor(elapsed/60) + "m " + (elapsed%60) + "s" : elapsed + "s";
+        const tokens = run.tokensUsed || 0;
+        const cost = run.costUsd || 0;
+        
+        html += "<div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;background:var(--surface-2)">"
+          + "<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">"
+          + "<span class="status-dot " + statusClass + " style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:" + (status === "running" ? "#22c55e" : status === "completed" ? "#8b5cf6" : status === "failed" ? "#ef4444" : "#fbbf24") + ""></span>" + status.toUpperCase() + "</span>"
+          + "<span style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary)">" + (run.id || "").slice(0, 12) + "</span>"
+          + "</div>"
+          + "<div style="font-weight:600;margin-bottom:4px;color:var(--accent)">" + escHtml(goal) + "</div>"
+          + "<div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:8px">"
+          + "Provider: " + escHtml(run.provider || "unknown") + " · Model: " + escHtml(run.model || "unknown")
+          + "</div>"
+          + "<div style="display:flex;gap:16px;font-size:0.75rem;color:var(--text-secondary);flex-wrap:wrap">"
+          + "<span>⏱ " + elapsedStr + "</span>"
+          + "<span>🔤 " + tokens.toLocaleString() + " tokens</span>"
+          + "<span>💰 $" + cost.toFixed(4) + "</span>"
+          + "</div>"
+          + "<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">"
+          + "<button class="btn btn-sm btn-ghost" onclick="openAgentRun(\"" + run.id + "\")">Open Details</button>"
+          + (status === "running" ? "<button class="btn btn-sm btn-ghost" onclick="cancelAgentRun(\"" + run.id + "\")">Cancel</button>" : "")
+          + (status === "running" ? "<button class="btn btn-sm btn-yellow" onclick="approveAgentRun(\"" + run.id + "\")">Approve</button>" : "")
+          + (status === "running" ? "<button class="btn btn-sm btn-red" onclick="rejectAgentRun(\"" + run.id + "\")">Reject</button>" : "")
+          + "</div>"
+          + "</div>";
+      });
+      container.innerHTML = html;
+    } catch (e) {
+      container.innerHTML = "<div class="error-banner">Failed to load agents: " + escHtml(e.message || "Unknown error") + "</div>";
+    }
+  }
+
+  async function exportAgentMonitor() {
+    const projectSelect = document.getElementById("projectSelect");
+    if (!projectSelect) return;
+    
+    const projectRoot = projectSelect.value;
+    if (!projectRoot) {
+      alert("Select a project first");
+      return;
+    }
+    
+    try {
+      const resp = await api("GET", "/api/v1/agent-runs?projectRoot=" + encodeURIComponent(projectRoot) + "&limit=1000");
+      const data = {
+        projectRoot,
+        exportedAt: new Date().toISOString(),
+        runs: resp.runs || []
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "agent-monitor-" + projectRoot.split("/").pop() + "-" + Date.now() + ".json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Export failed: " + (e.message || "Unknown error"));
+    }
+  }
+
+  async function openAgentRun(runId) {
+    window.location.href = "/workspace.html?run=" + encodeURIComponent(runId);
+  }
+
+  async function cancelAgentRun(runId) {
+    if (!confirm("Cancel this agent run?")) return;
+    try {
+      await api("POST", "/api/v1/agent-runs/" + runId + "/cancel");
+      refreshAgentMonitor();
+    } catch (e) {
+      alert("Cancel failed: " + (e.message || "Unknown error"));
+    }
+  }
+
+  async function approveAgentRun(runId) {
+    try {
+      await api("POST", "/api/v1/agent-runs/" + runId + "/approve");
+      refreshAgentMonitor();
+    } catch (e) {
+      alert("Approve failed: " + (e.message || "Unknown error"));
+    }
+  }
+
+  async function rejectAgentRun(runId) {
+    if (!confirm("Reject this agent run? This will cancel the run and flag it for review.")) return;
+    try {
+      await api("POST", "/api/v1/agent-runs/" + runId + "/reject");
+      refreshAgentMonitor();
+    } catch (e) {
+      alert("Reject failed: " + (e.message || "Unknown error"));
+    }
+  }
+
+  // Populate project select with available projects
+  async function loadAgentMonitorProjects() {
+    const projectSelect = document.getElementById("projectSelect");
+    if (!projectSelect) return;
+    
+    try {
+      const resp = await api("GET", "/api/v1/projects");
+      if (resp.projects && resp.projects.length > 0) {
+        let html = "<option value="">Select project...</option>";
+        resp.projects.forEach(function(p) {
+          html += "<option value="" + escHtml(p.rootPath) + "">" + escHtml(p.name) + " (" + escHtml(p.rootPath) + ")</option>";
+        });
+        projectSelect.innerHTML = html;
+        
+        // Auto-load first project
+        if (resp.projects[0]) {
+          projectSelect.value = resp.projects[0].rootPath;
+          refreshAgentMonitor();
+        }
+      } else {
+        projectSelect.innerHTML = "<option value="">No projects found</option>";
+      }
+    } catch (e) {
+      projectSelect.innerHTML = "<option value="">Error loading projects</option>";
+    }
+  }
+
+  // Expose functions on window for inline event handlers
+  window.refreshAgentMonitor = refreshAgentMonitor;
+  window.exportAgentMonitor = exportAgentMonitor;
+  window.openAgentRun = openAgentRun;
+  window.cancelAgentRun = cancelAgentRun;
+  window.approveAgentRun = approveAgentRun;
+  window.rejectAgentRun = rejectAgentRun;
+  window.loadAgentMonitorProjects = loadAgentMonitorProjects;
+
+  init();
       })();
     </script>
   </body>

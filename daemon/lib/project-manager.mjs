@@ -7,6 +7,7 @@ export class ProjectManager {
     this.activeProjectRoot = null;
     this.userId = options.userId || null;
     this.orgChart = new Map(); // projectRoot -> { name, description, trustScore, parentProject }
+    this.registry = new Map(); // projectRoot -> { lastAdapter, preferredModels, stackSignals, trailPath, linkedLinearId }
   }
 
   async addProject(userId, name, rootPath, techStack = 'unknown', parentProject = null) {
@@ -115,6 +116,53 @@ export class ProjectManager {
       trustScore: entry.trustScore,
       parentProject: entry.parentProject,
     }));
+  }
+
+  async registerProjectInRegistry(projectRoot, adapter, preferredModels, stackSignals, trailPath, linkedLinearId) {
+    const entry = this.registry.get(projectRoot);
+    if (entry) {
+      entry.lastAdapter = adapter;
+      entry.preferredModels = preferredModels || entry.preferredModels;
+      entry.stackSignals = stackSignals || entry.stackSignals;
+      entry.trailPath = trailPath || entry.trailPath;
+      entry.linkedLinearId = linkedLinearId || entry.linkedLinearId;
+    } else {
+      this.registry.set(projectRoot, { lastAdapter: adapter, preferredModels: preferredModels || [], stackSignals: stackSignals || [], trailPath: trailPath || '', linkedLinearId: linkedLinearId || '' });
+    }
+    try {
+      const stmt = prepare(
+        'INSERT INTO project_registry (project_root, last_adapter, preferred_models, stack_signals, trail_path, linked_linear_id) VALUES (?, ?, ?, ?, ?, ?)',
+      );
+      stmt.onConflict = 'DO UPDATE SET last_adapter = EXCLUDED.last_adapter, preferred_models = EXCLUDED.preferred_models, stack_signals = EXCLUDED.stack_signals, trail_path = EXCLUDED.trail_path, linked_linear_id = EXCLUDED.linked_linear_id, updated_at = CURRENT_TIMESTAMP';
+      stmt.run(projectRoot, adapter, JSON.stringify(preferredModels || []), JSON.stringify(stackSignals || []), trailPath || '', linkedLinearId || '');
+    } catch (e) {
+      this.log.warn(`Failed to persist registry for ${projectRoot}: ${e.message}`);
+    }
+  }
+
+  async updateProjectRegistry(projectRoot, adapter, preferredModels, stackSignals, trailPath, linkedLinearId) {
+    await this.registerProjectInRegistry(projectRoot, adapter, preferredModels, stackSignals, trailPath, linkedLinearId);
+  }
+
+  async getProjectRegistry(projectRoot) {
+    const entry = this.registry.get(projectRoot);
+    if (entry) return entry;
+    try {
+      const row = prepare('SELECT * FROM project_registry WHERE project_root = ?').get(projectRoot);
+      if (row) {
+        this.registry.set(projectRoot, {
+          lastAdapter: row.last_adapter,
+          preferredModels: row.preferred_models ? JSON.parse(row.preferred_models) : [],
+          stackSignals: row.stack_signals ? JSON.parse(row.stack_signals) : [],
+          trailPath: row.trail_path || '',
+          linkedLinearId: row.linked_linear_id || '',
+        });
+        return this.registry.get(projectRoot);
+      }
+    } catch (e) {
+      this.log.warn(`Failed to fetch registry from DB for ${projectRoot}: ${e.message}`);
+    }
+    return {};
   }
 
   async routeAIRequest(projectRoot, goal, options = {}) {

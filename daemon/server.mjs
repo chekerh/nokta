@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { ServiceContainer } from './lib/container.mjs';
 import { ProviderManager } from './lib/provider-manager.mjs';
 import { ChatHandler } from './lib/chat-handler.mjs';
 import { CostTracker } from './lib/cost-tracker.mjs';
@@ -25,9 +26,13 @@ import { rateLimit, getAllProviderBucketStats } from './lib/rate-limit.mjs';
 import { registerSkillRoutes } from './routes/skills.mjs';
 import { registerPlannerRoutes } from './routes/planner.mjs';
 import { registerFleetRoutes } from './routes/fleet.mjs';
+import { setupContinuousLearningV2 } from './lib/continuous-learning-v2/index.mjs';
+import { registerSkillEvolutionRoutes } from './routes/skill-evolution.mjs';
 import { FleetTransport } from './lib/fleet.mjs';
 import { registerAgentRunRoutes } from './routes/agent-runs.mjs';
 import { registerUiUxRoutes } from './routes/uiux.mjs';
+import { registerAgentLaunchRoutes } from './routes/agent-launch.mjs';
+import { registerLinearRoutes } from './routes/linear.mjs';
 import { SprintEngine } from './lib/sprint-engine.mjs';
 import { AgentOrchestrator } from './agent/orchestrator.mjs';
 import { AutoWatcher } from './lib/auto-watcher.mjs';
@@ -47,7 +52,6 @@ import { registerProjectRoutes } from './routes/projects.mjs';
 import { registerBrainRoutes } from './routes/brain.mjs';
 import { registerAdversarialRoutes } from './routes/adversarial.mjs';
 import { registerSandboxRoutes } from './routes/sandbox.mjs';
-import { registerSkillEvolutionRoutes } from './routes/skill-evolution.mjs';
 import { metricsMiddleware, makeMetricsHandler, setGaugeSource, recordLlmTokens } from './lib/metrics.mjs';
 
 export async function createServer(options = {}) {
@@ -55,7 +59,25 @@ export async function createServer(options = {}) {
   const projectRoot = options.projectRoot || process.cwd();
   const log = options.log || logger;
 
+  // Initialize service container for dependency injection
+  const container = new ServiceContainer({ log, projectRoot });
+
+  // Register all services with the container
+  container.register('providerManager', (c) => new ProviderManager({ log: c.log }));
+  container.register('chatHandler', (c) => new ChatHandler(
+    container.get('providerManager'), { projectRoot, log: c.log }
+  ));
+  container.register('costTracker', (c) => new CostTracker({
+    onTokens: (provider, tokensIn, tokensOut) => {
+      recordLlmTokens(provider, 'input', tokensIn);
+      recordLlmTokens(provider, 'output', tokensOut);
+    },
+  }));
+  container.register('gateKeeper', (c) => new GateKeeper());
+  container.register('decisionEngine', (c) => new DecisionEngine(projectRoot, { log: c.log }));
+
   const app = express();
+
   // Trust X-Forwarded-For only when the operator opts in (NOKTA_TRUST_PROXY=1).
   // Default is off so a client cannot spoof the source IP used for rate
   // limiting by setting the header directly. Set it when behind a real
@@ -128,6 +150,13 @@ export async function createServer(options = {}) {
     }),
   );
 
+  // Initialize service container resolved services
+  const providerManager = container.get('providerManager');
+  const chatHandler = container.get('chatHandler');
+  const costTracker = container.get('costTracker');
+  const gateKeeper = container.get('gateKeeper');
+  const decisionEngine = container.get('decisionEngine');
+
   migrate();
 
   loadBlacklist();
@@ -137,18 +166,9 @@ export async function createServer(options = {}) {
   registerAuthRoutes(app);
   trackRoute('auth');
 
-  const providerManager = new ProviderManager({ log });
+  // Initialize provider manager defaults
   await providerManager.initDefaults();
   providerManager.health().catch(() => {});
-
-  const costTracker = new CostTracker({
-    onTokens: (provider, tokensIn, tokensOut) => {
-      recordLlmTokens(provider, 'input', tokensIn);
-      recordLlmTokens(provider, 'output', tokensOut);
-    },
-  });
-  const gateKeeper = new GateKeeper();
-  const chatHandler = new ChatHandler(providerManager, { projectRoot, log, costTracker, gateKeeper });
 
   registerChatRoutes(app, chatHandler, providerManager);
   trackRoute('chat');
@@ -213,10 +233,13 @@ export async function createServer(options = {}) {
   registerSkillEvolutionRoutes(app, projectRoot, log);
   trackRoute('skill-evolution');
 
-  const decisionEngine = new DecisionEngine(projectRoot, { log });
+  // Initialize continuous-learning-v2 hook integration and instincts storage
+  setupContinuousLearningV2({ projectRoot, log });
 
   // decisionEngine must be constructed before SprintEngine — SprintEngine keeps the
   // reference at construction time, and every decision-link method hard-fails without it.
+  // Already resolved from container above.
+
   const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler, decisionEngine });
   registerPlannerRoutes(app, sprintEngine);
   trackRoute('planner');
@@ -234,6 +257,8 @@ export async function createServer(options = {}) {
   }));
   registerAgentRunRoutes(app, orchestrator, log, jobQueue);
   registerAgentRoutes(app, providerManager, log, orchestrator, jobQueue);
+  registerAgentLaunchRoutes(app, projectManager, orchestrator);
+  registerLinearRoutes(app, projectManager, orchestrator, log);
   trackRoute('agent-runs');
 
   // Autonomous file watcher — watches, updates sprints, and creates agent runs.
@@ -299,5 +324,5 @@ export async function createServer(options = {}) {
     });
   });
 
-  return { app, providerManager, chatHandler, sprintEngine, port };
+  return { app, providerManager, chatHandler, sprintEngine, port, container };
 }
