@@ -320,28 +320,23 @@ ${renderProjectContext(projectContext)}
 
 ${skillBlock}
 
-Additional request context: ${JSON.stringify(_context)}
-
 Produce the fewest steps that genuinely accomplish the goal. Prefer editing existing files. Do not invent directories or file types that are not present above.
 
 When the goal requires code changes, the plan MUST include, in order: a scope step naming the files/dirs to touch (before any edit), the edit steps, a shell step that runs the project's tests, and a final review step. A plan that edits without scope, or that never runs tests, is incomplete.`;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const result = await this.chatHandler.handleChat([{ role: 'user', content: prompt }], {
-          stream: false,
-          temperature: 0.3,
-        });
-        const content = (result.content || '').trim();
-        if (!content) throw new Error('empty model output');
-        const cleaned = content.replace(/```(?:json)?\n?/g, '').trim();
-        const steps = JSON.parse(cleaned);
-        const normalized = normalizeSteps(steps, null);
-        if (normalized && normalized.length) return normalized;
-        throw new Error('no valid steps');
-      } catch (err) {
-        this.log.warn(`generateSteps attempt ${attempt + 1} failed: ${err.message}`);
-      }
+    try {
+      const result = await this.chatHandler.handleChat([{ role: 'user', content: prompt }], {
+        stream: false,
+        temperature: 0.3,
+      });
+      const content = (result.content || '').trim();
+      if (!content) throw new Error('empty model output');
+      const cleaned = content.replace(/```(?:json)?\n?/g, '').trim();
+      const steps = JSON.parse(cleaned);
+      const normalized = normalizeSteps(steps, null);
+      if (normalized && normalized.length) return normalized;
+    } catch (err) {
+      this.log.warn(`generateSteps failed: ${err.message}`);
     }
 
     return this._generateMinimalEditSteps(goal);
