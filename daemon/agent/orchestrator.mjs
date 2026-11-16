@@ -12,6 +12,11 @@ export const STEP_TYPES = ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', '
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
+// Runs only the tests that reference changed source files, falling back to the
+// full suite when none match. Used by deterministic fallback plans.
+const CHANGED_TESTS_COMMAND =
+  'changed=$(git diff --name-only HEAD 2>/dev/null | grep -v "\\.test\\.mjs$" || true); tests=""; for s in $changed; do b=$(basename "$s" .mjs); for t in $(grep -rl "$b" tests 2>/dev/null); do tests="$tests $t"; done; done; tests=$(echo "$tests" | tr " " "\\n" | sort -u | tr "\\n" " "); if [ -n "$tests" ]; then for t in $tests; do node --test "$t" || exit 1; done; else npm test 2>/dev/null || echo "No test command found"; fi';
+
 // Model output is untrusted: it may omit "type", invent unknown types, or return
 // a non-array. Normalize to only executable steps so a malformed plan degrades
 // gracefully instead of corrupting the run row.
@@ -343,11 +348,8 @@ When the goal requires code changes, the plan MUST include, in order: a scope st
   }
 
   _extractGoalFile(goal) {
-    const m =
-      String(goal || '').match(/named\s+["']?([\w./-]+\.[a-zA-Z0-9]{1,5})["']?/i) ||
-      String(goal || '').match(/\b([\w./-]+\.[a-zA-Z0-9]{1,5})\b/);
-    const raw = m ? m[1] : '';
-    return raw.replace(/["',;:]+$/g, '').trim() || 'CHANGES.md';
+    const m = String(goal || '').match(/\b([\w./-]+\.[a-zA-Z0-9]{1,5})\b/);
+    return (m ? m[1] : '').replace(/["',;:]+$/g, '').trim() || 'CHANGES.md';
   }
 
   _generateDeterministicEditSteps(goal) {
@@ -368,7 +370,7 @@ When the goal requires code changes, the plan MUST include, in order: a scope st
       {
         type: 'shell',
         name: 'Run tests',
-        command: 'changed=$(git diff --name-only HEAD 2>/dev/null | grep -v "\\.test\\.mjs$" || true); tests=""; for s in $changed; do b=$(basename "$s" .mjs); for t in $(grep -rl "$b" tests 2>/dev/null); do tests="$tests $t"; done; done; tests=$(echo "$tests" | tr " " "\\n" | sort -u | tr "\\n" " "); if [ -n "$tests" ]; then for t in $tests; do node --test "$t" || exit 1; done; else npm test 2>/dev/null || echo "No test command found"; fi',
+        command: CHANGED_TESTS_COMMAND,
         ignoreFailure: true,
       },
       {
@@ -410,7 +412,7 @@ When the goal requires code changes, the plan MUST include, in order: a scope st
       {
         type: 'shell',
         name: 'Run tests',
-        command: 'changed=$(git diff --name-only HEAD 2>/dev/null | grep -v "\\.test\\.mjs$" || true); tests=""; for s in $changed; do b=$(basename "$s" .mjs); for t in $(grep -rl "$b" tests 2>/dev/null); do tests="$tests $t"; done; done; tests=$(echo "$tests" | tr " " "\\n" | sort -u | tr "\\n" " "); if [ -n "$tests" ]; then for t in $tests; do node --test "$t" || exit 1; done; else npm test 2>/dev/null || echo "No test command found"; fi',
+        command: CHANGED_TESTS_COMMAND,
         ignoreFailure: true,
       },
       {
