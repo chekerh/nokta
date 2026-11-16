@@ -289,7 +289,7 @@ export class AgentOrchestrator extends EventEmitter {
     }
 
     const [projectContext, skills] = await Promise.all([
-      buildProjectContext(this.projectRoot),
+      buildProjectContext(this.projectRoot, { maxFiles: 50, maxDepth: 2 }),
       this.skills.select(goal).catch(() => []),
     ]);
 
@@ -326,7 +326,7 @@ Produce the fewest steps that genuinely accomplish the goal. Prefer editing exis
 
 When the goal requires code changes, the plan MUST include, in order: a scope step naming the files/dirs to touch (before any edit), the edit steps, a shell step that runs the project's tests, and a final review step. A plan that edits without scope, or that never runs tests, is incomplete.`;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const result = await this.chatHandler.handleChat([{ role: 'user', content: prompt }], {
           stream: false,
