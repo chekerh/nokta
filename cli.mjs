@@ -832,6 +832,31 @@ async function cmdAgent(args) {
     return;
   }
 
+  if (sub === 'rollback') {
+    const runId = args[1];
+    if (!runId) {
+      console.error('Usage: nokta agent rollback <run-id>');
+      process.exit(1);
+    }
+    const { execFileSync } = await import('node:child_process');
+    let commit = '';
+    try {
+      commit = execFileSync('git', ['log', '--all', `--grep=nokta run ${runId}`, '-1', '--format=%H'], { encoding: 'utf8' }).trim();
+    } catch {}
+    if (!commit) {
+      console.error(`No commit found for run ${runId}.`);
+      process.exit(1);
+    }
+    try {
+      execFileSync('git', ['revert', '--no-edit', commit], { stdio: 'inherit' });
+      console.log(`Rolled back ${runId} (${commit.slice(0, 8)}).`);
+    } catch (err) {
+      console.error(`Rollback failed: ${err.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
   if (sub === 'clean') {
     const all = args.includes('--all');
     const { cleanStaleWorktrees } = await import('./daemon/agent/worktree.mjs');
@@ -842,7 +867,7 @@ async function cmdAgent(args) {
   }
 
   console.error(`Unknown agent subcommand: ${sub}`);
-  console.log('Usage: nokta agent [list|run|clean]');
+  console.log('Usage: nokta agent [list|run|clean|rollback]');
   process.exit(1);
 }
 
