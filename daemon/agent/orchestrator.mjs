@@ -152,6 +152,31 @@ export class AgentOrchestrator extends EventEmitter {
     return info;
   }
 
+  _finalizeWorktree(run, wtInfo) {
+    try {
+      const status = execFileSync('git', ['status', '--porcelain'], { cwd: wtInfo.path, encoding: 'utf8' }).trim();
+      if (!status) {
+        this.log.info('Worktree had no changes; nothing to merge.');
+        return;
+      }
+      const diff = execFileSync('git', ['diff', 'HEAD'], { cwd: wtInfo.path, encoding: 'utf8' });
+      this.log.info(`Worktree changes (merge with: git merge ${wtInfo.branch}):\n${diff}`);
+      if (process.env.NOKTA_AUTO_MERGE === 'true') {
+        execFileSync('git', ['add', '-A'], { cwd: wtInfo.path, stdio: 'ignore' });
+        execFileSync('git', ['commit', '-m', `nokta run ${run.id}`], { cwd: wtInfo.path, stdio: 'ignore' });
+        try {
+          execFileSync('git', ['merge', '--no-ff', wtInfo.branch, '-m', `Merge nokta run ${run.id}`], { cwd: this.projectRoot, stdio: 'pipe' });
+          this.log.info(`Merged worktree branch ${wtInfo.branch} into current branch`);
+        } catch {
+          try { execFileSync('git', ['merge', '--abort'], { cwd: this.projectRoot, stdio: 'ignore' }); } catch {}
+          this.log.warn('Could not auto-merge worktree; resolve manually.');
+        }
+      }
+    } catch (err) {
+      this.log.warn(`Worktree finalize failed: ${err.message}`);
+    }
+  }
+
   async executeRun(runId, userId = null) {
     await this.load();
     const run = this.getRun(runId, userId);
@@ -255,30 +280,7 @@ export class AgentOrchestrator extends EventEmitter {
     // on conflict, abort and print the diff for manual resolution.
     const wtInfo = run.metadata?.worktree;
     if (wtInfo?.path && wtInfo?.branch && run.status === 'completed') {
-      try {
-        const status = execFileSync('git', ['status', '--porcelain'], { cwd: wtInfo.path, encoding: 'utf8' }).trim();
-        if (!status) {
-          this.log.info('Worktree had no changes; nothing to merge.');
-        } else {
-          // Print the diff so edits are visible even when not auto-merged.
-          const diff = execFileSync('git', ['diff', 'HEAD'], { cwd: wtInfo.path, encoding: 'utf8' });
-          this.log.info(`Worktree changes (merge with: git merge ${wtInfo.branch}):\n${diff}`);
-
-          if (process.env.NOKTA_AUTO_MERGE === 'true') {
-            execFileSync('git', ['add', '-A'], { cwd: wtInfo.path, stdio: 'ignore' });
-            execFileSync('git', ['commit', '-m', `nokta run ${run.id}`], { cwd: wtInfo.path, stdio: 'ignore' });
-            try {
-              execFileSync('git', ['merge', '--no-ff', wtInfo.branch, '-m', `Merge nokta run ${run.id}`], { cwd: this.projectRoot, stdio: 'pipe' });
-              this.log.info(`Merged worktree branch ${wtInfo.branch} into current branch`);
-            } catch {
-              try { execFileSync('git', ['merge', '--abort'], { cwd: this.projectRoot, stdio: 'ignore' }); } catch {}
-              this.log.warn('Could not auto-merge worktree; resolve manually.');
-            }
-          }
-        }
-      } catch (err) {
-        this.log.warn(`Worktree finalize failed: ${err.message}`);
-      }
+      this._finalizeWorktree(run, wtInfo);
     }
 
     // An agent pack's output is its deliverable, and the run row is the only
