@@ -109,6 +109,34 @@ export function removeRunWorktree({ projectRoot, worktreePath, branch }) {
   return { ok: true };
 }
 
+/** Removes stale run worktrees older than maxAgeMs (default 24h). Pass all=true to remove every managed worktree. Returns { removed, kept }. */
+export function cleanStaleWorktrees(projectRoot, { maxAgeMs = 24 * 60 * 60 * 1000, all = false } = {}) {
+  const root = path.resolve(projectRoot);
+  const now = Date.now();
+  const entries = listRunWorktrees(root);
+  const removed = [];
+  const kept = [];
+  for (const entry of entries) {
+    let stale = all;
+    if (!stale) {
+      try {
+        const st = fs.statSync(entry.path);
+        stale = now - st.mtimeMs > maxAgeMs;
+      } catch {
+        stale = true;
+      }
+    }
+    if (stale) {
+      const res = removeRunWorktree({ projectRoot: root, worktreePath: entry.path, branch: entry.branch });
+      if (res.ok) removed.push(entry.runId);
+      else kept.push(entry.runId);
+    } else {
+      kept.push(entry.runId);
+    }
+  }
+  return { removed, kept };
+}
+
 /** Lists worktrees this module created, with their branch and HEAD state. */
 export function listRunWorktrees(projectRoot) {
   const root = path.resolve(projectRoot);

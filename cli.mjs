@@ -825,8 +825,17 @@ async function cmdAgent(args) {
     return;
   }
 
+  if (sub === 'clean') {
+    const all = args.includes('--all');
+    const { cleanStaleWorktrees } = await import('./daemon/agent/worktree.mjs');
+    const { removed, kept } = cleanStaleWorktrees(projectRoot, { all });
+    console.log(`Removed ${removed.length} worktree(s): ${removed.join(', ') || '(none)'}`);
+    if (kept.length) console.log(`Kept ${kept.length}: ${kept.join(', ')}`);
+    return;
+  }
+
   console.error(`Unknown agent subcommand: ${sub}`);
-  console.log('Usage: nokta agent [list|run]');
+  console.log('Usage: nokta agent [list|run|clean]');
   process.exit(1);
 }
 
