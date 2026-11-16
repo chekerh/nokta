@@ -5,6 +5,7 @@ import * as dbStorage from './db-storage.mjs';
 import { buildProjectContext, renderProjectContext } from './project-context.mjs';
 import { buildPackSteps, auditCitations } from './agent-pack.mjs';
 import { execFileSync } from 'node:child_process';
+import { findSecretLikePaths } from '../lib/secret-paths.mjs';
 import { createRunWorktree } from './worktree.mjs';
 import { LocalSkills } from '../workspace/skills.mjs';
 import { NOOP_LOG } from '../lib/route-utils.mjs';
@@ -157,6 +158,11 @@ export class AgentOrchestrator extends EventEmitter {
       const status = execFileSync('git', ['status', '--porcelain'], { cwd: wtInfo.path, encoding: 'utf8' }).trim();
       if (!status) {
         this.log.info('Worktree had no changes; nothing to merge.');
+        return;
+      }
+      const secrets = findSecretLikePaths(status);
+      if (secrets.length) {
+        this.log.warn(`Refusing to commit: secret-like files detected (${secrets.join(', ')}).`);
         return;
       }
       const diff = execFileSync('git', ['diff', 'HEAD'], { cwd: wtInfo.path, encoding: 'utf8' });
