@@ -693,6 +693,15 @@ async function cmdDoctor(_args) {
   }
 }
 
+async function pickHealthyProvider(providerManager) {
+  const health = await providerManager.health();
+  const preference = ['ollama', 'openai', 'claude', 'openrouter'];
+  for (const id of preference) {
+    if (health[id]?.status === 'ok') return id;
+  }
+  return Object.keys(health).find((id) => health[id]?.status === 'ok') || null;
+}
+
 async function cmdDemo(_args) {
   const projectRoot = process.cwd();
   const { ProviderManager } = await import('./daemon/lib/provider-manager.mjs');
@@ -706,18 +715,8 @@ async function cmdDemo(_args) {
 
   const providerManager = new ProviderManager({ log });
   await providerManager.initDefaults();
-  const health = await providerManager.health();
 
-  const preference = ['ollama', 'openai', 'claude', 'openrouter'];
-  let chosen = null;
-  for (const id of preference) {
-    if (health[id]?.status === 'ok') { chosen = id; break; }
-  }
-  if (!chosen) {
-    // fall back to any healthy provider
-    chosen = Object.keys(health).find((id) => health[id]?.status === 'ok') || null;
-  }
-
+  const chosen = await pickHealthyProvider(providerManager);
   if (!chosen) {
     console.error('No healthy LLM provider found.');
     console.error('');
@@ -802,13 +801,7 @@ async function cmdAgent(args) {
     console.log(`Running agent task: ${task}`);
     const providerManager = new ProviderManager({ log });
     await providerManager.initDefaults();
-    const health = await providerManager.health();
-    const preference = ['ollama', 'openai', 'claude', 'openrouter'];
-    let chosen = null;
-    for (const id of preference) {
-      if (health[id]?.status === 'ok') { chosen = id; break; }
-    }
-    if (!chosen) chosen = Object.keys(health).find((id) => health[id]?.status === 'ok') || null;
+    const chosen = await pickHealthyProvider(providerManager);
     if (!chosen) {
       console.error('No healthy LLM provider. Run `nokta doctor` for setup.');
       process.exit(1);
