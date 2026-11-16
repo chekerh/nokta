@@ -370,6 +370,7 @@ export function registerPlannerRoutes(app, sprintEngine) {
             });
             createdItems.push(item);
           } catch (err) {
+            if (err instanceof AppError) throw err;
             throw new AppError(`Failed to create brainstorm item: ${err.message}`, 400);
           }
         }
