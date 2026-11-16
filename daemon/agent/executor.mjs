@@ -278,7 +278,7 @@ export async function executeStep(run, step, context = {}) {
           const stdout = execFileSync('bash', ['-c', cmd], {
             cwd,
             encoding: 'utf8',
-            timeout: step.timeout || 30000,
+            timeout: step.timeout || 120000,
             maxBuffer: 1024 * 1024,
             env: createSafeEnv(),
           });

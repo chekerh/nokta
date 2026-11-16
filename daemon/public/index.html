@@ -493,6 +493,13 @@
       .btn-danger:hover {
         box-shadow: 0 0 15px rgba(244, 63, 94, 0.3);
       }
+      .btn-yellow {
+        background: var(--yellow);
+        color: #1a1a1a;
+      }
+      .btn-yellow:hover {
+        box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+      }
       .btn-sm {
         height: 28px;
         padding: 0 12px;
@@ -3587,7 +3594,7 @@
           + "<button class="btn btn-sm btn-ghost" onclick="openAgentRun(\"" + run.id + "\")">Open Details</button>"
           + (status === "running" ? "<button class="btn btn-sm btn-ghost" onclick="cancelAgentRun(\"" + run.id + "\")">Cancel</button>" : "")
           + (status === "running" ? "<button class="btn btn-sm btn-yellow" onclick="approveAgentRun(\"" + run.id + "\")">Approve</button>" : "")
-          + (status === "running" ? "<button class="btn btn-sm btn-red" onclick="rejectAgentRun(\"" + run.id + "\")">Reject</button>" : "")
+          + (status === "running" ? "<button class="btn btn-sm btn-danger" onclick="rejectAgentRun(\"" + run.id + "\")">Reject</button>" : "")
           + "</div>"
           + "</div>";
       });

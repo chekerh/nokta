@@ -63,18 +63,18 @@ export async function createServer(options = {}) {
   const container = new ServiceContainer({ log, projectRoot });
 
   // Register all services with the container
-  container.register('providerManager', (c) => new ProviderManager({ log: c.log }));
+  container.register('providerManager', () => new ProviderManager({ log }));
   container.register('chatHandler', (c) => new ChatHandler(
-    container.get('providerManager'), { projectRoot, log: c.log }
+    c.get('providerManager'), { projectRoot, log },
   ));
-  container.register('costTracker', (c) => new CostTracker({
+  container.register('costTracker', () => new CostTracker({
     onTokens: (provider, tokensIn, tokensOut) => {
       recordLlmTokens(provider, 'input', tokensIn);
       recordLlmTokens(provider, 'output', tokensOut);
     },
   }));
-  container.register('gateKeeper', (c) => new GateKeeper());
-  container.register('decisionEngine', (c) => new DecisionEngine(projectRoot, { log: c.log }));
+  container.register('gateKeeper', () => new GateKeeper());
+  container.register('decisionEngine', () => new DecisionEngine(projectRoot, { log }));
 
   const app = express();
 
@@ -283,18 +283,24 @@ export async function createServer(options = {}) {
 
   startAutoBackup();
 
-  // Background discovery on daemon start (runs in background, never blocks)
-  runDiscovery(false)
-    .then((report) => {
-      if (report.summary.totalDiscovery > 0) {
-        log.info(
-          `Discovery found ${report.summary.totalDiscovery} items (${report.summary.githubRepos} repos, ${report.summary.npmPackages} packages, ${report.summary.sourceUpdates} updates)`,
-        );
-      }
-    })
-    .catch((err) => {
-      log.debug('Discovery failed:', err.message);
-    });
+  // Background discovery on daemon start is OPT-IN. It makes network calls and
+  // can flood the board with items, so it only runs when explicitly enabled.
+  // Trigger manually with `nokta discover` or set NOKTA_AUTO_DISCOVERY=true.
+  if (process.env.NOKTA_AUTO_DISCOVERY === 'true') {
+    runDiscovery(false)
+      .then((report) => {
+        if (report.summary.totalDiscovery > 0) {
+          log.info(
+            `Discovery found ${report.summary.totalDiscovery} items (${report.summary.githubRepos} repos, ${report.summary.npmPackages} packages, ${report.summary.sourceUpdates} updates)`,
+          );
+        }
+      })
+      .catch((err) => {
+        log.debug('Discovery failed:', err.message);
+      });
+  } else {
+    log.info('Auto-discovery disabled (set NOKTA_AUTO_DISCOVERY=true to enable)');
+  }
 
   app.get('/api/v1/openapi.json', (req, res) => {
     res.json(getOpenApiSpec('0.3.0'));

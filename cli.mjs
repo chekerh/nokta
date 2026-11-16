@@ -600,11 +600,175 @@ async function cmdChat(args) {
   console.log(result.content + '\n');
 }
 
+async function cmdDoctor(_args) {
+  const projectRoot = process.cwd();
+  const { execSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const log = logger.child ? logger.child({ module: 'cli' }) : logger;
+
+  const checks = [];
+  const add = (name, ok, detail) => checks.push({ name, ok, detail });
+
+  // Node version
+  const nodeVersion = process.version;
+  const nodeMajor = parseInt(nodeVersion.slice(1), 10);
+  add('Node.js >= 20', nodeMajor >= 20, nodeVersion);
+
+  // git
+  let gitOk = false; let gitDetail = '';
+  try {
+    gitDetail = execSync('git --version', { encoding: 'utf8' }).trim();
+    gitOk = true;
+  } catch (e) {
+    gitDetail = e.message;
+  }
+  add('git available', gitOk, gitDetail || 'not found');
+
+  // git repo
+  let isRepo = false;
+  try {
+    execSync('git rev-parse --is-inside-work-tree', { cwd: projectRoot, encoding: 'utf8', stdio: 'pipe' });
+    isRepo = true;
+  } catch {}
+  add('project is a git repo', isRepo, isRepo ? projectRoot : 'not a git repository');
+
+  // .nokta writable
+  const dataDir = process.env.NOKTA_DATA_DIR || path.join(projectRoot, '.nokta');
+  let writable = false;
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const testFile = path.join(dataDir, '.doctor-write-test');
+    fs.writeFileSync(testFile, 'ok');
+    fs.unlinkSync(testFile);
+    writable = true;
+  } catch {
+    writable = false;
+  }
+  add('.nokta writable', writable, dataDir);
+
+  // Provider health
+  const { ProviderManager } = await import('./daemon/lib/provider-manager.mjs');
+  const providerManager = new ProviderManager({ log });
+  await providerManager.initDefaults();
+  const health = await providerManager.health();
+  const healthy = Object.entries(health).filter(([, h]) => h?.status === 'ok');
+  add('LLM provider healthy', healthy.length > 0, healthy.length ? healthy.map(([id]) => id).join(', ') : 'none — install Ollama or set API key');
+
+  // Worktree dir
+  const wtDir = path.join(dataDir, 'worktrees');
+  let wtOk = true;
+  try { fs.mkdirSync(wtDir, { recursive: true }); } catch { wtOk = false; }
+  add('worktree dir usable', wtOk, wtDir);
+
+  // npm/node modules
+  add('node_modules present', fs.existsSync(path.join(projectRoot, 'node_modules')), path.join(projectRoot, 'node_modules'));
+
+  // Sprint store loadable
+  let sprintOk = true; let sprintDetail = '';
+  try {
+    const { SprintEngine } = await import('./daemon/lib/sprint-engine.mjs');
+    const engine = new SprintEngine(projectRoot, { log });
+    const summary = await engine.getSummary();
+    sprintDetail = `${summary.totalItems} items`;
+  } catch (e) {
+    sprintOk = false; sprintDetail = e.message;
+  }
+  add('sprint store loadable', sprintOk, sprintDetail);
+
+  // Print scorecard
+  console.log('\n🩺 Nokta Doctor — environment scorecard\n');
+  let passed = 0;
+  for (const c of checks) {
+    const icon = c.ok ? '✅' : '❌';
+    console.log(`${icon} ${c.name.padEnd(28)} ${c.detail}`);
+    if (c.ok) passed++;
+  }
+  console.log(`\n${passed}/${checks.length} checks passed.`);
+  if (passed < checks.length) {
+    console.log('Fix the failing checks above, then re-run: nokta doctor');
+    process.exitCode = 1;
+  } else {
+    console.log('All good. Try: nokta demo');
+  }
+}
+
+async function cmdDemo(_args) {
+  const projectRoot = process.cwd();
+  const { ProviderManager } = await import('./daemon/lib/provider-manager.mjs');
+  const { ChatHandler } = await import('./daemon/lib/chat-handler.mjs');
+  const { AgentOrchestrator } = await import('./daemon/agent/orchestrator.mjs');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const log = logger.child ? logger.child({ module: 'cli' }) : logger;
+
+  console.log('\n⚡ Nokta Demo — running one agent task end-to-end\n');
+
+  const providerManager = new ProviderManager({ log });
+  await providerManager.initDefaults();
+  const health = await providerManager.health();
+
+  const preference = ['ollama', 'openai', 'claude', 'openrouter'];
+  let chosen = null;
+  for (const id of preference) {
+    if (health[id]?.status === 'ok') { chosen = id; break; }
+  }
+  if (!chosen) {
+    // fall back to any healthy provider
+    chosen = Object.keys(health).find((id) => health[id]?.status === 'ok') || null;
+  }
+
+  if (!chosen) {
+    console.error('No healthy LLM provider found.');
+    console.error('');
+    console.error('To enable one:');
+    console.error('  • Install Ollama (https://ollama.com) and run:  ollama pull llama3.2');
+    console.error('  • Or set OPENAI_API_KEY / ANTHROPIC_API_KEY / OPENROUTER_API_KEY');
+    process.exit(1);
+  }
+  console.log(`Provider: ${chosen}`);
+
+  const chatHandler = new ChatHandler(providerManager, { projectRoot, log });
+  const { SprintEngine } = await import('./daemon/lib/sprint-engine.mjs');
+  const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler });
+  const orchestrator = new AgentOrchestrator(projectRoot, {
+    log,
+    providerManager,
+    chatHandler,
+    sprintEngine,
+    isolation: false,
+  });
+
+  const goal = "Create a file named NOKTA_DEMO.md containing a short hello message and today's date.";
+  try { fs.unlinkSync(path.join(projectRoot, 'NOKTA_DEMO.md')); } catch {}
+  console.log(`Task:    ${goal}\n`);
+  const run = await orchestrator.runTask(goal);
+
+  console.log(`\nRun status: ${run.status}`);
+  if (Array.isArray(run.output)) {
+    for (const o of run.output) {
+      console.log(`  - [${o.status}] ${o.step || o.type}${o.error ? '  → ' + o.error : ''}`);
+    }
+  }
+
+  const demoFile = path.join(projectRoot, 'NOKTA_DEMO.md');
+  if (fs.existsSync(demoFile)) {
+    console.log('\n--- NOKTA_DEMO.md ---');
+    console.log(fs.readFileSync(demoFile, 'utf8'));
+    console.log('---------------------');
+    console.log('\n✨ Demo complete. Try: nokta agent run "<your task>"');
+  } else {
+    console.log('\n(No NOKTA_DEMO.md was created — the model may need a different prompt or a larger model.)');
+    console.log('Run status above shows what happened. Try a larger model or: nokta agent run "<your task>"');
+  }
+}
+
 async function cmdAgent(args) {
   const sub = args[0];
   const projectRoot = process.cwd();
   const { SprintEngine } = await import('./daemon/lib/sprint-engine.mjs');
   const { ProviderManager } = await import('./daemon/lib/provider-manager.mjs');
+  const { ChatHandler } = await import('./daemon/lib/chat-handler.mjs');
   const { AgentOrchestrator } = await import('./daemon/agent/orchestrator.mjs');
   const log = logger.child ? logger.child({ module: 'cli' }) : logger;
 
@@ -637,8 +801,23 @@ async function cmdAgent(args) {
     console.log(`Running agent task: ${task}`);
     const providerManager = new ProviderManager({ log });
     await providerManager.initDefaults();
-    const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager });
-    const run = await orchestrator.runTask(task);
+    const health = await providerManager.health();
+    const preference = ['ollama', 'openai', 'claude', 'openrouter'];
+    let chosen = null;
+    for (const id of preference) {
+      if (health[id]?.status === 'ok') { chosen = id; break; }
+    }
+    if (!chosen) chosen = Object.keys(health).find((id) => health[id]?.status === 'ok') || null;
+    if (!chosen) {
+      console.error('No healthy LLM provider. Run `nokta doctor` for setup.');
+      process.exit(1);
+    }
+    console.log(`Provider: ${chosen}`);
+    const chatHandler = new ChatHandler(providerManager, { projectRoot, log });
+    const { SprintEngine } = await import('./daemon/lib/sprint-engine.mjs');
+    const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler });
+    const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler, sprintEngine });
+    const run = await orchestrator.runTask(task, { provider: chosen });
     console.log(`\nRun complete: ${run.status}`);
     if (run.steps && Array.isArray(run.steps)) {
       for (const step of run.steps) {
@@ -806,6 +985,8 @@ Usage:
   nokta <command> [options]
 
 Commands:
+  doctor                          Check environment (Node, git, providers, writability)
+  demo                            Run one agent task end-to-end (first-run value)
   compile <target> [--out <file>]  Compile context for a project
   gates <target>                   Evaluate trail + rendered-UI gates
   detect <target>                  Detect project stack
@@ -852,6 +1033,8 @@ Examples:
 }
 
 const commands = {
+  doctor: cmdDoctor,
+  demo: cmdDemo,
   compile: cmdCompile,
   gates: cmdGates,
   detect: cmdDetect,

@@ -334,7 +334,13 @@ export class ProviderManager {
     if (fileConfigs._autoRoute !== undefined) this._autoRoute = fileConfigs._autoRoute;
 
     const ollama = this.get('ollama');
-    if (ollama) ollama.listModels().catch(() => {});
+    if (ollama) {
+      try {
+        await ollama.listModels();
+      } catch {
+        /* keep persisted models */
+      }
+    }
     return this;
   }
 

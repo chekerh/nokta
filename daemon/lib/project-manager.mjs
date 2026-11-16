@@ -1,4 +1,5 @@
 import { prepare } from '../db/connection.mjs';
+import { migrate } from '../db/schema.mjs';
 import { NOOP_LOG } from './route-utils.mjs';
 export class ProjectManager {
   constructor(options = {}) {
@@ -8,6 +9,7 @@ export class ProjectManager {
     this.userId = options.userId || null;
     this.orgChart = new Map(); // projectRoot -> { name, description, trustScore, parentProject }
     this.registry = new Map(); // projectRoot -> { lastAdapter, preferredModels, stackSignals, trailPath, linkedLinearId }
+    try { migrate(); } catch (e) { this.log.warn(`migrate failed: ${e.message}`); }
   }
 
   async addProject(userId, name, rootPath, techStack = 'unknown', parentProject = null) {

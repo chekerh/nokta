@@ -2,7 +2,7 @@ import EventEmitter from 'node:events';
 import { createRunConfig, executeStep } from './executor.mjs';
 import * as fileStorage from './storage.mjs';
 import * as dbStorage from './db-storage.mjs';
-import { buildProjectContext, renderProjectContext } from './project-context.mjs';
+import { buildProjectContext } from './project-context.mjs';
 import { buildPackSteps, auditCitations } from './agent-pack.mjs';
 import { createRunWorktree } from './worktree.mjs';
 import { LocalSkills } from '../workspace/skills.mjs';
@@ -283,75 +283,46 @@ export class AgentOrchestrator extends EventEmitter {
     this.emit('run:deleted', runId);
   }
 
-  async generateSteps(goal, context = {}) {
+  async generateSteps(goal, _context = {}) {
     if (!this.chatHandler) {
       return this._generateDefaultSteps(goal);
     }
 
-    // Ground the model in the real repository and the curated skill index.
-    // Without this it invents stacks and paths (e.g. TypeScript files in a
-    // plain-JS project) and plans that cannot be executed.
-    const [projectContext, skills] = await Promise.all([
-      buildProjectContext(this.projectRoot),
-      this.skills.select(goal).catch(() => []),
-    ]);
-
-    const skillBlock = skills.length
-      ? [
-          'Relevant skills available in this project (follow their guidance when applicable):',
-          ...skills.map((s) => `- ${s.name}: ${(s.description || '').slice(0, 200)}`),
-        ].join('\n')
-      : 'No matching skills found in the skill index.';
-
-    const prompt = `You are a software engineering agent planner. Given a goal and project context, generate a sequence of steps to accomplish the goal.
-
-Available step types:
-- prompt: Call an AI model with messages. Fields: messages (array of {role, content}), systemPrompt (optional).
-- shell: Run a shell command. Fields: command (string), cwd (optional), timeout (ms, default 30000), ignoreFailure (optional).
-- edit: Edit a file. Fields: file (path relative to project root), content, oldString (optional), overwrite (optional).
-  HOW TO USE THIS CORRECTLY — this is the most important rule in this prompt:
-  * To CHANGE PART of a file that already exists: you MUST supply oldString (the exact existing
-    text to replace) and content (the text that replaces it). content is ONLY the replacement
-    snippet, not the whole file.
-  * To CREATE a brand-new file: supply content as the complete file body and omit oldString.
-  * To REPLACE an entire existing file: supply content as the complete new file body plus
-    "overwrite": true. Without "overwrite": true this is rejected, because a plan that emits
-    only the snippet it wants to add silently deletes the rest of the file.
-  Never emit only the few lines you want to add as content for a file that already exists.
-- review: Review current changes. Fields: branch (optional, default HEAD), diff (optional).
-- pr: Create a GitHub PR. Fields: owner, repo, title, body, head, base.
-- condition: Check a condition. Fields: condition (string like "git:hasChanges"), failOnFalse (optional).
-- scope: Declare which files this run is permitted to modify. REQUIRED before any edit step.
-  Fields: allowedFiles (array of glob patterns), allowedDirs (array of directories), blockedFiles (optional), maxFilesChanged (optional), maxLinesChanged (optional).
-  A scope that names no files or directories permits nothing, and an edit in a run with no scope is rejected.
-
-Respond with ONLY a JSON array of steps. No explanation. Each step MUST have a "type" field set to one of: ${STEP_TYPES.join(', ')}, plus the relevant fields for that type.
-
+    // Small local models cannot process the full repository-context prompt and
+    // return empty output. Use a compact prompt with an example, retried.
+    const compactPrompt = `Output ONLY a JSON array of steps. No prose.
+Example: [{"type":"scope","allowedFiles":["HELLO.md"]},{"type":"edit","file":"HELLO.md","content":"# Hi\\n"},{"type":"shell","command":"npm test"},{"type":"review"}]
 Goal: ${goal}
+Step types: scope(allowedFiles,allowedDirs), edit(file,content,oldString?), shell(command), review, condition(condition), prompt(messages).`;
 
-Repository context (ground truth - use only these paths and extensions):
-${renderProjectContext(projectContext)}
-
-${skillBlock}
-
-Additional request context: ${JSON.stringify(context)}
-
-Produce the fewest steps that genuinely accomplish the goal. Prefer editing existing files. Do not invent directories or file types that are not present above.
-
-If the plan contains any edit step, it MUST also contain a scope step placed before it, and that scope must name the specific files or directories the goal requires. An unscoped edit will be rejected at execution time, and an over-broad scope is a security defect rather than a shortcut. If the goal requires no file changes, emit no scope and no edit steps.`;
-
-    try {
-      const result = await this.chatHandler.handleChat([{ role: 'user', content: prompt }], {
-        stream: false,
-        temperature: 0.3,
-      });
-      const content = result.content.trim();
-      const cleaned = content.replace(/```(?:json)?\n?/g, '').trim();
-      const steps = JSON.parse(cleaned);
-      return normalizeSteps(steps, this._generateDefaultSteps(goal));
-    } catch {
-      return this._generateDefaultSteps(goal);
+    // Bypass chatHandler (which injects a large compiled context) and call the
+    // provider directly with a minimal system prompt for reliability.
+    const provider = this.providerManager
+      ? await this.providerManager.selectProvider([{ role: 'user', content: compactPrompt }])
+      : null;
+    if (provider) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const r = await provider.chat(
+            [
+              { role: 'system', content: 'Output only valid JSON. No prose.' },
+              { role: 'user', content: compactPrompt },
+            ],
+            { stream: false, temperature: 0.1 },
+          );
+          const content = (r.content || '').trim();
+          if (!content) throw new Error('empty model output');
+          const cleaned = content.replace(/```(?:json)?\n?/g, '').trim();
+          const steps = JSON.parse(cleaned);
+          const normalized = normalizeSteps(steps, null);
+          if (normalized && normalized.length) return normalized;
+          throw new Error('no valid steps');
+        } catch (err) {
+          this.log.warn(`generateSteps attempt ${attempt + 1} failed: ${err.message}`);
+        }
+      }
     }
+    return this._generateDefaultSteps(goal);
   }
 
   _generateDefaultSteps(goal) {
@@ -490,6 +461,7 @@ If the plan contains any edit step, it MUST also contain a scope step placed bef
       trigger,
       metadata,
       userId: metadata.userId,
+      provider: metadata.provider || null,
     });
     return run;
   }
