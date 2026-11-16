@@ -12,6 +12,11 @@ import { NOOP_LOG } from '../lib/route-utils.mjs';
 
 export const STEP_TYPES = ['prompt', 'shell', 'scope', 'edit', 'review', 'pr', 'condition', 'inspect'];
 
+export function isProviderError(error) {
+  const msg = String(error?.message || error || '');
+  return /empty model output|timeout|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|network|429|5\d{2}|provider|rate.?limit/i.test(msg);
+}
+
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 // Model output is untrusted: it may omit "type", invent unknown types, or return
@@ -273,6 +278,7 @@ export class AgentOrchestrator extends EventEmitter {
         if (
           stepResult.status !== 'failed' ||
           step.ignoreFailure ||
+          !isProviderError(stepResult.error) ||
           failoverAttempts + 1 >= healthyProviders.length
         ) {
           break;
