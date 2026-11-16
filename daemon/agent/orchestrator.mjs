@@ -2,7 +2,7 @@ import EventEmitter from 'node:events';
 import { createRunConfig, executeStep } from './executor.mjs';
 import * as fileStorage from './storage.mjs';
 import * as dbStorage from './db-storage.mjs';
-import { buildProjectContext } from './project-context.mjs';
+import { buildProjectContext, renderProjectContext } from './project-context.mjs';
 import { buildPackSteps, auditCitations } from './agent-pack.mjs';
 import { createRunWorktree } from './worktree.mjs';
 import { LocalSkills } from '../workspace/skills.mjs';
@@ -283,37 +283,67 @@ export class AgentOrchestrator extends EventEmitter {
     this.emit('run:deleted', runId);
   }
 
-  async generateSteps(goal, _context = {}) {
+    async generateSteps(goal, _context = {}) {
     if (!this.chatHandler) {
       return this._generateDefaultSteps(goal);
     }
 
-    // Small local models cannot process the full repository-context prompt and
-    // return empty output. Use a compact prompt with an example, retried.
-    const compactPrompt = `Output ONLY a JSON array of steps. No prose.
-Example: [{"type":"scope","allowedFiles":["HELLO.md"]},{"type":"edit","file":"HELLO.md","content":"# Hi\\n"},{"type":"shell","command":"npm test"},{"type":"review"}]
-Goal: ${goal}
-Step types: scope(allowedFiles,allowedDirs), edit(file,content,oldString?), shell(command), review, condition(condition), prompt(messages).`;
+    const [projectContext, skills] = await Promise.all([
+      buildProjectContext(this.projectRoot),
+      this.skills.select(goal).catch(() => []),
+    ]);
 
-    if (this.chatHandler) {
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          const result = await this.chatHandler.handleChat([{ role: 'user', content: compactPrompt }], {
-            stream: false,
-            temperature: 0.3,
-          });
-          const content = (result.content || '').trim();
-          if (!content) throw new Error('empty model output');
-          const cleaned = content.replace(/```(?:json)?\n?/g, '').trim();
-          const steps = JSON.parse(cleaned);
-          const normalized = normalizeSteps(steps, null);
-          if (normalized && normalized.length) return normalized;
-          throw new Error('no valid steps');
-        } catch (err) {
-          this.log.warn(`generateSteps attempt ${attempt + 1} failed: ${err.message}`);
-        }
+    const skillBlock = skills.length
+      ? [
+          'Relevant skills available in this project (follow their guidance when applicable):',
+          ...skills.map((s) => `- ${s.name}: ${(s.description || '').slice(0, 200)}`),
+        ].join('\n')
+      : 'No matching skills found in the skill index.';
+
+    const prompt = `You are a software engineering agent planner. Given a goal and project context, generate a sequence of steps to accomplish the goal.
+
+Available step types:
+- prompt: Call an AI model with messages. Fields: messages (array of {role, content}), systemPrompt (optional).
+- shell: Run a shell command. Fields: command (string), cwd (optional), timeout (ms, default 30000), ignoreFailure (optional).
+- edit: Edit a file. Fields: file (path relative to project root), content, oldString (optional), overwrite (optional).
+- review: Review current changes. Fields: branch (optional, default HEAD), diff (optional).
+- condition: Check a condition. Fields: condition (string like "git:hasChanges"), failOnFalse (optional).
+- scope: Declare which files this run is permitted to modify. REQUIRED before any edit step.
+  Fields: allowedFiles (array of glob patterns), allowedDirs (array of directories), blockedFiles (optional), maxFilesChanged (optional), maxLinesChanged (optional).
+
+Respond with ONLY a JSON array of steps. No explanation. Each step MUST have a "type" field set to one of: ${STEP_TYPES.join(', ')}, plus the relevant fields for that type.
+
+Goal: ${goal}
+
+Repository context (ground truth - use only these paths and extensions):
+${renderProjectContext(projectContext)}
+
+${skillBlock}
+
+Additional request context: ${JSON.stringify(_context)}
+
+Produce the fewest steps that genuinely accomplish the goal. Prefer editing existing files. Do not invent directories or file types that are not present above.
+
+When the goal requires code changes, the plan MUST include, in order: a scope step naming the files/dirs to touch (before any edit), the edit steps, a shell step that runs the project's tests, and a final review step. A plan that edits without scope, or that never runs tests, is incomplete.`;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const result = await this.chatHandler.handleChat([{ role: 'user', content: prompt }], {
+          stream: false,
+          temperature: 0.3,
+        });
+        const content = (result.content || '').trim();
+        if (!content) throw new Error('empty model output');
+        const cleaned = content.replace(/```(?:json)?\n?/g, '').trim();
+        const steps = JSON.parse(cleaned);
+        const normalized = normalizeSteps(steps, null);
+        if (normalized && normalized.length) return normalized;
+        throw new Error('no valid steps');
+      } catch (err) {
+        this.log.warn(`generateSteps attempt ${attempt + 1} failed: ${err.message}`);
       }
     }
+
     return this._generateDefaultSteps(goal);
   }
 
