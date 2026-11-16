@@ -90,6 +90,31 @@ export function isReadOnlyCommand(command) {
   });
 }
 
+export function selectChangedTestFiles(projectRoot) {
+  const root = path.resolve(projectRoot || process.cwd());
+  let changed = '';
+  try {
+    changed = execFileSync('git', ['diff', '--name-only', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 10000 }).trim();
+  } catch {
+    return [];
+  }
+  const sources = changed.split('\n').map((s) => s.trim()).filter(Boolean).filter((f) => !/\.test\.mjs$/.test(f));
+  const selected = new Set();
+  for (const src of sources) {
+    const base = path.basename(src, path.extname(src));
+    if (!base) continue;
+    let testFiles = [];
+    try {
+      const out = execFileSync('grep', ['-rl', base, 'tests'], { cwd: root, encoding: 'utf8', timeout: 10000 });
+      testFiles = out.split('\n').map((s) => s.trim()).filter(Boolean);
+    } catch {
+      testFiles = [];
+    }
+    for (const t of testFiles) selected.add(t);
+  }
+  return [...selected];
+}
+
 export function makeId() {
   return 'run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
 }
@@ -238,7 +263,14 @@ export async function executeStep(run, step, context = {}) {
       }
 
       case 'shell': {
-        const cmd = step.command;
+        const projectRoot = path.resolve(context.projectRoot || process.cwd());
+        let cmd = step.command;
+        if (step.name && /run tests/i.test(step.name)) {
+          const selected = selectChangedTestFiles(projectRoot);
+          if (selected.length) {
+            cmd = 'node --test ' + selected.map((f) => JSON.stringify(f)).join(' ');
+          }
+        }
         if (!cmd || typeof cmd !== 'string') {
           throw new Error('Command is required for shell step');
         }
@@ -249,7 +281,6 @@ export async function executeStep(run, step, context = {}) {
         ) {
           throw new Error('Destructive shell command blocked by security guard');
         }
-        const projectRoot = path.resolve(context.projectRoot || process.cwd());
         let cwd = step.cwd ? path.resolve(projectRoot, step.cwd) : projectRoot;
         if (!cwd.startsWith(projectRoot)) {
           cwd = projectRoot;
