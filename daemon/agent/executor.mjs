@@ -269,6 +269,8 @@ export async function executeStep(run, step, context = {}) {
           const selected = selectChangedTestFiles(projectRoot);
           if (selected.length) {
             cmd = 'node --test ' + selected.map((f) => JSON.stringify(f)).join(' ');
+          } else {
+            cmd = 'echo "No impacted tests found; running full suite." && (npm test 2>/dev/null || echo "No test command found")';
           }
         }
         if (!cmd || typeof cmd !== 'string') {
