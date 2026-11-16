@@ -102,15 +102,15 @@ export function selectChangedTestFiles(projectRoot) {
   const selected = new Set();
   for (const src of sources) {
     const base = path.basename(src, path.extname(src));
-    if (!base) continue;
-    let testFiles = [];
-    try {
-      const out = execFileSync('grep', ['-rl', base, 'tests'], { cwd: root, encoding: 'utf8', timeout: 10000 });
-      testFiles = out.split('\n').map((s) => s.trim()).filter(Boolean);
-    } catch {
-      testFiles = [];
+    const rel = src.replace(/\.[^.]+$/, '');
+    for (const needle of [base, rel].filter(Boolean)) {
+      try {
+        const out = execFileSync('grep', ['-rl', needle, 'tests'], { cwd: root, encoding: 'utf8', timeout: 10000 });
+        for (const t of out.split('\n').map((s) => s.trim()).filter(Boolean)) selected.add(t);
+      } catch {
+        // no matches
+      }
     }
-    for (const t of testFiles) selected.add(t);
   }
   return [...selected];
 }
