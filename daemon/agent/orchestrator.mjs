@@ -258,7 +258,6 @@ export class AgentOrchestrator extends EventEmitter {
         };
       }
 
-      step.status = stepResult.status;
       run.output.push(stepResult);
       this.emit('run:step-complete', { runId, stepIndex: i, stepResult });
 

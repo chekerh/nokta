@@ -593,6 +593,7 @@ export async function executeStep(run, step, context = {}) {
     }
   }
 
+  step.status = stepResult.status;
   stepResult.durationMs = Date.now() - startTime;
   return stepResult;
 }
