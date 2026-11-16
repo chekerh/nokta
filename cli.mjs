@@ -793,9 +793,10 @@ async function cmdAgent(args) {
   }
 
   if (sub === 'run') {
-    const task = args[1];
+    const dryRun = args.includes('--dry-run');
+    const task = args.filter((a) => a !== '--dry-run')[1];
     if (!task) {
-      console.error('Usage: nokta agent run <task description>');
+      console.error('Usage: nokta agent run <task description> [--dry-run]');
       process.exit(1);
     }
     console.log(`Running agent task: ${task}`);
@@ -811,6 +812,12 @@ async function cmdAgent(args) {
     const { SprintEngine } = await import('./daemon/lib/sprint-engine.mjs');
     const sprintEngine = new SprintEngine(projectRoot, { log, chatHandler });
     const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler, sprintEngine });
+    if (dryRun) {
+      const steps = await orchestrator.generateSteps(task, { provider: chosen });
+      console.log('\nDry run — planned steps (not executed):');
+      for (const step of steps) console.log(`  - [${step.type}] ${step.name || ''}`);
+      return;
+    }
     const run = await orchestrator.runTask(task, { provider: chosen });
     console.log(`\nRun complete: ${run.status}`);
     const stepResults = Array.isArray(run.output) ? run.output : [];
