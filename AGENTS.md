@@ -103,3 +103,12 @@ The loop stops when:
 # Docker mode
 ./run_app.sh --docker
 ```
+
+## Isolated Runs
+
+Agent runs execute in an isolated git worktree under `.nokta/worktrees/` so the
+live tree is never mutated. Edits are printed as a diff after the run, along
+with the worktree path and branch name. To apply them, run
+`git merge <branch>` manually, or set `NOKTA_AUTO_MERGE=true` to merge
+automatically on successful runs. Auto-merge is opt-in by default to preserve
+the containment guarantee.

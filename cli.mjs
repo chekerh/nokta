@@ -825,6 +825,12 @@ async function cmdAgent(args) {
         console.log(`  - [${step.status || 'pending'}] ${step.name}`);
       }
     }
+    const wt = run.metadata?.worktree;
+    if (wt?.path) {
+      console.log(`\nWorktree: ${wt.path}`);
+      console.log(`Branch: ${wt.branch}`);
+      console.log(`To apply edits: git merge ${wt.branch}  (or set NOKTA_AUTO_MERGE=true)`);
+    }
     if (run.result) console.log(run.result);
     return;
   }
