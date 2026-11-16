@@ -756,6 +756,7 @@ async function cmdDemo(_args) {
     console.log('\n--- NOKTA_DEMO.md ---');
     console.log(fs.readFileSync(demoFile, 'utf8'));
     console.log('---------------------');
+    try { fs.unlinkSync(demoFile); } catch {}
     console.log('\n✨ Demo complete. Try: nokta agent run "<your task>"');
   } else {
     console.log('\n(No NOKTA_DEMO.md was created — the model may need a different prompt or a larger model.)');
