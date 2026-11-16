@@ -48,25 +48,4 @@ export class ServiceContainer {
     return instance;
   }
 
-  /**
-   * Check if a service is registered.
-   */
-  has(name) {
-    return this._factories.has(name);
-  }
-
-  /**
-   * Register and immediately get a service (convenience).
-   */
-  registerAndGet(name, factory) {
-    this.register(name, factory);
-    return this.get(name);
-  }
-
-  /**
-   * Reset all instances (useful for testing).
-   */
-  reset() {
-    this._instances.clear();
-  }
 }

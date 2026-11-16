@@ -298,8 +298,6 @@ export async function createServer(options = {}) {
       .catch((err) => {
         log.debug('Discovery failed:', err.message);
       });
-  } else {
-    log.info('Auto-discovery disabled (set NOKTA_AUTO_DISCOVERY=true to enable)');
   }
 
   app.get('/api/v1/openapi.json', (req, res) => {
