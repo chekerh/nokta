@@ -235,6 +235,17 @@ export class AgentOrchestrator extends EventEmitter {
       providerManager: this.providerManager,
     };
 
+    // Healthy providers available for mid-run failover.
+    let healthyProviders = [];
+    if (this.providerManager?.health) {
+      try {
+        const h = await this.providerManager.health();
+        healthyProviders = Object.keys(h || {}).filter((id) => h[id]?.status === 'ok');
+      } catch {}
+    }
+    if (!healthyProviders.length && run.provider) healthyProviders = [run.provider];
+    let providerIndex = Math.max(0, healthyProviders.indexOf(run.provider));
+
     for (let i = 0; i < run.steps.length; i++) {
       if (executionCtx.aborted) {
         run.status = 'cancelled';
@@ -246,16 +257,30 @@ export class AgentOrchestrator extends EventEmitter {
       this.emit('run:step-start', { runId, stepIndex: i, step });
 
       let stepResult;
-      try {
-        stepResult = await executeStep(run, step, context);
-      } catch (err) {
-        stepResult = {
-          step: step.name || step.type,
-          type: step.type,
-          status: 'failed',
-          error: err.message,
-          durationMs: 0,
-        };
+      let failoverAttempts = 0;
+      while (true) {
+        try {
+          stepResult = await executeStep(run, step, context);
+        } catch (err) {
+          stepResult = {
+            step: step.name || step.type,
+            type: step.type,
+            status: 'failed',
+            error: err.message,
+            durationMs: 0,
+          };
+        }
+        if (
+          stepResult.status !== 'failed' ||
+          step.ignoreFailure ||
+          failoverAttempts + 1 >= healthyProviders.length
+        ) {
+          break;
+        }
+        failoverAttempts++;
+        providerIndex = Math.min(providerIndex + 1, healthyProviders.length - 1);
+        run.provider = healthyProviders[providerIndex];
+        this.log.warn(`Step failed on ${healthyProviders[providerIndex - 1]}; failing over to ${run.provider}`);
       }
 
       run.output.push(stepResult);
