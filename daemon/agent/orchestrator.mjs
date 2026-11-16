@@ -368,7 +368,7 @@ When the goal requires code changes, the plan MUST include, in order: a scope st
       {
         type: 'shell',
         name: 'Run tests',
-        command: 'npm test 2>/dev/null || echo "No test command found"',
+        command: 'changed=$(git diff --name-only HEAD 2>/dev/null | grep -v "\\.test\\.mjs$" || true); tests=""; for s in $changed; do b=$(basename "$s" .mjs); for t in $(grep -rl "$b" tests 2>/dev/null); do tests="$tests $t"; done; done; tests=$(echo "$tests" | tr " " "\\n" | sort -u | tr "\\n" " "); if [ -n "$tests" ]; then for t in $tests; do node --test "$t" || exit 1; done; else npm test 2>/dev/null || echo "No test command found"; fi',
         ignoreFailure: true,
       },
       {
@@ -410,7 +410,7 @@ When the goal requires code changes, the plan MUST include, in order: a scope st
       {
         type: 'shell',
         name: 'Run tests',
-        command: 'npm test 2>/dev/null || echo "No test command found"',
+        command: 'changed=$(git diff --name-only HEAD 2>/dev/null | grep -v "\\.test\\.mjs$" || true); tests=""; for s in $changed; do b=$(basename "$s" .mjs); for t in $(grep -rl "$b" tests 2>/dev/null); do tests="$tests $t"; done; done; tests=$(echo "$tests" | tr " " "\\n" | sort -u | tr "\\n" " "); if [ -n "$tests" ]; then for t in $tests; do node --test "$t" || exit 1; done; else npm test 2>/dev/null || echo "No test command found"; fi',
         ignoreFailure: true,
       },
       {
