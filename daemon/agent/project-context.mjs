@@ -38,7 +38,7 @@ const SOURCE_EXTENSIONS = new Set([
 
 const TEST_PATTERN = /(^|[./-])(test|tests|spec|__tests__)([./-]|$)|\.(test|spec)\.[a-z]+$/i;
 
-const CACHE_TTL_MS = 60_000;
+const CACHE_TTL_MS = 300_000;
 const cache = new Map();
 
 async function readJson(file) {
