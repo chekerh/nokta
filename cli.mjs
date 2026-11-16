@@ -813,9 +813,12 @@ async function cmdAgent(args) {
     const orchestrator = new AgentOrchestrator(projectRoot, { log, providerManager, chatHandler, sprintEngine });
     const run = await orchestrator.runTask(task, { provider: chosen });
     console.log(`\nRun complete: ${run.status}`);
+    const stepResults = Array.isArray(run.output) ? run.output : [];
     if (run.steps && Array.isArray(run.steps)) {
-      for (const step of run.steps) {
-        console.log(`  - [${step.status || 'pending'}] ${step.name}`);
+      for (let i = 0; i < run.steps.length; i++) {
+        const step = run.steps[i];
+        const result = stepResults[i];
+        console.log(`  - [${result?.status || 'pending'}] ${step.name}`);
       }
     }
     if (run.result) console.log(run.result);
