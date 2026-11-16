@@ -4,6 +4,7 @@ import * as fileStorage from './storage.mjs';
 import * as dbStorage from './db-storage.mjs';
 import { buildProjectContext, renderProjectContext } from './project-context.mjs';
 import { buildPackSteps, auditCitations } from './agent-pack.mjs';
+import { execFileSync } from 'node:child_process';
 import { createRunWorktree } from './worktree.mjs';
 import { LocalSkills } from '../workspace/skills.mjs';
 import { NOOP_LOG } from '../lib/route-utils.mjs';
@@ -247,6 +248,37 @@ export class AgentOrchestrator extends EventEmitter {
 
     if (run.status === 'running') {
       run.status = 'completed';
+    }
+
+    // Surface isolated-run edits in the main tree instead of stranding them in
+    // the worktree. Commit the worktree's changes, then merge the branch back;
+    // on conflict, abort and print the diff for manual resolution.
+    const wtInfo = run.metadata?.worktree;
+    if (wtInfo?.path && wtInfo?.branch && run.status === 'completed') {
+      try {
+        const status = execFileSync('git', ['status', '--porcelain'], { cwd: wtInfo.path, encoding: 'utf8' }).trim();
+        if (!status) {
+          this.log.info('Worktree had no changes; nothing to merge.');
+        } else {
+          // Print the diff so edits are visible even when not auto-merged.
+          const diff = execFileSync('git', ['diff', 'HEAD'], { cwd: wtInfo.path, encoding: 'utf8' });
+          this.log.info(`Worktree changes (merge with: git merge ${wtInfo.branch}):\n${diff}`);
+
+          if (process.env.NOKTA_AUTO_MERGE === 'true') {
+            execFileSync('git', ['add', '-A'], { cwd: wtInfo.path, stdio: 'ignore' });
+            execFileSync('git', ['commit', '-m', `nokta run ${run.id}`], { cwd: wtInfo.path, stdio: 'ignore' });
+            try {
+              execFileSync('git', ['merge', '--no-ff', wtInfo.branch, '-m', `Merge nokta run ${run.id}`], { cwd: this.projectRoot, stdio: 'pipe' });
+              this.log.info(`Merged worktree branch ${wtInfo.branch} into current branch`);
+            } catch {
+              try { execFileSync('git', ['merge', '--abort'], { cwd: this.projectRoot, stdio: 'ignore' }); } catch {}
+              this.log.warn('Could not auto-merge worktree; resolve manually.');
+            }
+          }
+        }
+      } catch (err) {
+        this.log.warn(`Worktree finalize failed: ${err.message}`);
+      }
     }
 
     // An agent pack's output is its deliverable, and the run row is the only
