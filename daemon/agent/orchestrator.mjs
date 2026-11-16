@@ -295,22 +295,14 @@ Example: [{"type":"scope","allowedFiles":["HELLO.md"]},{"type":"edit","file":"HE
 Goal: ${goal}
 Step types: scope(allowedFiles,allowedDirs), edit(file,content,oldString?), shell(command), review, condition(condition), prompt(messages).`;
 
-    // Bypass chatHandler (which injects a large compiled context) and call the
-    // provider directly with a minimal system prompt for reliability.
-    const provider = this.providerManager
-      ? await this.providerManager.selectProvider([{ role: 'user', content: compactPrompt }])
-      : null;
-    if (provider) {
-      for (let attempt = 0; attempt < 3; attempt++) {
+    if (this.chatHandler) {
+      for (let attempt = 0; attempt < 5; attempt++) {
         try {
-          const r = await provider.chat(
-            [
-              { role: 'system', content: 'Output only valid JSON. No prose.' },
-              { role: 'user', content: compactPrompt },
-            ],
-            { stream: false, temperature: 0.1 },
-          );
-          const content = (r.content || '').trim();
+          const result = await this.chatHandler.handleChat([{ role: 'user', content: compactPrompt }], {
+            stream: false,
+            temperature: 0.3,
+          });
+          const content = (result.content || '').trim();
           if (!content) throw new Error('empty model output');
           const cleaned = content.replace(/```(?:json)?\n?/g, '').trim();
           const steps = JSON.parse(cleaned);
