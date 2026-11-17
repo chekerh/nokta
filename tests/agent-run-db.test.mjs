@@ -716,3 +716,49 @@ function baseRun() {
     updatedAt: now,
   };
 }
+
+test('mid-run provider failover retries on next healthy provider', async () => {
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'nokta-failover-'));
+  const sh = (cmd) => execFileSync('bash', ['-c', cmd], { cwd: repo, encoding: 'utf8' });
+  sh('git init -q -b main .');
+  sh('git config user.email test@nokta.local && git config user.name Test');
+  await fs.writeFile(path.join(repo, 'counter.txt'), '0', 'utf8');
+  sh('git add . && git commit -q -m initial');
+
+  let calls = 0;
+  const chatHandler = {
+    async handleChat() {
+      calls++;
+      if (calls === 1) throw new Error('empty model output');
+      return { content: 'ok', provider: 'p2', model: 'm2' };
+    },
+  };
+
+  const providerManager = {
+    async health() {
+      return { p1: { status: 'ok' }, p2: { status: 'ok' } };
+    },
+  };
+
+  const run = {
+    ...baseRun(),
+    user_id: USER_ID,
+    project_root: repo,
+    provider: 'p1',
+    steps: [
+      { type: 'shell', name: 'side-effect', command: 'echo x >> counter.txt', ignoreFailure: false },
+      { type: 'prompt', name: 'model-step', messages: [{ role: 'user', content: 'hi' }], systemPrompt: 's' },
+    ],
+  };
+  dbStorage.insertRun(run);
+
+  const orchestrator = new AgentOrchestrator(repo, { isolation: false, chatHandler, providerManager });
+  const result = await orchestrator.executeRun(run.id);
+
+  assert.equal(result.status, 'completed');
+  const counter = await fs.readFile(path.join(repo, 'counter.txt'), 'utf8');
+  assert.equal((counter.match(/x/g) || []).length, 1, 'side effect should run once');
+  assert.equal(calls, 2);
+  const promptResult = result.output.find((o) => o.step === 'model-step');
+  assert.equal(promptResult.status, 'completed');
+});
