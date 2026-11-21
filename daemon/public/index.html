@@ -167,6 +167,19 @@
         text-align: center;
         color: var(--text-3);
       }
+      .nav-tab .icon svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+      }
+      .nav-group-label {
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        color: var(--text-3);
+        padding: 12px 14px 4px;
+      }
       .nav-tab.active .icon {
         color: var(--accent);
       }
@@ -750,14 +763,6 @@
         }
       }
 
-      /* SVG Costs Graph */
-      .chart-container {
-        width: 100%;
-        height: 180px;
-        position: relative;
-        margin-top: 14px;
-      }
-
       /* Table styling */
       table {
         width: 100%;
@@ -1022,22 +1027,24 @@
         <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
         <nav class="sidebar-nav" id="navTabs">
-          <button class="nav-tab active" data-tab="dashboard"><span class="icon">⌂</span> Dashboard</button>
-          <button class="nav-tab" data-tab="planner"><span class="icon">📋</span> Kanban Board</button>
-          <button class="nav-tab" data-tab="reports"><span class="icon">📊</span> Reports</button>
-          <button class="nav-tab" data-tab="agents"><span class="icon">⚡</span> Agent Queue</button>
-          <button class="nav-tab" data-tab="uiux"><span class="icon">🎨</span> UI/UX Pro Max</button>
-          <button class="nav-tab" data-tab="chat"><span class="icon">💬</span> Chat Console</button>
-          <button class="nav-tab" data-tab="discover"><span class="icon">🔍</span> Discovery</button>
-          <button class="nav-tab" data-tab="gates"><span class="icon">🚧</span> Gates & Audits</button>
-          <button class="nav-tab" data-tab="providers"><span class="icon">🔌</span> LLM Keys</button>
-          <button class="nav-tab" data-tab="skills"><span class="icon">📦</span> Skill Packs</button>
-          <button class="nav-tab" data-tab="search"><span class="icon">🔍</span> Semantic Search</button>
-          <button class="nav-tab" data-tab="sandbox"><span class="icon">⏯️</span> Sandbox</button>
-          <button class="nav-tab" data-tab="adversarial"><span class="icon">👁️</span> Adversarial Review</button>
-          <button class="nav-tab" id="adminNavTab" data-tab="admin" style="display: none">
-            <span class="icon">🛡️</span> Admin Control
-          </button>
+          <button class="nav-tab active" data-tab="dashboard"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></span> Dashboard</button>
+          <div class="nav-group-label">Build</div>
+          <button class="nav-tab " data-tab="planner"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="3" height="10" rx="1"/><rect x="6.5" y="3" width="3" height="7" rx="1"/><rect x="11" y="3" width="3" height="10" rx="1"/></svg></span> Kanban Board</button>
+          <button class="nav-tab " data-tab="agents"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 1 3 9h4l-1 6 7-8H9z"/></svg></span> Agent Queue</button>
+          <button class="nav-tab " data-tab="chat"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h10v8H6l-3 3z"/></svg></span> Chat Console</button>
+          <button class="nav-tab " data-tab="discover"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M10.5 5.5 9 9l-3.5 1.5L7 7z"/></svg></span> Discovery</button>
+          <div class="nav-group-label">Quality</div>
+          <button class="nav-tab " data-tab="reports"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13V8M8 13V4M13 13V10"/></svg></span> Reports</button>
+          <button class="nav-tab " data-tab="gates"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1 13 3v5c0 3-2 5-5 7-3-2-5-4-5-7V3z"/><path d="M6 8l1.5 1.5L11 6"/></svg></span> Gates & Audits</button>
+          <button class="nav-tab " data-tab="adversarial"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8S4 4 8 4s6.5 4 6.5 4-2.5 4-6.5 4-6.5-4-6.5-4z"/><circle cx="8" cy="8" r="1.8"/></svg></span> Adversarial Review</button>
+          <div class="nav-group-label">Configure</div>
+          <button class="nav-tab " data-tab="uiux"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13c1 0 1.5-.6 1.5-1.4 0-.4-.2-.7-.2-1.1 0-.7.5-1.2 1.3-1.2H12a2.5 2.5 0 0 0 2.5-2.5C14.5 4.4 11.6 1.5 8 1.5z"/><circle cx="5" cy="6" r=".8"/><circle cx="8" cy="4.5" r=".8"/><circle cx="11" cy="6" r=".8"/></svg></span> UI/UX Pro Max</button>
+          <button class="nav-tab " data-tab="providers"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="8" r="2.5"/><path d="M7.5 8H14M11 8v3M14 8v2"/></svg></span> LLM Keys</button>
+          <button class="nav-tab " data-tab="skills"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.5 14 4.5v7L8 14.5 2 11.5v-7z"/><path d="M2 4.5 8 7.5l6-3M8 7.5v7"/></svg></span> Skill Packs</button>
+          <div class="nav-group-label">Tools</div>
+          <button class="nav-tab " data-tab="search"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg></span> Semantic Search</button>
+          <button class="nav-tab " data-tab="sandbox"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M7 6l3 2-3 2z"/></svg></span> Sandbox</button>
+          <button class="nav-tab" id="adminNavTab" data-tab="admin" style="display: none"><span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1 13 3v5c0 3-2 5-5 7-3-2-5-4-5-7V3z"/><path d="M6 8l1.5 1.5L11 6"/></svg></span> Admin Control</button>
         </nav>
 
         <div class="sidebar-footer">
@@ -1086,31 +1093,26 @@
             </div>
 
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 20px">
-              <!-- FinOps Token Graph -->
+              <!-- FinOps spend, from the real cost ledger -->
               <div class="card">
-                <div class="card-title">📊 Monthly API Consumption & Costs (FinOps)</div>
-                <div class="chart-container">
-                  <!-- Render an elegant custom SVG area graph representing real-time API cost tracking -->
-                  <svg width="100%" height="150" viewBox="0 0 600 150" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.3"></stop>
-                        <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"></stop>
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d="M 0,130 C 50,120 100,100 150,110 C 200,120 250,70 300,80 C 350,90 400,30 450,40 C 500,50 550,10 600,20 L 600,150 L 0,150 Z"
-                      fill="url(#chartGrad)"
-                    ></path>
-                    <path
-                      d="M 0,130 C 50,120 100,100 150,110 C 200,120 250,70 300,80 C 350,90 400,30 450,40 C 500,50 550,10 600,20"
-                      fill="none"
-                      stroke="#8b5cf6"
-                      stroke-width="2.5"
-                    ></path>
-                    <line x1="0" y1="140" x2="600" y2="140" stroke="rgba(255,255,255,0.05)" stroke-width="1"></line>
-                  </svg>
+                <div class="card-title">Monthly API Spend (FinOps)</div>
+                <div class="stat-grid" style="margin: 14px 0 0">
+                  <div class="stat">
+                    <div class="stat-value" id="costMonthValue">—</div>
+                    <div class="stat-label">This month</div>
+                  </div>
+                  <div class="stat">
+                    <div class="stat-value" id="costRequestsValue">—</div>
+                    <div class="stat-label">Requests</div>
+                  </div>
+                  <div class="stat">
+                    <div class="stat-value" id="costAllTimeValue">—</div>
+                    <div class="stat-label">All time</div>
+                  </div>
                 </div>
+                <p id="costNote" style="color: var(--text-3); font-size: 0.78rem; margin-top: 12px">
+                  Spend appears here after agent runs make model calls.
+                </p>
               </div>
 
               <div class="card">
@@ -2381,13 +2383,15 @@
             badge.className = 'badge badge-green';
             badge.textContent = '● Online';
             $('statProvidersValue').textContent = (health.providers && health.providers.length) || 0;
-            $('statVersionValue').textContent = health.version || '0.2.0';
+            $('statVersionValue').textContent = health.version || '—';
             var defProv = health.defaultProvider || 'auto';
+            var activeCount = health.providers ? health.providers.filter((p) => p.enabled).length : 0;
             $('daemonDetail').innerHTML =
               '<span style="color:var(--green)">✔</span> ' +
-              (health.providers ? health.providers.filter((p) => p.enabled).length : 0) +
-              ' active models &middot; default: ' +
-              defProv;
+              activeCount +
+              (activeCount === 1 ? ' active model' : ' active models') +
+              ' &middot; default: ' +
+              escHtml(defProv);
           } catch (e) {
             var badge = $('daemonStatusBadge');
             badge.className = 'badge badge-red';
@@ -2395,6 +2399,23 @@
             $('daemonDetail').innerHTML = 'Daemon unreachable: ' + escHtml(e.message);
           }
           refreshAgentRunCounts();
+          refreshCosts();
+        }
+
+        async function refreshCosts() {
+          try {
+            var data = await api('GET', '/api/v1/costs/summary');
+            var monthly = data.monthly || {};
+            $('costMonthValue').textContent = '$' + Number(monthly.totalCost || 0).toFixed(2);
+            $('costRequestsValue').textContent = Number(monthly.requestCount || 0).toLocaleString();
+            $('costAllTimeValue').textContent = '$' + Number(data.allTimeCost || 0).toFixed(2);
+            $('costNote').textContent =
+              monthly.requestCount > 0
+                ? 'Month ' + monthly.month + ' · avg trust ' + Number(data.avgTrustScore || 0).toFixed(2)
+                : 'No model spend recorded this month yet.';
+          } catch (e) {
+            $('costNote').textContent = 'Cost ledger unavailable: ' + e.message;
+          }
         }
 
         async function refreshAgentRunCounts() {
@@ -3335,7 +3356,7 @@
           var query = $('searchQuery').value.trim();
           if (!query) return;
           var resultDiv = $('searchResults');
-          resultDiv.innerHTML = '<div style="color:var(--text-secondary)">Searching...</div>';
+          resultDiv.innerHTML = '<div style="color:var(--text-2)">Searching...</div>';
           try {
             var resp = await api('POST', '/api/v1/search/semantic', { query: query, target: '.', maxResults: 20 });
             var html = '';
@@ -3346,7 +3367,7 @@
                   escHtml(r.file) +
                   '</div>';
                 html +=
-                  '<div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:6px">Score: ' +
+                  '<div style="font-size:0.8rem;color:var(--text-2);margin-bottom:6px">Score: ' +
                   r.score +
                   '</div>';
                 if (r.snippet)
@@ -3357,7 +3378,7 @@
                 html += '</div>';
               });
             } else {
-              html = '<div style="color:var(--text-secondary)">No results found</div>';
+              html = '<div style="color:var(--text-2)">No results found</div>';
             }
             resultDiv.innerHTML = html;
           } catch (e) {
@@ -3369,7 +3390,7 @@
           var code = $('sandboxCode').value.trim();
           if (!code) return;
           var resultDiv = $('sandboxResult');
-          resultDiv.innerHTML = '<div style="color:var(--text-secondary)">Executing...</div>';
+          resultDiv.innerHTML = '<div style="color:var(--text-2)">Executing...</div>';
           try {
             var resp = await api('POST', '/api/v1/sandbox/exec', { code: code, fileName: 'exec.mjs' });
             var passed = resp.passed ? '✅ Passed' : '❌ Failed';
@@ -3395,7 +3416,7 @@
           var code = $('adversarialCode').value.trim();
           if (!code) return;
           var resultDiv = $('adversarialResult');
-          resultDiv.innerHTML = '<div style="color:var(--text-secondary)">Reviewing... this may take a while</div>';
+          resultDiv.innerHTML = '<div style="color:var(--text-2)">Reviewing... this may take a while</div>';
           try {
             var resp = await api('POST', '/api/v1/adversarial/review', {
               code: code,
@@ -3420,7 +3441,7 @@
                   ']</span> ' +
                   escHtml(issue.message);
                 if (issue.suggestion)
-                  html += '<br><span style="color:var(--text-secondary)">Fix: ' + escHtml(issue.suggestion) + '</span>';
+                  html += '<br><span style="color:var(--text-2)">Fix: ' + escHtml(issue.suggestion) + '</span>';
                 html += '</div>';
               });
             }
@@ -3443,7 +3464,7 @@
                 html +=
                   '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div><strong>' +
                   escHtml(s.name) +
-                  '</strong><span style="color:var(--text-secondary);font-size:0.8rem"> (' +
+                  '</strong><span style="color:var(--text-2);font-size:0.8rem"> (' +
                   (s.category || 'general') +
                   ')</span></div><span style="color:#fbbf24">' +
                   stars +
@@ -3451,7 +3472,7 @@
               });
             } else {
               html =
-                '<div style="color:var(--text-secondary)">No learned skills yet. Run agents to build skills.</div>';
+                '<div style="color:var(--text-2)">No learned skills yet. Run agents to build skills.</div>';
             }
             skillsDiv.innerHTML = html;
           } catch (e) {
@@ -3466,7 +3487,7 @@
 
           errorDiv.style.display = 'none';
           container.innerHTML =
-            '<div style="color:var(--text-secondary)">Synthesizing skills from brainstorm, sprint items, and feedback...</div>';
+            '<div style="color:var(--text-2)">Synthesizing skills from brainstorm, sprint items, and feedback...</div>';
 
           try {
             // Fetch source data from available APIs
@@ -3513,7 +3534,7 @@
                 container.innerHTML +=
                   '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div><strong>' +
                   escHtml(s.name) +
-                  '</strong><span style="color:var(--text-secondary);font-size:0.8rem"> (' +
+                  '</strong><span style="color:var(--text-2);font-size:0.8rem"> (' +
                   (s.category || 'general') +
                   ', ' +
                   (s.occurrences || 0) +
@@ -3522,14 +3543,14 @@
                   '</span></div>';
               });
               container.innerHTML +=
-                '<div style="margin-top:10px;color:var(--text-secondary)">Synthesized ' +
+                '<div style="margin-top:10px;color:var(--text-2)">Synthesized ' +
                 resp.total +
                 ' skills (' +
                 resp.new +
                 ' new).</div>';
             } else {
               container.innerHTML =
-                '<div style="color:var(--text-secondary)">No learned patterns to synthesize yet.</div>';
+                '<div style="color:var(--text-2)">No learned patterns to synthesize yet.</div>';
             }
           } catch (e) {
             errorDiv.textContent = 'Failed to synthesize skills: ' + (e.message || 'Unknown error');
@@ -3546,16 +3567,16 @@
     
     const projectRoot = projectSelect.value;
     if (!projectRoot) {
-      container.innerHTML = "<div style="color:var(--text-secondary)">Select a project to view agents</div>";
+      container.innerHTML = "<div style='color:var(--text-2)'>Select a project to view agents</div>";
       return;
     }
     
-    container.innerHTML = "<div style="color:var(--text-secondary);text-align:center;padding:20px">Loading agents...</div>";
+    container.innerHTML = "<div style='color:var(--text-2);text-align:center;padding:20px'>Loading agents...</div>";
     
     try {
       const resp = await api("GET", "/api/v1/agent-runs?projectRoot=" + encodeURIComponent(projectRoot));
       if (!resp.runs || resp.runs.length === 0) {
-        container.innerHTML = "<div style="color:var(--text-secondary);text-align:center;padding:20px">No agent runs found for this project</div>";
+        container.innerHTML = "<div style='color:var(--text-2);text-align:center;padding:20px'>No agent runs found for this project</div>";
         return;
       }
       
@@ -3576,31 +3597,29 @@
         const tokens = run.tokensUsed || 0;
         const cost = run.costUsd || 0;
         
-        html += "<div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;background:var(--surface-2)">"
-          + "<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">"
-          + "<span class="status-dot " + statusClass + " style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:" + (status === "running" ? "#22c55e" : status === "completed" ? "#8b5cf6" : status === "failed" ? "#ef4444" : "#fbbf24") + ""></span>" + status.toUpperCase() + "</span>"
-          + "<span style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary)">" + (run.id || "").slice(0, 12) + "</span>"
-          + "</div>"
-          + "<div style="font-weight:600;margin-bottom:4px;color:var(--accent)">" + escHtml(goal) + "</div>"
-          + "<div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:8px">"
-          + "Provider: " + escHtml(run.provider || "unknown") + " · Model: " + escHtml(run.model || "unknown")
-          + "</div>"
-          + "<div style="display:flex;gap:16px;font-size:0.75rem;color:var(--text-secondary);flex-wrap:wrap">"
-          + "<span>⏱ " + elapsedStr + "</span>"
-          + "<span>🔤 " + tokens.toLocaleString() + " tokens</span>"
-          + "<span>💰 $" + cost.toFixed(4) + "</span>"
-          + "</div>"
-          + "<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">"
-          + "<button class="btn btn-sm btn-ghost" onclick="openAgentRun(\"" + run.id + "\")">Open Details</button>"
-          + (status === "running" ? "<button class="btn btn-sm btn-ghost" onclick="cancelAgentRun(\"" + run.id + "\")">Cancel</button>" : "")
-          + (status === "running" ? "<button class="btn btn-sm btn-yellow" onclick="approveAgentRun(\"" + run.id + "\")">Approve</button>" : "")
-          + (status === "running" ? "<button class="btn btn-sm btn-danger" onclick="rejectAgentRun(\"" + run.id + "\")">Reject</button>" : "")
-          + "</div>"
-          + "</div>";
+        html += `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;background:var(--surface-2)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span class="status-dot ${statusClass}" style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${status === 'running' ? '#22c55e' : status === 'completed' ? '#8b5cf6' : status === 'failed' ? '#ef4444' : '#fbbf24'}"></span>${status.toUpperCase()}</span>
+          <span style="font-family:monospace;font-size:0.75rem;color:var(--text-2)">${(run.id || '').slice(0, 12)}</span>
+          </div>
+          <div style="font-weight:600;margin-bottom:4px;color:var(--accent)">${escHtml(goal)}</div>
+          <div style="font-size:0.8rem;color:var(--text-2);margin-bottom:8px">Provider: ${escHtml(run.provider || 'unknown')} · Model: ${escHtml(run.model || 'unknown')}</div>
+          <div style="display:flex;gap:16px;font-size:0.75rem;color:var(--text-2);flex-wrap:wrap">
+          <span>⏱ ${elapsedStr}</span>
+          <span>🔤 ${tokens.toLocaleString()} tokens</span>
+          <span>💰 $${cost.toFixed(4)}</span>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-ghost" onclick="openAgentRun('${run.id}')">Open Details</button>
+          ${status === 'running' ? `<button class="btn btn-sm btn-ghost" onclick="cancelAgentRun('${run.id}')">Cancel</button>` : ''}
+          ${status === 'running' ? `<button class="btn btn-sm btn-yellow" onclick="approveAgentRun('${run.id}')">Approve</button>` : ''}
+          ${status === 'running' ? `<button class="btn btn-sm btn-danger" onclick="rejectAgentRun('${run.id}')">Reject</button>` : ''}
+          </div>
+          </div>`;
       });
       container.innerHTML = html;
     } catch (e) {
-      container.innerHTML = "<div class="error-banner">Failed to load agents: " + escHtml(e.message || "Unknown error") + "</div>";
+      container.innerHTML = `<div class="error-banner">Failed to load agents: ${escHtml(e.message || 'Unknown error')}</div>`;
     }
   }
 
@@ -3674,9 +3693,9 @@
     try {
       const resp = await api("GET", "/api/v1/projects");
       if (resp.projects && resp.projects.length > 0) {
-        let html = "<option value="">Select project...</option>";
+        let html = "<option value=''>Select project...</option>";
         resp.projects.forEach(function(p) {
-          html += "<option value="" + escHtml(p.rootPath) + "">" + escHtml(p.name) + " (" + escHtml(p.rootPath) + ")</option>";
+          html += "<option value='" + escHtml(p.rootPath) + "'>" + escHtml(p.name) + " (" + escHtml(p.rootPath) + ")</option>";
         });
         projectSelect.innerHTML = html;
         
@@ -3686,10 +3705,10 @@
           refreshAgentMonitor();
         }
       } else {
-        projectSelect.innerHTML = "<option value="">No projects found</option>";
+        projectSelect.innerHTML = "<option value=''>No projects found</option>";
       }
     } catch (e) {
-      projectSelect.innerHTML = "<option value="">Error loading projects</option>";
+      projectSelect.innerHTML = "<option value=''>Error loading projects</option>";
     }
   }
 

@@ -68,7 +68,8 @@ test('database probe reports ok and the applied schema version', () => {
   assert.equal(result.status, 'ok');
   assert.equal(result.engine, 'sqlite');
   assert.ok(result.schemaVersion >= 5, 'migrations up to v5 applied');
-  assert.equal(result.totalMigrations, 6);
+  assert.ok(result.totalMigrations >= 6, 'all declared migrations are counted');
+  assert.equal(result.schemaVersion, result.totalMigrations);
 });
 
 test('database probe fails gracefully when the DB cannot be opened', async () => {

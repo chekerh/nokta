@@ -320,6 +320,44 @@ const MIGRATIONS = [
   DROP TABLE IF EXISTS project_registry;
   `,
   },
+  // v7: Backfill refresh_tokens columns that CREATE TABLE IF NOT EXISTS cannot
+  // add to databases created before the column existed.
+  {
+    up: (db) => {
+      const cols = (table) =>
+        db
+          .prepare(`PRAGMA table_info(${table})`)
+          .all()
+          .map((c) => c.name);
+      if (cols('refresh_tokens').length) {
+        if (!cols('refresh_tokens').includes('family_expires_at')) {
+          db.exec('ALTER TABLE refresh_tokens ADD COLUMN family_expires_at TEXT;');
+        }
+        if (!cols('refresh_tokens').includes('revoked_at')) {
+          db.exec('ALTER TABLE refresh_tokens ADD COLUMN revoked_at TEXT;');
+        }
+      }
+    },
+    down: `
+  SELECT 1;
+  `,
+  },
+  // v8: Backfill users.token_version on databases created before v5 gained
+  // the conditional ALTER. Editing an applied migration cannot repair them.
+  {
+    up: (db) => {
+      const cols = db
+        .prepare('PRAGMA table_info(users)')
+        .all()
+        .map((c) => c.name);
+      if (!cols.includes('token_version')) {
+        db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;');
+      }
+    },
+    down: `
+  SELECT 1;
+  `,
+  },
 ];
 
 export function migrate() {
