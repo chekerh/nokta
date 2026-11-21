@@ -56,19 +56,6 @@
       return;
     }
 
-    // Auto-discovered work repeats the same title. Collapse duplicates so a
-    // backlog full of "Workflow E2E Test" rows does not bury real tasks.
-    var seenTitles = new Set();
-    plannerState.items = plannerState.items.filter(function (item) {
-      var key = String(item.title || '')
-        .trim()
-        .toLowerCase();
-      if (!key) return true;
-      if (seenTitles.has(key)) return false;
-      seenTitles.add(key);
-      return true;
-    });
-
     var columns = [
       { id: 'backlog', label: 'Backlog', items: [] },
       { id: 'ready', label: 'Ready', items: [] },
