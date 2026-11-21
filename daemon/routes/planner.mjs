@@ -52,6 +52,14 @@ export function registerPlannerRoutes(app, sprintEngine) {
     }),
   );
 
+  app.post(
+    '/api/v1/planner/prune-duplicates',
+    asyncHandler(async (req, res) => {
+      const result = await sprintEngine.pruneDuplicateItems({ dryRun: req.body?.dryRun === true });
+      res.json(result);
+    }),
+  );
+
   app.get(
     '/api/v1/planner/items/:itemId',
     asyncHandler(async (req, res) => {
