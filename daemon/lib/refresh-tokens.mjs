@@ -69,27 +69,33 @@ export function rotateRefreshToken(token) {
   const now = Date.now();
   return transaction(() => {
     const row = prepare(
-      'SELECT id, user_id, expires_at, family_expires_at, revoked_at FROM refresh_tokens WHERE token_hash = ?',
+      'SELECT id, user_id, expires_at, family_expires_at, revoked_at, rotated FROM refresh_tokens WHERE token_hash = ?',
     ).get(hash);
     if (!row) return null;
     if (row.revoked_at) {
       // Replaying a consumed token is normally a theft signal. Tolerate a token
-      // revoked moments ago, since that is the expected outcome of two
-      // concurrent refreshes; anything older burns the whole family.
+      // that rotation consumed moments ago, since that is the expected outcome
+      // of two concurrent refreshes; anything older burns the whole family.
+      // A token revoked by logout or a credential change has rotated = 0 and is
+      // never retryable, however recent.
       const revokedAt = new Date(String(row.revoked_at).replace(' ', 'T') + 'Z').getTime();
-      if (!Number.isFinite(revokedAt) || now - revokedAt > REUSE_GRACE_MS) {
+      const raced = row.rotated === 1 && Number.isFinite(revokedAt) && now - revokedAt <= REUSE_GRACE_MS;
+      if (!raced) {
         logger.warn('refresh token reuse detected; revoking refresh family', {
           userId: row.user_id,
           tokenId: row.id,
         });
         revokeUserRefreshTokens(row.user_id);
+        return null;
       }
-      return null;
+      // Lost the rotation race to another tab: signal a retry rather than a
+      // dead session. Only the winner receives a token (single use holds).
+      return { raced: true };
     }
     if (!usable(row, now)) return null;
 
     const claimed = prepare(
-      "UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL",
+      "UPDATE refresh_tokens SET revoked_at = datetime('now'), rotated = 1 WHERE id = ? AND revoked_at IS NULL",
     ).run(row.id);
     if (claimed.changes !== 1) return null;
 

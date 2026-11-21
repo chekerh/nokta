@@ -134,6 +134,9 @@ export function registerAuthRoutes(app) {
 
       const rotated = rotateRefreshToken(refreshToken);
       if (!rotated) throw new AppError('Invalid or expired refresh token', 401);
+      // Another tab rotated this token microseconds ago. Tell the client to read
+      // the successor it stored instead of treating the session as expired.
+      if (rotated.raced) throw new AppError('Refresh token already rotated; retry with the current token', 409);
 
       const user = prepare('SELECT id, email, name, role, tier, token_version FROM users WHERE id = ?').get(
         rotated.userId,

@@ -224,6 +224,11 @@ test('concurrent refreshes with the same token: exactly one succeeds', async () 
   ]);
   const ok = results.filter((r) => r.status === 'fulfilled' && r.value.statusCode === 200);
   assert.equal(ok.length, 1, 'the conditional revoke lets only one refresh win');
+
+  // The loser gets a retryable 409, not a dead session, so the other tab can
+  // pick up the successor token instead of forcing a re-login.
+  const raced = results.filter((r) => r.status === 'rejected' && r.reason?.status === 409);
+  assert.equal(raced.length, 1, 'the concurrent loser is told to retry');
 });
 
 test('an expired refresh token is rejected', async () => {
@@ -303,10 +308,11 @@ test('a refresh raced within the grace window does not tear down the family', as
   assert.equal(first.statusCode, 200);
 
   // Replay the consumed token immediately (inside the 5s grace window): it is
-  // rejected, but -- unlike a late replay -- the newly issued token survives.
+  // answered with a retryable 409, but -- unlike a late replay -- the newly
+  // issued token survives.
   await assert.rejects(
     () => invoke(refresh, fakeReq({ refreshToken })),
-    (err) => err instanceof AppError && err.status === 401,
+    (err) => err instanceof AppError && err.status === 409,
   );
   const again = await invoke(refresh, fakeReq({ refreshToken: first.body.refreshToken }));
   assert.equal(again.statusCode, 200);

@@ -292,6 +292,7 @@ const MIGRATIONS = [
       expires_at TEXT NOT NULL,
       family_expires_at TEXT,
       revoked_at TEXT,
+      rotated INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
@@ -352,6 +353,23 @@ const MIGRATIONS = [
         .map((c) => c.name);
       if (!cols.includes('token_version')) {
         db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;');
+      }
+    },
+    down: `
+  SELECT 1;
+  `,
+  },
+  // v9: Distinguish a token consumed by rotation (a benign concurrent-refresh
+  // race the client can retry) from one killed by logout or a credential change
+  // (a dead session). Backfills tables created before the column existed.
+  {
+    up: (db) => {
+      const cols = db
+        .prepare('PRAGMA table_info(refresh_tokens)')
+        .all()
+        .map((c) => c.name);
+      if (cols.length && !cols.includes('rotated')) {
+        db.exec('ALTER TABLE refresh_tokens ADD COLUMN rotated INTEGER NOT NULL DEFAULT 0;');
       }
     },
     down: `

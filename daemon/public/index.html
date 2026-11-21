@@ -1901,6 +1901,7 @@
             localStorage.setItem('nokta-token', token);
             localStorage.setItem('nokta-user', JSON.stringify(user));
             if (authRefreshToken) localStorage.setItem('nokta-refresh', authRefreshToken);
+            scheduleTokenRefresh();
           } else {
             authToken = null;
             authRefreshToken = null;
@@ -1920,31 +1921,103 @@
         //   false - the refresh token is rejected (401): the session is gone
         //   null  - transient failure (429/5xx/network): keep the session
         var refreshInFlight = null;
+        function sleep(ms) {
+          return new Promise(function (resolve) {
+            setTimeout(resolve, ms);
+          });
+        }
+        // A concurrent rotation in another tab answers 409. The winner stores
+        // the successor milliseconds later, so poll storage briefly instead of
+        // treating the 409 as an expired session.
+        async function awaitOtherTabRotation(current) {
+          for (var i = 0; i < 8; i++) {
+            await sleep(75);
+            var stored = localStorage.getItem('nokta-refresh');
+            if (stored && stored !== current) return true;
+            var access = localStorage.getItem('nokta-token');
+            if (access && access !== authToken) return true;
+          }
+          return false;
+        }
         function refreshAccessToken() {
-          var current = localStorage.getItem('nokta-refresh') || authRefreshToken;
-          if (!current) return Promise.resolve(false);
           if (refreshInFlight) return refreshInFlight;
-          refreshInFlight = fetch(API + '/api/v1/auth/refresh', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: current }),
-          })
-            .then(function (res) {
-              if (res.status === 401) return false;
+          refreshInFlight = (async function () {
+            for (var attempt = 0; attempt < 2; attempt++) {
+              var current = localStorage.getItem('nokta-refresh') || authRefreshToken;
+              if (!current) return false;
+              var res;
+              try {
+                res = await fetch(API + '/api/v1/auth/refresh', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ refreshToken: current }),
+                });
+              } catch (e) {
+                // A network hiccup is not a dead session; do not log the user out.
+                return null;
+              }
+              if (res.status === 409) {
+                return (await awaitOtherTabRotation(current)) ? true : false;
+              }
+              if (res.status === 401) {
+                // Another tab may have rotated while this request was in flight
+                // and already stored the successor; retry once with it before
+                // declaring the session over.
+                var latest = localStorage.getItem('nokta-refresh');
+                if (latest && latest !== current) continue;
+                return false;
+              }
               if (!res.ok) return null;
-              return res.json().then(function (data) {
-                setAuth(data.token, data.user || authUser, data.refreshToken);
-                return true;
-              });
-            })
-            .catch(function () {
-              // A network hiccup is not a dead session; do not log the user out.
-              return null;
-            })
-            .finally(function () {
-              refreshInFlight = null;
-            });
+              var data;
+              try {
+                data = await res.json();
+              } catch (e) {
+                return null;
+              }
+              setAuth(data.token, data.user || authUser, data.refreshToken);
+              return true;
+            }
+            return false;
+          })().finally(function () {
+            refreshInFlight = null;
+          });
           return refreshInFlight;
+        }
+
+        // Renew shortly before the access token expires so panel loads never
+        // meet a 401 in the first place.
+        var refreshTimer = null;
+        function accessTokenMsLeft() {
+          if (!authToken) return null;
+          try {
+            var part = authToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            var payload = JSON.parse(atob(part + '==='.slice((part.length + 3) % 4)));
+            return Number.isFinite(payload.exp) ? payload.exp * 1000 - Date.now() : null;
+          } catch (e) {
+            return null;
+          }
+        }
+        function scheduleTokenRefresh() {
+          if (refreshTimer) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+          }
+          var left = accessTokenMsLeft();
+          if (left === null) return;
+          if (left <= 0) {
+            runScheduledRefresh();
+            return;
+          }
+          var lead = Math.min(60 * 1000, left / 3);
+          refreshTimer = setTimeout(runScheduledRefresh, Math.max(1000, left - lead));
+        }
+        function runScheduledRefresh() {
+          refreshTimer = null;
+          refreshAccessToken().then(function (outcome) {
+            // Transient failure: the session is alive, so try again shortly.
+            if (outcome === null) refreshTimer = setTimeout(runScheduledRefresh, 15000);
+            else if (outcome === true) scheduleTokenRefresh();
+          });
         }
 
         // Decode (without verifying) the access token's exp so the SSE reconnect
@@ -1978,6 +2051,12 @@
         });
         // ...and let it silently refresh a short-lived access token before giving up.
         window.setOnRefresh(refreshAccessToken);
+        scheduleTokenRefresh();
+        // A laptop waking from sleep can outlive the timer; refresh immediately
+        // if the tab becomes visible with a dead access token.
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible' && accessTokenExpired()) refreshAccessToken();
+        });
         function authShowLogin() {
           $('authRegisterBox').style.display = 'none';
           $('authLoginBox').style.display = 'block';
