@@ -14,7 +14,7 @@ export function registerAdminRoutes(app) {
     ...adminGuard,
     asyncHandler(async (req, res) => {
       const users = prepare(
-        'SELECT id, email, name, role, tier, monthly_cost_limit, daily_token_limit, created_at, updated_at FROM users ORDER BY created_at DESC',
+        "SELECT id, email, name, role, tier, monthly_cost_limit, daily_token_limit, created_at, updated_at FROM users WHERE id <> 'system' ORDER BY created_at DESC",
       ).all();
       res.json({ users });
     }),
@@ -77,9 +77,9 @@ export function registerAdminRoutes(app) {
     '/api/v1/admin/metrics',
     ...adminGuard,
     asyncHandler(async (req, res) => {
-      const userCount = prepare('SELECT count(*) as total FROM users').get()?.total || 0;
-      const tierCounts = prepare('SELECT tier, count(*) as count FROM users GROUP BY tier').all();
-      const roleCounts = prepare('SELECT role, count(*) as count FROM users GROUP BY role').all();
+      const userCount = prepare("SELECT count(*) as total FROM users WHERE id <> 'system'").get()?.total || 0;
+      const tierCounts = prepare("SELECT tier, count(*) as count FROM users WHERE id <> 'system' GROUP BY tier").all();
+      const roleCounts = prepare("SELECT role, count(*) as count FROM users WHERE id <> 'system' GROUP BY role").all();
       const projectCount = prepare('SELECT count(*) as total FROM projects').get()?.total || 0;
       const runCount = prepare('SELECT count(*) as total FROM agent_runs').get()?.total || 0;
       const runsByStatus = prepare('SELECT status, count(*) as count FROM agent_runs GROUP BY status').all();

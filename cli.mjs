@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import './daemon/lib/node-version.mjs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -612,8 +613,13 @@ async function cmdDoctor(_args) {
 
   // Node version
   const nodeVersion = process.version;
-  const nodeMajor = parseInt(nodeVersion.slice(1), 10);
-  add('Node.js >= 20', nodeMajor >= 20, nodeVersion);
+  const parsed = /^v?(\d+)\.(\d+)\.(\d+)/.exec(nodeVersion);
+  const ok =
+    !!parsed &&
+    (+parsed[1] > 22 ||
+      (+parsed[1] === 22 && +parsed[2] > 5) ||
+      (+parsed[1] === 22 && +parsed[2] === 5 && +parsed[3] >= 0));
+  add('Node.js >= 22.5.0', ok, nodeVersion);
 
   // git
   let gitOk = false; let gitDetail = '';

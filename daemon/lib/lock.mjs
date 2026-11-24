@@ -36,3 +36,45 @@ export function releaseLock(key) {
     next();
   }
 }
+
+// --- Cross-process file locks ------------------------------------------------
+
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
+export async function acquireFileLock(lockPath, timeout = 10000) {
+  const dir = path.dirname(lockPath);
+  await fs.mkdir(dir, { recursive: true });
+  const start = Date.now();
+  while (true) {
+    try {
+      const fh = await fs.open(lockPath, 'wx');
+      await fh.writeFile(String(process.pid));
+      await fh.close();
+      return lockPath;
+    } catch (err) {
+      if (err && err.code !== 'EEXIST') throw err;
+      try {
+        const st = await fs.stat(lockPath);
+        if (Date.now() - st.mtimeMs > 10000) {
+          await fs.unlink(lockPath);
+          continue;
+        }
+      } catch {}
+      if (Date.now() - start >= timeout) {
+        throw new Error(`File lock timeout: ${lockPath}`);
+      }
+      await new Promise((r) => setTimeout(r, 15));
+    }
+  }
+}
+
+export async function releaseFileLock(lockPath) {
+  try {
+    await fs.unlink(lockPath);
+  } catch {}
+}
+
+export function lockPathFor(projectRoot) {
+  return path.join(projectRoot, '.nokta', 'sprints', '.items.lock');
+}

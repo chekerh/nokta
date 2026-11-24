@@ -1,11 +1,36 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+const REAL_DATA_DIR = path.join(DIR, '.nokta');
+
+// Snapshot only the store files the daemon itself writes, so a concurrently
+// running daemon (WAL checkpoints, log lines, directory mtimes) cannot make
+// this assertion flaky while still catching any real mutation.
+function snapshotRealStore() {
+  let itemsContent = null;
+  try {
+    itemsContent = fs.readFileSync(path.join(REAL_DATA_DIR, 'sprints', 'items.json'), 'utf8');
+  } catch {}
+  let dbSize = null;
+  try {
+    dbSize = fs.statSync(path.join(REAL_DATA_DIR, 'nokta.db')).size;
+  } catch {}
+  return { itemsContent, dbSize };
+}
+
+function assertRealStoreUnchanged(before, after) {
+  assert.equal(after.itemsContent, before.itemsContent, 'the test must not modify the real .nokta/sprints/items.json');
+  assert.equal(after.dbSize, before.dbSize, 'the test must not change the real .nokta/nokta.db size');
+}
+
 
 function findPort() {
   return 6000 + Math.floor(Math.random() * 20000);
@@ -75,11 +100,11 @@ function httpRequest(url, method, body, timeout = 5000) {
   });
 }
 
-function startDaemon(port) {
-  const proc = spawn('node', [path.join(DIR, 'daemon', 'index.mjs'), 'daemon', '--port', String(port)], {
-    cwd: DIR,
+function startDaemon(port, dataDir) {
+  const proc = spawn('node', [path.join(DIR, 'daemon', 'index.mjs'), 'daemon', '--port', String(port), '--project', dataDir], {
+    cwd: dataDir,
     stdio: 'ignore',
-    env: { ...process.env, NOKTA_LOG_LEVEL: 'error', NOKTA_API_KEY: API_KEY },
+    env: { ...process.env, NOKTA_LOG_LEVEL: 'error', NOKTA_API_KEY: API_KEY, NOKTA_DATA_DIR: dataDir },
   });
   return proc;
 }
@@ -120,7 +145,9 @@ const BASE = (port) => `http://localhost:${port}`;
 
 test('planner: GET /api/v1/planner/summary returns counts', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     const res = await httpGet(`${BASE(port)}/api/v1/planner/summary`);
@@ -133,12 +160,16 @@ test('planner: GET /api/v1/planner/summary returns counts', async () => {
     assert.ok('initiatives' in res.body);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: POST/GET/UPDATE/DELETE item', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     const created = await httpRequest(`${BASE(port)}/api/v1/planner/items`, 'POST', {
@@ -171,12 +202,16 @@ test('planner: POST/GET/UPDATE/DELETE item', async () => {
     assert.equal(deleted.body.success, true);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: GET non-existent item returns 404', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     const res = await httpGet(`${BASE(port)}/api/v1/planner/items/NOK-9999`);
@@ -184,12 +219,16 @@ test('planner: GET non-existent item returns 404', async () => {
     assert.ok(res.body.error.includes('not found'));
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: POST/GET sprint', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     const created = await httpRequest(`${BASE(port)}/api/v1/planner/sprints`, 'POST', {
@@ -204,12 +243,16 @@ test('planner: POST/GET sprint', async () => {
     assert.ok(listed.body.sprints.length >= 1);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: POST/GET epic', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     const created = await httpRequest(`${BASE(port)}/api/v1/planner/epics`, 'POST', {
@@ -224,12 +267,16 @@ test('planner: POST/GET epic', async () => {
     assert.ok(listed.body.epics.length >= 1);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: POST/GET initiatives', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     const created = await httpRequest(`${BASE(port)}/api/v1/planner/initiatives`, 'POST', {
@@ -243,12 +290,16 @@ test('planner: POST/GET initiatives', async () => {
     assert.ok(listed.body.initiatives.length >= 1);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: brainstorm returns suggestions', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     // Brainstorm may call LLM (slow) or fall back to UI/UX suggestions.
@@ -295,12 +346,16 @@ test('planner: brainstorm returns suggestions', async () => {
     }
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: feedback endpoint records accept', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
 
@@ -323,12 +378,16 @@ test('planner: feedback endpoint records accept', async () => {
     assert.ok(feedback.body.patterns.commonLabels.includes('frontend'));
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: brainstorm without features returns 400', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     const res = await httpRequest(`${BASE(port)}/api/v1/planner/brainstorm`, 'POST', {
@@ -339,17 +398,23 @@ test('planner: brainstorm without features returns 400', async () => {
     assert.ok(res.body.error);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('planner: delete non-existent item returns 404', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-planner-routes-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`${BASE(port)}/health`, 20000);
     const res = await httpRequest(`${BASE(port)}/api/v1/planner/items/NOK-9999`, 'DELETE', {});
     assert.equal(res.status, 404);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });

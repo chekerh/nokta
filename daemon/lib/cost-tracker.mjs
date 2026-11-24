@@ -54,7 +54,7 @@ function logCostToDb(entry, metadata = {}) {
   try {
     let userId = metadata.userId || metadata.user_id;
     if (!userId) {
-      const firstUser = prepare('SELECT id FROM users LIMIT 1').get();
+      const firstUser = prepare("SELECT id FROM users WHERE id <> 'system' LIMIT 1").get();
       userId = firstUser ? firstUser.id : null;
     }
     if (userId) {

@@ -1,11 +1,36 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+const REAL_DATA_DIR = path.join(DIR, '.nokta');
+
+// Snapshot only the store files the daemon itself writes, so a concurrently
+// running daemon (WAL checkpoints, log lines, directory mtimes) cannot make
+// this assertion flaky while still catching any real mutation.
+function snapshotRealStore() {
+  let itemsContent = null;
+  try {
+    itemsContent = fs.readFileSync(path.join(REAL_DATA_DIR, 'sprints', 'items.json'), 'utf8');
+  } catch {}
+  let dbSize = null;
+  try {
+    dbSize = fs.statSync(path.join(REAL_DATA_DIR, 'nokta.db')).size;
+  } catch {}
+  return { itemsContent, dbSize };
+}
+
+function assertRealStoreUnchanged(before, after) {
+  assert.equal(after.itemsContent, before.itemsContent, 'the test must not modify the real .nokta/sprints/items.json');
+  assert.equal(after.dbSize, before.dbSize, 'the test must not change the real .nokta/nokta.db size');
+}
+
 
 function findPort() {
   return 6000 + Math.floor(Math.random() * 20000);
@@ -96,11 +121,11 @@ function httpGetNoAuth(url, timeout = 3000) {
   });
 }
 
-function startDaemon(port) {
-  const proc = spawn('node', [path.join(DIR, 'daemon', 'index.mjs'), 'daemon', '--port', String(port)], {
-    cwd: DIR,
+function startDaemon(port, dataDir) {
+  const proc = spawn('node', [path.join(DIR, 'daemon', 'index.mjs'), 'daemon', '--port', String(port), '--project', dataDir], {
+    cwd: dataDir,
     stdio: 'ignore',
-    env: { ...process.env, NOKTA_LOG_LEVEL: 'error', NOKTA_API_KEY: 'test-key-123' },
+    env: { ...process.env, NOKTA_LOG_LEVEL: 'error', NOKTA_API_KEY: 'test-key-123', NOKTA_DATA_DIR: dataDir },
   });
   return proc;
 }
@@ -145,19 +170,25 @@ async function killProcess(proc) {
 
 test('daemon starts and responds to health check', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     const health = await waitForHealth(`http://localhost:${port}/health`, 20000);
     assert.equal(health.status, 'ok');
     assert.ok(Array.isArray(health.providers));
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon detects project stacks', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpPost(`http://localhost:${port}/api/v1/detect`, { target: DIR });
@@ -165,12 +196,16 @@ test('daemon detects project stacks', async () => {
     assert.ok(result.stacks.includes('node'));
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon runs trail gates', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpPost(`http://localhost:${port}/api/v1/gates`, { target: DIR });
@@ -181,12 +216,16 @@ test('daemon runs trail gates', async () => {
     assert.ok(result.gates.length >= 5);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon returns trail state', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpGet(`http://localhost:${port}/api/v1/trail`);
@@ -195,12 +234,16 @@ test('daemon returns trail state', async () => {
     assert.ok(Array.isArray(result.recentSessions));
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon returns context packs', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpGet(`http://localhost:${port}/api/v1/packs`);
@@ -210,12 +253,16 @@ test('daemon returns context packs', async () => {
     assert.ok(result.packs.some((p) => p.id === 'token.context-budget'));
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon returns routes in health check', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     const health = await waitForHealth(`http://localhost:${port}/health`, 20000);
     if (health.routes) {
@@ -223,12 +270,16 @@ test('daemon returns routes in health check', async () => {
     }
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon metrics endpoint requires authentication', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
 
@@ -242,12 +293,16 @@ test('daemon metrics endpoint requires authentication', async () => {
     assert.match(body, /nokta_http_requests_total\{[^}]*route="\/health"/);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon projects route requires authentication', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpGetNoAuth(`http://localhost:${port}/api/v1/projects`);
@@ -255,12 +310,16 @@ test('daemon projects route requires authentication', async () => {
     assert.equal(result.status, 401);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon brain route requires authentication', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpGetNoAuth(`http://localhost:${port}/api/v1/brain`);
@@ -268,12 +327,16 @@ test('daemon brain route requires authentication', async () => {
     assert.equal(result.status, 401);
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon semantic search returns results', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpPost(`http://localhost:${port}/api/v1/search/semantic`, {
@@ -286,12 +349,16 @@ test('daemon semantic search returns results', async () => {
     }
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon adversarial critique endpoint returns JSON', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpPost(`http://localhost:${port}/api/v1/adversarial/critique`, {
@@ -303,12 +370,16 @@ test('daemon adversarial critique endpoint returns JSON', async () => {
     }
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });
 
 test('daemon sandbox exec endpoint executes code', async () => {
   const port = findPort();
-  const proc = startDaemon(port);
+  const dataDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'nokta-daemon-test-'));
+  const before = snapshotRealStore();
+  const proc = startDaemon(port, dataDir);
   try {
     await waitForHealth(`http://localhost:${port}/health`, 20000);
     const result = await httpPost(`http://localhost:${port}/api/v1/sandbox/exec`, {
@@ -320,5 +391,7 @@ test('daemon sandbox exec endpoint executes code', async () => {
     }
   } finally {
     await killProcess(proc);
+    assertRealStoreUnchanged(before, snapshotRealStore());
+    await fs.promises.rm(dataDir, { recursive: true, force: true });
   }
 });

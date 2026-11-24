@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import './lib/node-version.mjs';
 import { createServer } from './server.mjs';
 import { loadConfig } from './lib/config.mjs';
 import { logger, setLogLevel, setLogPath } from './lib/logger.mjs';

@@ -50,3 +50,6 @@ landing/dist/
 .nokta/workspace-runtime.json
 .nokta/worktrees/
 .nokta/fleet.json
+
+# Audit screenshots
+audit/*.png

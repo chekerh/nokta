@@ -57,10 +57,23 @@ export function hashPassword(password) {
 }
 
 export function verifyPassword(password, hash) {
-  return new Promise((resolve, reject) => {
-    const [salt, keyHex] = hash.split(':');
+  return new Promise((resolve) => {
+    if (typeof hash !== 'string' || hash === '') {
+      resolve(false);
+      return;
+    }
+    const parts = hash.split(':');
+    if (parts.length !== 2) {
+      resolve(false);
+      return;
+    }
+    const [salt, keyHex] = parts;
+    if (!salt || !keyHex) {
+      resolve(false);
+      return;
+    }
     crypto.scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 }, (err, key) => {
-      if (err) reject(err);
+      if (err) resolve(false);
       else resolve(key.toString('hex') === keyHex);
     });
   });

@@ -16,6 +16,18 @@ import {
 } from '../lib/schemas.mjs';
 
 export function registerPlannerRoutes(app, sprintEngine) {
+  const mirrorHandler = asyncHandler(async (req, res) => {
+    const result = await sprintEngine.checkMirrorParity();
+    res.json(result);
+  });
+  for (const route of [
+    '/api/v1/planner/mirror',
+    '/api/v1/planner/mirror-parity',
+    '/api/v1/planner/parity',
+    '/api/v1/planner/db-parity',
+  ]) {
+    app.get(route, mirrorHandler);
+  }
   app.get(
     '/api/v1/planner/summary',
     asyncHandler(async (req, res) => {

@@ -63,6 +63,32 @@ models, configure checks, and let Nokta analyze, implement, test, repair once,
 and independently verify each task. Use `./run_app.sh --workspace --ports
 4500,4501` to choose a different port range.
 
+## Dashboard (daemon)
+
+The daemon hosts the main web UI on port `4217`:
+
+```bash
+npm install
+npm run daemon          # serves http://127.0.0.1:4217
+```
+
+Or with the wrapper:
+
+```bash
+./run_app.sh            # daemon mode
+./run_app.sh --dev      # lint + tests, then start
+./run_app.sh --status   # check if it is running
+./run_app.sh --stop     # stop it
+```
+
+Open `http://127.0.0.1:4217` in a browser. On first run, register an account
+from the login screen (email + password); that account owns the local data under
+`.nokta/`. Set `NOKTA_DATA_DIR=/path/to/data` to keep state outside the repo.
+
+```bash
+PORT=4217 HOST=127.0.0.1 NOKTA_AUTO_WATCHER=false npm run daemon
+```
+
 ## Core Workflow
 
 Every agent follows:

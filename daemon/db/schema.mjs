@@ -91,7 +91,7 @@ const MIGRATIONS = [
 
   CREATE TABLE IF NOT EXISTS sprint_items (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     project_id TEXT,
     project_root TEXT NOT NULL DEFAULT '',
     type TEXT NOT NULL,
@@ -371,6 +371,84 @@ const MIGRATIONS = [
       if (cols.length && !cols.includes('rotated')) {
         db.exec('ALTER TABLE refresh_tokens ADD COLUMN rotated INTEGER NOT NULL DEFAULT 0;');
       }
+    },
+    down: `
+  SELECT 1;
+  `,
+  },
+  // v10: Drop the phantom 'system' user. sprint_items.user_id becomes nullable
+  // so system-owned / unattributed mirror rows need no owning account; the
+  // 'system' row is removed from users so admin listings, first-user
+  // attribution and login never see a phantom account. Existing tables are
+  // rebuilt because SQLite cannot ALTER a column's NOT NULL constraint.
+  {
+    up: (db) => {
+      const cols = db
+        .prepare('PRAGMA table_info(sprint_items)')
+        .all()
+        .map((c) => c.name);
+      if (cols.length === 0) {
+        // Table not present yet (fresh install is handled by v1).
+        db.exec("DELETE FROM users WHERE id = 'system'");
+        return;
+      }
+      db.exec(`CREATE TABLE sprint_items_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+        project_id TEXT,
+        project_root TEXT NOT NULL DEFAULT '',
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        priority TEXT NOT NULL DEFAULT 'P2',
+        status TEXT NOT NULL DEFAULT 'backlog',
+        sprint_id TEXT,
+        epic_id TEXT,
+        initiative_id TEXT,
+        auto_generated INTEGER NOT NULL DEFAULT 0,
+        related_files TEXT,
+        evidence TEXT,
+        dependencies TEXT,
+        labels TEXT,
+        storyPoints INTEGER,
+        assignee TEXT,
+        createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+        updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+      )`);
+      const has = (c) => cols.includes(c);
+      const selectCols = [
+        'id',
+        has('user_id')
+          ? "CASE WHEN user_id = 'system' OR user_id NOT IN (SELECT id FROM users) THEN NULL ELSE user_id END"
+          : 'NULL',
+        has('project_id') ? 'project_id' : 'NULL',
+        has('project_root') ? "COALESCE(project_root, '')" : "''",
+        has('type') ? "COALESCE(type, 'task')" : "'task'",
+        has('title') ? "COALESCE(title, '')" : "''",
+        has('description') ? "COALESCE(description, '')" : "''",
+        has('priority') ? "COALESCE(priority, 'P2')" : "'P2'",
+        has('status') ? "COALESCE(status, 'backlog')" : "'backlog'",
+        has('sprint_id') ? 'sprint_id' : 'NULL',
+        has('epic_id') ? 'epic_id' : 'NULL',
+        has('initiative_id') ? 'initiative_id' : 'NULL',
+        has('auto_generated') ? 'COALESCE(auto_generated, 0)' : '0',
+        has('related_files') ? 'related_files' : 'NULL',
+        has('evidence') ? 'evidence' : 'NULL',
+        has('dependencies') ? 'dependencies' : 'NULL',
+        has('labels') ? 'labels' : 'NULL',
+        has('storyPoints') ? 'storyPoints' : 'NULL',
+        has('assignee') ? 'assignee' : 'NULL',
+        has('createdAt') ? "COALESCE(createdAt, datetime('now'))" : "datetime('now')",
+        has('updatedAt') ? "COALESCE(updatedAt, datetime('now'))" : "datetime('now')",
+      ].join(', ');
+      db.exec(
+        `INSERT INTO sprint_items_new (id, user_id, project_id, project_root, type, title, description, priority, status, sprint_id, epic_id, initiative_id, auto_generated, related_files, evidence, dependencies, labels, storyPoints, assignee, createdAt, updatedAt) SELECT ${selectCols} FROM sprint_items`,
+      );
+      db.exec('DROP TABLE sprint_items');
+      db.exec('ALTER TABLE sprint_items_new RENAME TO sprint_items');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sprint_items_user ON sprint_items(user_id, status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sprint_items_sprint ON sprint_items(sprint_id)');
+      db.exec("DELETE FROM users WHERE id = 'system'");
     },
     down: `
   SELECT 1;

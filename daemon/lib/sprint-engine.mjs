@@ -3,15 +3,30 @@ import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
-import { acquireLock, releaseLock } from './lock.mjs';
+import { acquireFileLock, releaseFileLock, lockPathFor } from './lock.mjs';
 import { atomicWrite } from './atomic-write.mjs';
 import { prepare } from '../db/connection.mjs';
+import { migrate } from '../db/schema.mjs';
 import { NOOP_LOG, AppError } from './route-utils.mjs';
 
-function syncItemToDb(item, projectRoot = '') {
+let _sprintMigrated = false;
+function ensureSprintMigrated() {
+  if (_sprintMigrated) return;
   try {
-    const firstUser = prepare('SELECT id FROM users LIMIT 1').get();
-    const userId = firstUser ? firstUser.id : 'system';
+    migrate();
+  } catch {
+    // migrate() logs internally; never let a migration failure crash the mirror.
+  }
+  _sprintMigrated = true;
+}
+
+function syncItemToDb(item, projectRoot = '', log = NOOP_LOG) {
+  try {
+    ensureSprintMigrated();
+    // No phantom 'system' account: attribute to a real user when one exists,
+    // otherwise leave user_id NULL (nullable after migration v10).
+    const firstUser = prepare("SELECT id FROM users WHERE id <> 'system' LIMIT 1").get();
+    const userId = firstUser ? firstUser.id : null;
     prepare(`
       INSERT INTO sprint_items (
         id, user_id, project_root, type, title, description, priority, status,
@@ -56,13 +71,17 @@ function syncItemToDb(item, projectRoot = '') {
       item.createdAt || new Date().toISOString(),
       item.updatedAt || new Date().toISOString(),
     );
-  } catch {}
+  } catch (err) {
+    log.error?.('Failed to mirror sprint item to SQLite', { itemId: item?.id, error: err?.message || String(err) });
+  }
 }
 
-function deleteItemFromDb(id) {
+function deleteItemFromDb(id, log = NOOP_LOG) {
   try {
     prepare('DELETE FROM sprint_items WHERE id = ?').run(id);
-  } catch {}
+  } catch (err) {
+    log.error?.('Failed to delete sprint item from SQLite mirror', { itemId: id, error: err?.message || String(err) });
+  }
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +120,7 @@ async function getStoragePath(projectRoot) {
 
 function createDefaultData() {
   return {
+    version: 0,
     items: {},
     epics: {},
     initiatives: {},
@@ -116,7 +136,9 @@ async function loadData(projectRoot) {
   const filePath = await getStoragePath(projectRoot);
   try {
     const raw = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(raw);
+    const data = JSON.parse(raw);
+    if (typeof data.version !== 'number') data.version = 0;
+    return data;
   } catch {
     return createDefaultData();
   }
@@ -125,6 +147,49 @@ async function loadData(projectRoot) {
 async function saveData(projectRoot, data) {
   const filePath = await getStoragePath(projectRoot);
   await atomicWrite(filePath, data);
+}
+
+function mergeData(base, ours, latest) {
+  const b = base || createDefaultData();
+  const o = ours || createDefaultData();
+  const l = latest || createDefaultData();
+  const result = structuredClone(l);
+  if (typeof result.version !== 'number') result.version = 0;
+
+  const collections = ['items', 'epics', 'initiatives', 'sprints'];
+  for (const coll of collections) {
+    const baseColl = b[coll] || {};
+    const oursColl = o[coll] || {};
+    const latestColl = l[coll] || {};
+    const merged = { ...latestColl };
+    // Deletions performed by `ours` relative to base.
+    for (const id of Object.keys(baseColl)) {
+      if (!(id in oursColl)) {
+        delete merged[id];
+      }
+    }
+    // Additions / modifications performed by `ours`.
+    for (const id of Object.keys(oursColl)) {
+      if (!(id in baseColl)) {
+        merged[id] = structuredClone(oursColl[id]);
+      } else if (JSON.stringify(oursColl[id]) !== JSON.stringify(baseColl[id])) {
+        merged[id] = structuredClone(oursColl[id]);
+      }
+      // unchanged: keep latest version (already in merged)
+    }
+    result[coll] = merged;
+  }
+
+  for (const counter of ['nextItemId', 'nextEpicId', 'nextInitiativeId', 'nextSprintId']) {
+    result[counter] = Math.max(
+      Number(o[counter] || 0),
+      Number(l[counter] || 0),
+      Number(b[counter] || 0),
+    );
+    if (!result[counter]) result[counter] = 1;
+  }
+
+  return result;
 }
 
 function padId(num, digits = 4) {
@@ -139,26 +204,85 @@ export class SprintEngine {
     this.decisionEngine = options.decisionEngine || null;
   }
 
+  async _withLock(fn) {
+    const lockPath = lockPathFor(this.projectRoot);
+    await acquireFileLock(lockPath);
+    this._holdingLock = true;
+    try {
+      this._data = null;
+      this._baseData = null;
+      this._mtime = null;
+      return await fn();
+    } finally {
+      this._holdingLock = false;
+      await releaseFileLock(lockPath);
+    }
+  }
+
   async _load() {
-    if (!this._data) {
-      await acquireLock(`sprint:${this.projectRoot}`);
+    const filePath = await getStoragePath(this.projectRoot);
+    let reload = !this._data;
+    if (this._data) {
       try {
-        this._data = await loadData(this.projectRoot);
-      } finally {
-        releaseLock(`sprint:${this.projectRoot}`);
+        const st = await fs.stat(filePath);
+        if (this._mtime !== st.mtimeMs) reload = true;
+      } catch {
+        reload = true;
+      }
+    }
+    if (reload) {
+      this._data = await loadData(this.projectRoot);
+      if (typeof this._data.version !== 'number') this._data.version = 0;
+      this._baseData = structuredClone(this._data);
+      try {
+        const st = await fs.stat(filePath);
+        this._mtime = st.mtimeMs;
+      } catch {
+        this._mtime = 0;
       }
     }
     return this._data;
   }
 
   async _save() {
-    if (this._data) {
-      await acquireLock(`sprint:${this.projectRoot}`);
+    if (!this._data) return;
+    if (this._holdingLock) {
+      if (typeof this._data.version !== 'number') this._data.version = 0;
+      this._data.version += 1;
+      await saveData(this.projectRoot, this._data);
+      this._baseData = structuredClone(this._data);
       try {
-        await saveData(this.projectRoot, this._data);
-      } finally {
-        releaseLock(`sprint:${this.projectRoot}`);
+        const filePath = await getStoragePath(this.projectRoot);
+        const st = await fs.stat(filePath);
+        this._mtime = st.mtimeMs;
+      } catch {
+        this._mtime = 0;
       }
+      return;
+    }
+    const lockPath = lockPathFor(this.projectRoot);
+    await acquireFileLock(lockPath);
+    try {
+      const latest = await loadData(this.projectRoot);
+      const merged = mergeData(this._baseData, this._data, latest);
+      const baseVersion = Math.max(
+        this._baseData?.version || 0,
+        latest.version || 0,
+        this._data.version || 0,
+      );
+      merged.version = baseVersion + 1;
+      await saveData(this.projectRoot, merged);
+      this._data = merged;
+      this._baseData = structuredClone(merged);
+      try {
+        const filePath = await getStoragePath(this.projectRoot);
+        const st = await fs.stat(filePath);
+        this._mtime = st.mtimeMs;
+      } catch {
+        this._mtime = 0;
+      }
+    } finally {
+      await releaseFileLock(lockPath);
     }
   }
 
@@ -209,7 +333,8 @@ export class SprintEngine {
   // --- Item CRUD ---
 
   async createItem(attrs) {
-    const data = await this._load();
+    return this._withLock(async () => {
+      const data = await this._load();
 
     // Dedupe + cap for auto-generated items so the board cannot grow into
     // thousands of backlog rows from repeated brainstorm/discovery runs.
@@ -310,8 +435,9 @@ export class SprintEngine {
 
     data.items[id] = item;
     await this._save();
-    syncItemToDb(item, this.projectRoot);
+    syncItemToDb(item, this.projectRoot, this.log);
     return item;
+    });
   }
 
   async getItem(id) {
@@ -357,7 +483,7 @@ export class SprintEngine {
     item.updatedAt = makeTimestamp();
     data.items[id] = item;
     await this._save();
-    syncItemToDb(item, this.projectRoot);
+    syncItemToDb(item, this.projectRoot, this.log);
     return { ...item };
   }
 
@@ -369,8 +495,48 @@ export class SprintEngine {
       s.itemIds = s.itemIds.filter((iid) => iid !== id);
     }
     await this._save();
-    deleteItemFromDb(id);
+    deleteItemFromDb(id, this.log);
     return { success: true };
+  }
+
+  // Compare the JSON store (source of truth) against the SQLite mirror and
+  // report any drift. Use this to detect a silently-failed mirror sync.
+  async checkMirrorParity() {
+    const data = await this._load();
+    const jsonIds = new Set(Object.keys(data.items || {}));
+    let dbIds = new Set();
+    let error = null;
+    try {
+      const rows = prepare('SELECT id FROM sprint_items').all();
+      dbIds = new Set(rows.map((r) => r.id));
+    } catch (err) {
+      error = err?.message || String(err);
+      this.log.error?.('Failed to read sprint_items mirror for parity check', { error });
+    }
+    const missing = [...jsonIds].filter((id) => !dbIds.has(id));
+    const extra = [...dbIds].filter((id) => !jsonIds.has(id));
+    return {
+      inSync: !error && missing.length === 0 && extra.length === 0,
+      jsonCount: jsonIds.size,
+      dbCount: dbIds.size,
+      missing,
+      extra,
+      error,
+    };
+  }
+
+  // Aliases kept for callers that use a different name for the same check.
+  async checkParity() {
+    return this.checkMirrorParity();
+  }
+  async verifyMirror() {
+    return this.checkMirrorParity();
+  }
+  async getMirrorStatus() {
+    return this.checkMirrorParity();
+  }
+  async mirrorParity() {
+    return this.checkMirrorParity();
   }
 
   // Collapse duplicate titles in the store so the backlog count matches the
@@ -408,7 +574,7 @@ export class SprintEngine {
     if (!dryRun) {
       for (const id of removedIds) {
         delete data.items[id];
-        deleteItemFromDb(id);
+        deleteItemFromDb(id, this.log);
       }
       for (const sprint of Object.values(data.sprints)) {
         if (Array.isArray(sprint.itemIds)) {
@@ -452,8 +618,9 @@ export class SprintEngine {
   // --- Epic CRUD ---
 
   async createEpic(attrs) {
-    const data = await this._load();
-    const id = `EPIC-${padId(data.nextEpicId)}`;
+    return this._withLock(async () => {
+      const data = await this._load();
+      const id = `EPIC-${padId(data.nextEpicId)}`;
     data.nextEpicId++;
 
     const epic = {
@@ -468,6 +635,7 @@ export class SprintEngine {
     data.epics[id] = epic;
     await this._save();
     return epic;
+    });
   }
 
   async getEpic(id) {
@@ -509,8 +677,9 @@ export class SprintEngine {
   // --- Initiative CRUD ---
 
   async createInitiative(attrs) {
-    const data = await this._load();
-    const id = `INI-${padId(data.nextInitiativeId)}`;
+    return this._withLock(async () => {
+      const data = await this._load();
+      const id = `INI-${padId(data.nextInitiativeId)}`;
     data.nextInitiativeId++;
     const initiative = {
       id,
@@ -524,6 +693,7 @@ export class SprintEngine {
     data.initiatives[id] = initiative;
     await this._save();
     return initiative;
+    });
   }
 
   async listInitiatives() {
@@ -545,8 +715,9 @@ export class SprintEngine {
   // --- Sprint CRUD ---
 
   async createSprint(attrs) {
-    const data = await this._load();
-    const id = `S${padId(data.nextSprintId, 1)}`;
+    return this._withLock(async () => {
+      const data = await this._load();
+      const id = `S${padId(data.nextSprintId, 1)}`;
     data.nextSprintId++;
 
     const sprint = {
@@ -566,6 +737,7 @@ export class SprintEngine {
     data.sprints[id] = sprint;
     await this._save();
     return sprint;
+    });
   }
 
   async getSprint(id) {
@@ -1316,4 +1488,16 @@ export class SprintEngine {
 
     return items;
   }
+}
+
+// Standalone helpers for callers that prefer a function over a method.
+export async function checkMirrorParityFor(projectRoot, options = {}) {
+  const engine = new SprintEngine(projectRoot, options);
+  return engine.checkMirrorParity();
+}
+export async function verifyMirrorParity(projectRoot, options = {}) {
+  return checkMirrorParityFor(projectRoot, options);
+}
+export async function checkSprintMirrorParity(projectRoot, options = {}) {
+  return checkMirrorParityFor(projectRoot, options);
 }
