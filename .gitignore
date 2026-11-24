@@ -53,3 +53,12 @@ landing/dist/
 
 # Audit screenshots
 audit/*.png
+
+# Heritage landing app (Vite) build artifacts + deps
+landing-heritage/node_modules/
+landing-heritage/dist/
+
+# Heritage landing media (keep locally; too large for git)
+landing-heritage/public/character/*.jpeg
+landing-heritage/public/character/*.mp4
+landing-heritage/public/frames/*.png
